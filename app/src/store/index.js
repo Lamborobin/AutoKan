@@ -364,6 +364,60 @@ export const useStore = create((set, get) => ({
     }));
   },
 
+  // Apply a server-sent event — targeted update instead of full reload
+  applySSEEvent(event, data) {
+    const { currentProjectId } = get();
+    switch (event) {
+      case 'task_updated': {
+        const task = data.task;
+        if (task.project_id !== currentProjectId) return;
+        if (task.archived_at) {
+          // Task just got archived
+          set(s => ({
+            tasks: s.tasks.filter(t => t.id !== task.id),
+            archivedTasks: s.archivedTasks.some(t => t.id === task.id)
+              ? s.archivedTasks
+              : [...s.archivedTasks, task],
+            selectedTask: s.selectedTask?.id === task.id ? null : s.selectedTask,
+          }));
+        } else {
+          set(s => ({
+            tasks: s.tasks.some(t => t.id === task.id)
+              ? s.tasks.map(t => t.id === task.id ? task : t)
+              : [task, ...s.tasks],
+            archivedTasks: s.archivedTasks.filter(t => t.id !== task.id),
+            selectedTask: s.selectedTask?.id === task.id ? task : s.selectedTask,
+          }));
+        }
+        break;
+      }
+      case 'task_archived': {
+        set(s => {
+          const task = s.tasks.find(t => t.id === data.id);
+          return {
+            tasks: s.tasks.filter(t => t.id !== data.id),
+            archivedTasks: task && !s.archivedTasks.some(t => t.id === data.id)
+              ? [...s.archivedTasks, { ...task, archived_at: new Date().toISOString() }]
+              : s.archivedTasks,
+            selectedTask: s.selectedTask?.id === data.id ? null : s.selectedTask,
+          };
+        });
+        break;
+      }
+      case 'task_deleted': {
+        set(s => ({
+          tasks: s.tasks.filter(t => t.id !== data.id),
+          selectedTask: s.selectedTask?.id === data.id ? null : s.selectedTask,
+        }));
+        break;
+      }
+      case 'reload': {
+        get().load();
+        break;
+      }
+    }
+  },
+
   // UI state
   setSelectedTask: (task) => set({ selectedTask: task }),
   setShowNewTask: (v) => set({ showNewTask: v }),

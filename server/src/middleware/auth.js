@@ -9,9 +9,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'flowagent-dev-secret-change-in-pro
  */
 function attachUser(req, res, next) {
   const authHeader = req.headers['authorization'];
-  if (authHeader?.startsWith('Bearer ')) {
+  // EventSource can't send headers — accept ?token= as fallback (SSE endpoint only)
+  const raw = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.query.token;
+  if (raw) {
     try {
-      const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
+      const decoded = jwt.verify(raw, JWT_SECRET);
       req.user = decoded;
       req.agent = { id: 'human', role: 'human', permissions: ['*'] };
     } catch { /* invalid token — ignore, let next layer decide */ }

@@ -6,6 +6,23 @@ const { v4: uuidv4 } = require('uuid');
 const { exec, execSync } = require('child_process');
 const util = require('util');
 const { getDb } = require('../db');
+const { broadcast } = require('../sse');
+
+function broadcastTask(db, taskId) {
+  const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!t) return;
+  const isLocked = t.pm_approval_status != null &&
+    !(t.pm_approval_status === 'approved' && t.human_approval_status === 'approved');
+  broadcast('task_updated', {
+    task: {
+      ...t,
+      tags: JSON.parse(t.tags || '[]'),
+      metadata: JSON.parse(t.metadata || '{}'),
+      pm_checklist: t.pm_checklist ? JSON.parse(t.pm_checklist) : null,
+      is_locked: isLocked,
+    },
+  });
+}
 
 const execAsync = util.promisify(exec);
 
@@ -350,6 +367,7 @@ async function runPmAgent(taskId) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, pmAgent.id, 'pm_question', question);
       console.log(`[AgentRunner] PM asked question on task ${taskId}`);
+      broadcastTask(db, taskId);
 
     } else if (block.name === 'approve_task') {
       const { comment, checklist = [], acceptance_criteria = '', priority, complexity } = block.input;
@@ -374,6 +392,7 @@ async function runPmAgent(taskId) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, pmAgent.id, 'pm_reviewed', `PM approved — ${comment}`);
       console.log(`[AgentRunner] PM approved task ${taskId}`);
+      broadcastTask(db, taskId);
     }
   }
 
@@ -385,6 +404,7 @@ async function runPmAgent(taskId) {
         .run(text, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, pmAgent.id, 'pm_question', text);
+      broadcastTask(db, taskId);
     }
   }
 
@@ -626,6 +646,7 @@ async function runDevAgent(taskId) {
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
           .run(uuidv4(), taskId, devAgent.id, 'note', message);
         console.log(`[AgentRunner][dev][${taskId}] log: ${message}`);
+        broadcastTask(db, taskId);
         result = { success: true };
 
       } else if (block.name === 'task_complete') {
@@ -660,6 +681,7 @@ async function runDevAgent(taskId) {
             .run(uuidv4(), taskId, devAgent.id, 'moved', 'col_inprogress', 'col_humanaction', 'Moved to Human Action — awaiting PR review');
           console.log(`[AgentRunner][dev][${taskId}] awaiting review. PR: ${pr_url || 'creation failed'}`);
         }
+        broadcastTask(db, taskId);
         completed = true;
         removeWorktree(worktreePath);
         result = { success: true, pr_url };
@@ -670,6 +692,7 @@ async function runDevAgent(taskId) {
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
           .run(uuidv4(), taskId, devAgent.id, 'human_action_requested', reason);
         console.log(`[AgentRunner][dev][${taskId}] requested human: ${reason}`);
+        broadcastTask(db, taskId);
         completed = true; // stop the loop; human must resume
         removeWorktree(worktreePath);
         result = { success: true };
@@ -879,6 +902,7 @@ async function runTesterAgent(taskId) {
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
           .run(uuidv4(), taskId, testerAgent.id, 'note', message);
         console.log(`[AgentRunner][tester][${taskId}] log: ${message}`);
+        broadcastTask(db, taskId);
         result = { success: true };
 
       } else if (block.name === 'task_complete') {
@@ -909,6 +933,7 @@ async function runTesterAgent(taskId) {
             console.log(`[AgentRunner][tester][${taskId}] tests failed → In Progress (retry ${newRetryCount})`);
           }
         }
+        broadcastTask(db, taskId);
         completed = true;
         result = { success: true };
 
@@ -919,6 +944,7 @@ async function runTesterAgent(taskId) {
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
           .run(uuidv4(), taskId, testerAgent.id, 'human_action_requested', reason);
         console.log(`[AgentRunner][tester][${taskId}] requested human: ${reason}`);
+        broadcastTask(db, taskId);
         completed = true;
         result = { success: true };
       }

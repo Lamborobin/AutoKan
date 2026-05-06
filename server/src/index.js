@@ -8,6 +8,7 @@ const tasksRouter = require('./routes/tasks');
 const authRouter = require('./routes/auth');
 const projectsRouter = require('./routes/projects');
 const { agentsRouter, columnsRouter, secretsRouter, instructionsRouter, agentTemplatesRouter, rolesRouter } = require('./routes/other');
+const { addClient } = require('./sse');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,9 @@ app.use('/api/secrets', secretsRouter);
 app.use('/api/instructions', instructionsRouter);
 app.use('/api/agent-templates', agentTemplatesRouter);
 app.use('/api/roles', rolesRouter);
+
+// SSE — real-time push to connected browsers
+app.get('/api/events', (req, res) => addClient(res));
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -74,11 +74,36 @@ export default function App() {
     document.documentElement.classList.toggle('light', theme === 'light');
   }, [theme]);
 
-  // Poll for updates every 5s (agents may update tasks)
+  // SSE — real-time push updates from server (replaces polling)
   useEffect(() => {
     if (!user) return;
-    const interval = setInterval(() => load(), 5000);
-    return () => clearInterval(interval);
+    const { applySSEEvent, load } = useStore.getState();
+    let es;
+    let reconnectTimer;
+
+    function connect() {
+      const token = localStorage.getItem('fa_token');
+      const url = `/api/events${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      es = new EventSource(url);
+
+      const handle = (e) => {
+        try { applySSEEvent(e.type, JSON.parse(e.data)); } catch {}
+      };
+      ['task_updated', 'task_archived', 'task_deleted', 'reload'].forEach(evt =>
+        es.addEventListener(evt, handle)
+      );
+
+      es.onerror = () => {
+        es.close();
+        reconnectTimer = setTimeout(connect, 3000);
+      };
+    }
+
+    connect();
+    return () => {
+      clearTimeout(reconnectTimer);
+      if (es) es.close();
+    };
   }, [user]);
 
   function canAssignAgent(agent, columnId) {

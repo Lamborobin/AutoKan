@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent } = require('../middleware/auth');
 const { triggerPmAgent, triggerDevAgent, triggerTesterAgent } = require('../services/agentRunner');
+const { broadcast } = require('../sse');
 
 const router = express.Router();
 
@@ -37,6 +38,16 @@ function canAgentBeInColumn(agentId, columnId, db) {
 function isTaskLocked(task) {
   return task.pm_approval_status != null &&
     !(task.pm_approval_status === 'approved' && task.human_approval_status === 'approved');
+}
+
+function fmt(task) {
+  return {
+    ...task,
+    tags: JSON.parse(task.tags || '[]'),
+    metadata: JSON.parse(task.metadata || '{}'),
+    pm_checklist: task.pm_checklist ? JSON.parse(task.pm_checklist) : null,
+    is_locked: isTaskLocked(task),
+  };
 }
 
 // GET /tasks — list all tasks (optionally filter by column/project), excludes archived
@@ -137,7 +148,9 @@ router.post('/', requirePermission('task:create'), (req, res) => {
   }
 
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-  res.status(201).json({ ...task, tags: JSON.parse(task.tags), metadata: JSON.parse(task.metadata), is_locked: isTaskLocked(task) });
+  const fmtTask = fmt(task);
+  res.status(201).json(fmtTask);
+  broadcast('task_updated', { task: fmtTask });
 
   // Trigger PM agent asynchronously after response is sent
   if (pmReviewStatus === 'pending') triggerPmAgent(id);
@@ -231,7 +244,9 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
   }
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata), is_locked: isTaskLocked(updated) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 
   if (triggerPm) triggerPmAgent(task.id);
 });
@@ -290,7 +305,9 @@ router.post('/:id/move', requirePermission('task:move'), (req, res) => {
     }
   }
 
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata), is_locked: isTaskLocked(updated) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/toggle_checklist_item — human manually checks/unchecks a checklist item
@@ -317,7 +334,9 @@ router.post('/:id/toggle_checklist_item', requirePermission('task:update'), (req
       `Checklist: "${item.item}" manually ${item.resolved ? 'checked' : 'unchecked'}`);
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, pm_checklist: checklist, is_locked: isTaskLocked(updated) });
+  const fmtUpdated = { ...fmt(updated), pm_checklist: checklist };
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 
   // Trigger PM to re-evaluate, but only if PM is actively reviewing and not waiting for human to answer
   if (task.pm_approval_status && task.pm_approval_status !== 'approved' && !updated.pm_pending_question) {
@@ -357,7 +376,9 @@ router.post('/:id/request_human', requirePermission('task:request_human'), (req,
   db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(uuidv4(), task.id, agentId, 'human_action_requested', fromColumn, 'col_humanaction', reason || 'Human action required');
 
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
   res.json({ ok: true, message: 'Task flagged for human action' });
+  broadcast('task_updated', { task: fmt(updated) });
 });
 
 // POST /tasks/:id/approve_pr — human approves the PR, moves task to Testing
@@ -375,7 +396,9 @@ router.post('/:id/approve_pr', requirePermission('task:approve'), (req, res) => 
     .run(uuidv4(), task.id, 'human', 'pr_approved', 'col_humanaction', 'col_testing', `PR approved, moved to Testing`);
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // GET /tasks/:id/check_pr — check GitHub; if merged, auto-advance to Testing
@@ -414,7 +437,9 @@ router.get('/:id/check_pr', requirePermission('task:approve'), async (req, res, 
     }
 
     const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-    res.json({ merged: true, task: { ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) } });
+    const fmtUpdated = fmt(updated);
+    res.json({ merged: true, task: fmtUpdated });
+    broadcast('task_updated', { task: fmtUpdated });
   } catch (err) {
     next(err);
   }
@@ -437,7 +462,9 @@ router.post('/:id/pm_question', requirePermission('task:update'), (req, res) => 
     .run(uuidv4(), task.id, agentId, 'pm_question', question);
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/answer — human answers PM's pending question
@@ -461,7 +488,9 @@ router.post('/:id/answer', requirePermission('task:update'), (req, res) => {
     .run(uuidv4(), task.id, agentId, 'human_answer', answer);
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 
   // Re-trigger PM agent to continue conversation
   triggerPmAgent(task.id);
@@ -484,7 +513,9 @@ router.post('/:id/request_pm_review', requirePermission('task:update'), (req, re
     .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review requested');
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/pm_review — PM submits review
@@ -510,7 +541,9 @@ router.post('/:id/pm_review', requirePermission('task:update'), (req, res) => {
   }
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/approve — human approves task
@@ -542,7 +575,9 @@ router.post('/:id/approve', requirePermission('task:update'), (req, res) => {
   }
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/reject — human rejects task
@@ -567,7 +602,9 @@ router.post('/:id/reject', requirePermission('task:update'), (req, res) => {
   }
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/archive — archive a task (human only)
@@ -582,6 +619,7 @@ router.post('/:id/archive', attachAgent, (req, res) => {
     .run(uuidv4(), task.id, null, 'archived', 'Task archived by human');
 
   res.json({ ok: true });
+  broadcast('task_archived', { id: task.id });
 });
 
 // POST /tasks/:id/unarchive — restore an archived task (human only)
@@ -596,7 +634,9 @@ router.post('/:id/unarchive', attachAgent, (req, res) => {
     .run(uuidv4(), task.id, null, 'updated', 'Task restored from archive by human');
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags || '[]'), metadata: JSON.parse(updated.metadata || '{}'), is_locked: isTaskLocked(updated) });
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // POST /tasks/:id/bypass_pm — human overrides PM lock and unlocks the task
@@ -619,7 +659,9 @@ router.post('/:id/bypass_pm', attachAgent, (req, res) => {
     .run(uuidv4(), task.id, null, 'pm_bypassed', 'PM planning checks bypassed by human override');
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
-  res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata), is_locked: false });
+  const fmtUpdated = { ...fmt(updated), is_locked: false };
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
 });
 
 // DELETE /tasks/:id
@@ -637,6 +679,7 @@ router.delete('/:id', requirePermission('task:delete'), (req, res) => {
 
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   res.json({ ok: true, deleted: true });
+  broadcast('task_deleted', { id: req.params.id });
 });
 
 module.exports = router;

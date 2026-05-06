@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent } = require('../middleware/auth');
+const { broadcast } = require('../sse');
 
 const PROJECT_ROOT = path.join(__dirname, '../../..');
 
@@ -99,6 +100,7 @@ agentsRouter.post('/', (req, res) => {
 
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   res.status(201).json(parseAgent(agent));
+  broadcast('reload');
 });
 
 agentsRouter.post('/:id/save-as-template', (req, res) => {
@@ -126,6 +128,7 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(id);
   const updatedAgent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
   res.status(201).json({ template: parseTemplate(tpl), agent: parseAgent(updatedAgent) });
+  broadcast('reload');
 });
 
 agentsRouter.patch('/:id', (req, res) => {
@@ -185,6 +188,7 @@ agentsRouter.patch('/:id', (req, res) => {
 
   const updated = db.prepare('SELECT * FROM agents WHERE id = ?').get(agent.id);
   res.json({ agent: parseAgent(updated), displaced_tasks: displacedTasks });
+  broadcast('reload');
 });
 
 agentsRouter.post('/:id/archive', (req, res) => {
@@ -197,6 +201,7 @@ agentsRouter.post('/:id/archive', (req, res) => {
 
   db.prepare('UPDATE agents SET active = 0, archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+  broadcast('reload');
 });
 
 agentsRouter.post('/:id/unarchive', (req, res) => {
@@ -206,6 +211,7 @@ agentsRouter.post('/:id/unarchive', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE agents SET active = 1, archived_at = NULL WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+  broadcast('reload');
 });
 
 agentsRouter.delete('/:id', (req, res) => {
@@ -227,6 +233,7 @@ agentsRouter.delete('/:id', (req, res) => {
 
   db.prepare('DELETE FROM agents WHERE id = ?').run(req.params.id);
   res.json({ ok: true, deleted: true });
+  broadcast('reload');
 });
 
 // ── Columns ───────────────────────────────────────────────────────────────────
@@ -266,6 +273,7 @@ columnsRouter.post('/', (req, res) => {
   ).run(roleId, name, `Can be assigned to ${name} tasks`, JSON.stringify([id]));
 
   res.status(201).json(db.prepare('SELECT * FROM columns WHERE id = ?').get(id));
+  broadcast('reload');
 });
 
 columnsRouter.patch('/:id', (req, res) => {
@@ -283,6 +291,7 @@ columnsRouter.patch('/:id', (req, res) => {
   const setClauses = Object.keys(allowed).map(k => `${k} = ?`).join(', ');
   db.prepare(`UPDATE columns SET ${setClauses} WHERE id = ?`).run(...Object.values(allowed), req.params.id);
   res.json(db.prepare('SELECT * FROM columns WHERE id = ?').get(req.params.id));
+  broadcast('reload');
 });
 
 columnsRouter.post('/:id/archive', (req, res) => {
@@ -296,6 +305,7 @@ columnsRouter.post('/:id/archive', (req, res) => {
 
   db.prepare('UPDATE columns SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+  broadcast('reload');
 });
 
 columnsRouter.post('/:id/unarchive', (req, res) => {
@@ -305,6 +315,7 @@ columnsRouter.post('/:id/unarchive', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE columns SET archived_at = NULL WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+  broadcast('reload');
 });
 
 columnsRouter.delete('/:id', (req, res) => {
@@ -332,6 +343,7 @@ columnsRouter.delete('/:id', (req, res) => {
   db.prepare("DELETE FROM roles WHERE id = ? AND is_system = 0").run(deletedRoleId);
 
   res.json({ ok: true, deleted: true });
+  broadcast('reload');
 });
 
 // ── Secrets ───────────────────────────────────────────────────────────────────
@@ -603,6 +615,7 @@ agentTemplatesRouter.post('/', (req, res) => {
 
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(id);
   res.status(201).json(parseTemplate(tpl));
+  broadcast('reload');
 });
 
 agentTemplatesRouter.patch('/:id', (req, res) => {
@@ -635,6 +648,7 @@ agentTemplatesRouter.patch('/:id', (req, res) => {
 
   const updated = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(tpl.id);
   res.json(parseTemplate(updated));
+  broadcast('reload');
 });
 
 agentTemplatesRouter.post('/:id/archive', (req, res) => {
@@ -644,6 +658,7 @@ agentTemplatesRouter.post('/:id/archive', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE agent_templates SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+  broadcast('reload');
 });
 
 agentTemplatesRouter.post('/:id/unarchive', (req, res) => {
@@ -653,6 +668,7 @@ agentTemplatesRouter.post('/:id/unarchive', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE agent_templates SET archived_at = NULL WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
+  broadcast('reload');
 });
 
 agentTemplatesRouter.delete('/:id', (req, res) => {
@@ -674,6 +690,7 @@ agentTemplatesRouter.delete('/:id', (req, res) => {
 
   db.prepare('DELETE FROM agent_templates WHERE id = ?').run(req.params.id);
   res.json({ ok: true, deleted: true });
+  broadcast('reload');
 });
 
 // ── Roles ─────────────────────────────────────────────────────────────────────
