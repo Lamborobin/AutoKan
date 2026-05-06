@@ -153,7 +153,7 @@ const CHECKLIST_ITEM_SCHEMA = {
 const PM_TOOLS = [
   {
     name: 'ask_question',
-    description: 'Send a clarifying message to the human. On FIRST contact: ask ALL your open questions at once as a numbered list — this minimises round trips. On follow-up (human has already answered): ask at most ONE targeted question about anything still unclear. Always provide the updated checklist. Checklist items must be plain client-friendly decisions, not technical steps.',
+    description: 'Send a clarifying message to the human. Lead with a one-sentence summary of what you understand is being built. Then list open questions as a numbered list — ask everything at once on first contact. On follow-up: ask at most ONE targeted question. Always provide the updated checklist with resolved items marked. Checklist items must be plain client-friendly decisions, not technical steps. If the task seems large, include a task breakdown suggestion in the message.',
     input_schema: {
       type: 'object',
       properties: {
@@ -253,7 +253,17 @@ async function runPmAgent(taskId) {
   // Don't re-run while waiting for human to answer
   if (task.pm_pending_question) return;
 
-  const pmAgent = db.prepare("SELECT * FROM agents WHERE id = 'agent_pm'").get();
+  // Use the task's assigned agent; fall back to first active agent with perm_pm_planning capability
+  let pmAgent = task.assigned_agent_id
+    ? db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id)
+    : null;
+  if (!pmAgent) {
+    const candidates = db.prepare('SELECT * FROM agents WHERE active = 1').all();
+    pmAgent = candidates.find(a => {
+      try { return JSON.parse(a.role_ids || '[]').includes('perm_pm_planning'); }
+      catch { return false; }
+    }) || null;
+  }
   if (!pmAgent) return;
 
   // Get conversation history (questions + answers only)
@@ -296,8 +306,8 @@ async function runPmAgent(taskId) {
   const yourTurnBlock = isFinalReview
     ? `## FINAL REVIEW\nAll checklist items are now marked as resolved (some were manually checked by the human). Do a careful sanity check:\n- Is each item genuinely confirmed by the conversation and task description?\n- Does the priority (${task.priority}) and complexity (${task.complexity}) match the scope?\n- Are there any items that appear prematurely resolved?\n\nIf everything checks out → call approve_task with a clean requirements summary.\nIf you have ONE specific concern → ask about it. Do NOT re-ask things already answered.`
     : conversationLogs.length === 0
-      ? `## YOUR TURN — FIRST CONTACT\nThis is your first and ideally only question. Do the following in a single call:\n1. Build the full checklist of client decisions needed (5-9 items max). Mark any already answered by the description.\n2. If all items are already resolved → call approve_task immediately.\n3. Otherwise → call ask_question with ALL your open questions in ONE numbered message. The human will answer everything at once. Do NOT ask one question at a time.\n\nCRITICAL checklist rules:\n- Each item = a plain-language CLIENT DECISION (what they need to decide), not a technical task\n- Bad: "Backend category exists or needs creation" | Good: "Should shoes link to existing products or a new page?"\n- Bad: "Acceptance criteria defined" | Good: "What does done look like — when can a customer browse and buy shoes?"\n- A non-technical client must understand every item immediately`
-      : `## YOUR TURN — FOLLOW-UP\nThe human has answered. Re-evaluate the checklist and mark any newly resolved items.\n- If all items are now resolved → call approve_task immediately.\n- If items are still unresolved → ask about ALL of them in one message (numbered list), just like the first contact. Do NOT split remaining questions across multiple round trips. Do NOT re-ask anything already clearly answered.`;
+      ? `## YOUR TURN — FIRST CONTACT\nYour system prompt may include a [STYLE] and/or [CONSTRAINTS] section. Apply them as follows:\n- [CONSTRAINTS] — absolute hard rules, highest priority, always enforced regardless of anything else\n- [STYLE] — changes exactly one thing: whether you add a sentence or not. Direct/concise → no additions, e.g. "Before I can plan this out, I need to understand the goal: What should this task accomplish?" Warm/bubbly/chatty → same message plus one natural sentence, e.g. "Before I can plan this out, I need to understand the goal: What should this task accomplish? Happy to dig into this with you once I have a bit more context!" The structure never changes — only that one sentence appears or not.\n\nWork in two steps, in a single tool call:\n\n**Step 1 — Understand the goal**\nCan you summarize what's being built in one sentence from the description?\n- If YES → state that summary at the top of your message, then do Step 2.\n- If NO (genuinely too vague to know what they want) → your entire message is ONE question about the goal or intent. Submit an empty checklist for now. Stop here.\n\n**Step 2 — Plan the specifics**\nNow identify only the decisions genuinely missing from the description. Build the checklist from those gaps only.\n- Anything the description already states → mark resolved immediately, do NOT ask about it\n- A well-specified task → 1–3 open items\n- A vague task where intent is clear → up to 5–7 open items\n- If the task seems large (multiple distinct areas, multi-sprint scope) → include a breakdown suggestion in your message naming the proposed sub-tasks\n- If everything is already clear → call approve_task immediately\n- Otherwise → call ask_question. Lead with a one-sentence summary of what you understand is being built, then list open questions as a numbered list.\n\nCRITICAL: Only ask about things genuinely missing. If the description gives you a URL, color, or explicit behavior — it is answered. Do not invent uncertainty.`
+      : `## YOUR TURN — FOLLOW-UP\nThe human has answered. Re-evaluate the checklist and mark any newly resolved items.\n- If all items are now resolved → call approve_task immediately.\n- If items are still unresolved → ask about ALL of them in one message (numbered list). Do NOT split across multiple round trips. Do NOT re-ask anything already clearly answered.`;
 
   const userMessage = [
     contextBlock ? `## Context Files\n${contextBlock}` : '',
@@ -338,7 +348,7 @@ async function runPmAgent(taskId) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ?, pm_checklist = ? WHERE id = ?`)
         .run(question, JSON.stringify(checklist), taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, 'agent_pm', 'pm_question', question);
+        .run(uuidv4(), taskId, pmAgent.id, 'pm_question', question);
       console.log(`[AgentRunner] PM asked question on task ${taskId}`);
 
     } else if (block.name === 'approve_task') {
@@ -362,7 +372,7 @@ async function runPmAgent(taskId) {
         db.prepare(`UPDATE tasks SET complexity = ? WHERE id = ?`).run(complexity, taskId);
       }
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, 'agent_pm', 'pm_reviewed', `PM approved — ${comment}`);
+        .run(uuidv4(), taskId, pmAgent.id, 'pm_reviewed', `PM approved — ${comment}`);
       console.log(`[AgentRunner] PM approved task ${taskId}`);
     }
   }
@@ -374,7 +384,7 @@ async function runPmAgent(taskId) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ? WHERE id = ?`)
         .run(text, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, 'agent_pm', 'pm_question', text);
+        .run(uuidv4(), taskId, pmAgent.id, 'pm_question', text);
     }
   }
 
@@ -519,10 +529,14 @@ async function runDevAgent(taskId) {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
   if (!task) return;
   if (task.column_id !== 'col_inprogress') return;
-  if (task.assigned_agent_id !== 'agent_dev') return;
 
-  const devAgent = db.prepare("SELECT * FROM agents WHERE id = 'agent_dev'").get();
+  const devAgent = task.assigned_agent_id
+    ? db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id)
+    : null;
   if (!devAgent) return;
+  try {
+    if (!JSON.parse(devAgent.role_ids || '[]').includes('perm_coding')) return;
+  } catch { return; }
 
   // Create an isolated git worktree for this task so the main checkout is never touched
   let worktreePath;
@@ -531,7 +545,7 @@ async function runDevAgent(taskId) {
   } catch (err) {
     console.error(`[AgentRunner] Failed to create worktree for task ${taskId}:`, err.message);
     db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-      .run(uuidv4(), taskId, 'agent_dev', 'note', `Worktree setup failed: ${err.message}`);
+      .run(uuidv4(), taskId, devAgent.id, 'note', `Worktree setup failed: ${err.message}`);
     return;
   }
 
@@ -577,7 +591,7 @@ async function runDevAgent(taskId) {
     } catch (err) {
       console.error(`[AgentRunner] Dev agent API error for task ${taskId}:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, 'agent_dev', 'note', `Dev agent error: ${err.message}`);
+        .run(uuidv4(), taskId, devAgent.id, 'note', `Dev agent error: ${err.message}`);
       removeWorktree(worktreePath);
       break;
     }
@@ -610,7 +624,7 @@ async function runDevAgent(taskId) {
           db.prepare('UPDATE tasks SET progress = ? WHERE id = ?').run(progress, taskId);
         }
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), taskId, 'agent_dev', 'note', message);
+          .run(uuidv4(), taskId, devAgent.id, 'note', message);
         console.log(`[AgentRunner][dev][${taskId}] log: ${message}`);
         result = { success: true };
 
@@ -632,18 +646,18 @@ async function runDevAgent(taskId) {
           db.prepare('UPDATE tasks SET progress = 100, column_id = ?, pr_url = ?, requires_human_action = ?, human_action_reason = ? WHERE id = ?')
             .run(targetCol, pr_url, merged ? 0 : 1, reason, taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, 'agent_dev', 'pr_created', `PR created and ${merged ? 'auto-merged' : 'merge failed'}: ${pr_url}`);
+            .run(uuidv4(), taskId, devAgent.id, 'pr_created', `PR created and ${merged ? 'auto-merged' : 'merge failed'}: ${pr_url}`);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, 'agent_dev', 'moved', 'col_inprogress', targetCol, merged ? 'Auto-completed — moved to Testing' : 'Auto-merge failed — moved to Human Action');
+            .run(uuidv4(), taskId, devAgent.id, 'moved', 'col_inprogress', targetCol, merged ? 'Auto-completed — moved to Testing' : 'Auto-merge failed — moved to Human Action');
           console.log(`[AgentRunner][dev][${taskId}] auto-complete. merged=${merged} PR: ${pr_url}`);
         } else {
           // Manual review: park in Human Action
           db.prepare('UPDATE tasks SET progress = 100, column_id = ?, pr_url = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
             .run('col_humanaction', pr_url, 'PR ready for review', taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, 'agent_dev', 'pr_created', pr_url ? `PR created: ${pr_url}` : `Branch pushed — PR creation failed, create manually`);
+            .run(uuidv4(), taskId, devAgent.id, 'pr_created', pr_url ? `PR created: ${pr_url}` : `Branch pushed — PR creation failed, create manually`);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, 'agent_dev', 'moved', 'col_inprogress', 'col_humanaction', 'Moved to Human Action — awaiting PR review');
+            .run(uuidv4(), taskId, devAgent.id, 'moved', 'col_inprogress', 'col_humanaction', 'Moved to Human Action — awaiting PR review');
           console.log(`[AgentRunner][dev][${taskId}] awaiting review. PR: ${pr_url || 'creation failed'}`);
         }
         completed = true;
@@ -654,7 +668,7 @@ async function runDevAgent(taskId) {
         const { reason } = block.input;
         db.prepare('UPDATE tasks SET column_id = ? WHERE id = ?').run('col_humanaction', taskId);
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), taskId, 'agent_dev', 'human_action_requested', reason);
+          .run(uuidv4(), taskId, devAgent.id, 'human_action_requested', reason);
         console.log(`[AgentRunner][dev][${taskId}] requested human: ${reason}`);
         completed = true; // stop the loop; human must resume
         removeWorktree(worktreePath);
@@ -682,4 +696,252 @@ function triggerDevAgent(taskId) {
   });
 }
 
-module.exports = { triggerPmAgent, triggerDevAgent };
+// ── Tester Agent ──────────────────────────────────────────────────────────────
+
+const TESTER_TOOLS = [
+  {
+    name: 'bash',
+    description: 'Execute a shell command to run tests (npm test, jest, vitest, etc.) or inspect the project.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Shell command to run' }
+      },
+      required: ['command']
+    }
+  },
+  {
+    name: 'read_file',
+    description: 'Read a file from the repository.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path relative to the repo root' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'write_file',
+    description: 'Write a test file. Path must be inside a test directory or match a test file pattern (*.test.*, *.spec.*, __tests__/, test/).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path relative to repo root — must be a test file or inside a test directory' },
+        content: { type: 'string', description: 'Full file content' }
+      },
+      required: ['path', 'content']
+    }
+  },
+  {
+    name: 'task_log',
+    description: 'Add a progress note to the task log.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        progress: { type: 'number', description: 'Progress percentage 0-100' },
+        message: { type: 'string', description: 'Log message describing what was done' }
+      },
+      required: ['message']
+    }
+  },
+  {
+    name: 'task_complete',
+    description: 'Call this when testing is done. If passed=true the task moves to Human Review. If passed=false it moves back to In Progress for a fix (or to Human Action if max retries reached).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        passed: { type: 'boolean', description: 'True if all tests passed, false if any failed' },
+        summary: { type: 'string', description: 'Summary of tests run, what passed, and what failed (if any)' }
+      },
+      required: ['passed', 'summary']
+    }
+  },
+  {
+    name: 'request_human',
+    description: 'Flag the task as blocked and move it to Human Action. Use when you need a secret, permission, or cannot continue.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'What you need from the human and why' }
+      },
+      required: ['reason']
+    }
+  }
+];
+
+function testerWriteFile(relPath, content) {
+  const TEST_PATTERNS = [/\.test\.[jt]sx?$/, /\.spec\.[jt]sx?$/, /__tests__\//, /[/\\]test[/\\]/];
+  const allowed = TEST_PATTERNS.some(p => p.test(relPath));
+  if (!allowed) {
+    return { error: `Write denied: tester can only write test files. Got: ${relPath}` };
+  }
+  try {
+    const absPath = path.join(PROJECT_ROOT, relPath);
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, content, 'utf8');
+    return { success: true };
+  } catch (err) {
+    return { error: err.message };
+  }
+}
+
+async function runTesterAgent(taskId) {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task) return;
+  if (task.column_id !== 'col_testing') return;
+
+  const testerAgent = task.assigned_agent_id
+    ? db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id)
+    : null;
+  if (!testerAgent) return;
+  try {
+    if (!JSON.parse(testerAgent.role_ids || '[]').includes('perm_coding_tester')) return;
+  } catch { return; }
+
+  const systemPrompt = buildSystemPrompt(testerAgent);
+  const contextBlock = buildContextBlock(testerAgent);
+
+  const metadata = JSON.parse(task.metadata || '{}');
+  const retryCount = metadata.test_retry_count || 0;
+
+  const initialPrompt = [
+    contextBlock ? `## Context Files\n${contextBlock}` : '',
+    `## Your Assigned Task`,
+    `ID: ${task.id}`,
+    `Title: ${task.title}`,
+    `Description: ${task.description || '(no description)'}`,
+    `Acceptance Criteria: ${task.acceptance_criteria || '(none specified)'}`,
+    `PM Brief: ${task.pm_review_comment || '(none)'}`,
+    `Priority: ${task.priority} | Complexity: ${task.complexity}`,
+    retryCount > 0 ? `\n⚠️ This is retry #${retryCount} — the previous test run failed.` : '',
+    ``,
+    `## Instructions`,
+    `You are in the Testing column. Your job is to verify this task is complete and correct.`,
+    `1. Read the relevant source files and understand what was implemented`,
+    `2. Run the existing test suite: npm test (or the appropriate test command for this project)`,
+    `3. Write additional unit/integration tests if coverage is missing for the acceptance criteria`,
+    `4. Run tests again after writing them`,
+    `5. Call task_complete with passed=true if all tests pass, passed=false if any fail`,
+    `Use task_log at each milestone. If you hit a blocker you cannot resolve, call request_human.`
+  ].filter(Boolean).join('\n');
+
+  const messages = [{ role: 'user', content: initialPrompt }];
+
+  let completed = false;
+  const MAX_ITERATIONS = 30;
+
+  for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    let response;
+    try {
+      response = await getClient().messages.create({
+        model: testerAgent.model || 'claude-sonnet-4-5',
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: TESTER_TOOLS,
+        messages,
+      });
+    } catch (err) {
+      console.error(`[AgentRunner] Tester agent API error for task ${taskId}:`, err.message);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, testerAgent.id, 'note', `Tester agent error: ${err.message}`);
+      break;
+    }
+
+    messages.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason === 'end_turn') break;
+
+    const toolResults = [];
+
+    for (const block of response.content) {
+      if (block.type !== 'tool_use') continue;
+
+      let result;
+
+      if (block.name === 'bash') {
+        console.log(`[AgentRunner][tester][${taskId}] bash: ${block.input.command}`);
+        result = await runBash(block.input.command, PROJECT_ROOT);
+
+      } else if (block.name === 'read_file') {
+        const content = readFileFromDir(block.input.path, PROJECT_ROOT);
+        result = content ? { success: true, content } : { error: 'File not found' };
+
+      } else if (block.name === 'write_file') {
+        result = testerWriteFile(block.input.path, block.input.content);
+
+      } else if (block.name === 'task_log') {
+        const { progress, message } = block.input;
+        if (progress !== undefined) {
+          db.prepare('UPDATE tasks SET progress = ? WHERE id = ?').run(progress, taskId);
+        }
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, testerAgent.id, 'note', message);
+        console.log(`[AgentRunner][tester][${taskId}] log: ${message}`);
+        result = { success: true };
+
+      } else if (block.name === 'task_complete') {
+        const { passed, summary } = block.input;
+        if (passed) {
+          db.prepare('UPDATE tasks SET progress = 100, column_id = ? WHERE id = ?').run('col_humanreview', taskId);
+          db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), taskId, testerAgent.id, 'tests_passed', summary);
+          db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_humanreview', 'Tests passed — moved to Human Review');
+          console.log(`[AgentRunner][tester][${taskId}] tests passed → Human Review`);
+        } else {
+          const newRetryCount = retryCount + 1;
+          const MAX_RETRIES = 1;
+          if (newRetryCount > MAX_RETRIES) {
+            db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+              .run('col_humanaction', `Test run failed after ${newRetryCount} attempts: ${summary}`, taskId);
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
+            console.log(`[AgentRunner][tester][${taskId}] max retries → Human Action`);
+          } else {
+            const newMeta = JSON.stringify({ ...metadata, test_retry_count: newRetryCount });
+            db.prepare('UPDATE tasks SET column_id = ?, metadata = ? WHERE id = ?').run('col_inprogress', newMeta, taskId);
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, testerAgent.id, 'tests_failed', `Tests failed (retry ${newRetryCount}/${MAX_RETRIES}): ${summary}`);
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_inprogress', 'Tests failed — sent back to In Progress');
+            console.log(`[AgentRunner][tester][${taskId}] tests failed → In Progress (retry ${newRetryCount})`);
+          }
+        }
+        completed = true;
+        result = { success: true };
+
+      } else if (block.name === 'request_human') {
+        const { reason } = block.input;
+        db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+          .run('col_humanaction', reason, taskId);
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, testerAgent.id, 'human_action_requested', reason);
+        console.log(`[AgentRunner][tester][${taskId}] requested human: ${reason}`);
+        completed = true;
+        result = { success: true };
+      }
+
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: JSON.stringify(result)
+      });
+    }
+
+    if (toolResults.length > 0) {
+      messages.push({ role: 'user', content: toolResults });
+    }
+  }
+}
+
+function triggerTesterAgent(taskId) {
+  setImmediate(() => {
+    runTesterAgent(taskId).catch(err =>
+      console.error(`[AgentRunner] Tester unhandled error for task ${taskId}:`, err)
+    );
+  });
+}
+
+module.exports = { triggerPmAgent, triggerDevAgent, triggerTesterAgent };

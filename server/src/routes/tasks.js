@@ -2,15 +2,18 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent } = require('../middleware/auth');
-const { triggerPmAgent, triggerDevAgent } = require('../services/agentRunner');
+const { triggerPmAgent, triggerDevAgent, triggerTesterAgent } = require('../services/agentRunner');
 
 const router = express.Router();
 
-// Which agent auto-triggers in each column (both conditions must be true simultaneously)
-const COLUMN_AGENT_TRIGGERS = {
-  'col_backlog': 'agent_pm',
-  'col_inprogress': 'agent_dev',
-};
+// All agent auto-triggers are capability-based, not ID-based
+function agentHasCapability(agentId, capability, db) {
+  if (!agentId) return false;
+  const agent = db.prepare('SELECT role_ids FROM agents WHERE id = ?').get(agentId);
+  if (!agent) return false;
+  try { return JSON.parse(agent.role_ids || '[]').includes(capability); }
+  catch { return false; }
+}
 
 // Dynamic role-based column access check — works for system and custom columns
 function canAgentBeInColumn(agentId, columnId, db) {
@@ -106,9 +109,9 @@ router.post('/', requirePermission('task:create'), (req, res) => {
 
   const id = 'task_' + uuidv4().replace(/-/g, '').slice(0, 12);
 
-  // If PM is assigned at creation time in Backlog, auto-request PM review
+  // If a PM-capable agent is assigned at creation time in Backlog, auto-request PM review
   let pmReviewStatus = null;
-  if (assigned_agent_id === 'agent_pm' && column_id === 'col_backlog') {
+  if (column_id === 'col_backlog' && assigned_agent_id && agentHasCapability(assigned_agent_id, 'perm_pm_planning', db)) {
     pmReviewStatus = 'pending';
   }
 
@@ -208,21 +211,22 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
 
   let triggerPm = false;
 
-  // Trigger agent only when BOTH the right agent is assigned AND the task is in the matching column
+  // Trigger agent only when BOTH the right role is assigned AND the task is in the matching column
   if (req.body.assigned_agent_id !== undefined) {
-    const expectedAgent = COLUMN_AGENT_TRIGGERS[task.column_id];
     const newAgentId = req.body.assigned_agent_id;
-    if (expectedAgent && newAgentId === expectedAgent) {
-      if (task.column_id === 'col_backlog' && !task.pm_approval_status) {
-        db.prepare(`UPDATE tasks SET pm_approval_status = 'pending' WHERE id = ?`).run(task.id);
-        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review automatically requested on assignment');
-        triggerPm = true;
-      } else if (task.column_id === 'col_inprogress') {
-        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), task.id, agentId, 'developer_assigned', 'Developer assigned — starting implementation');
-        triggerDevAgent(task.id);
-      }
+    if (task.column_id === 'col_backlog' && agentHasCapability(newAgentId, 'perm_pm_planning', db) && !task.pm_approval_status) {
+      db.prepare(`UPDATE tasks SET pm_approval_status = 'pending' WHERE id = ?`).run(task.id);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review automatically requested on assignment');
+      triggerPm = true;
+    } else if (task.column_id === 'col_inprogress' && agentHasCapability(newAgentId, 'perm_coding', db)) {
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), task.id, agentId, 'developer_assigned', 'Developer assigned — starting implementation');
+      triggerDevAgent(task.id);
+    } else if (task.column_id === 'col_testing' && agentHasCapability(newAgentId, 'perm_coding_tester', db)) {
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), task.id, agentId, 'tester_assigned', 'Tester assigned — starting test run');
+      triggerTesterAgent(task.id);
     }
   }
 
@@ -275,13 +279,14 @@ router.post('/:id/move', requirePermission('task:move'), (req, res) => {
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
 
-  // Trigger agent if task moved into a column where the assigned agent is already correct
-  const expectedAgent = COLUMN_AGENT_TRIGGERS[column_id];
-  if (expectedAgent && updated.assigned_agent_id === expectedAgent) {
-    if (column_id === 'col_backlog' && !task.pm_approval_status) {
+  // Trigger agent if task moved into a column where the assigned agent has the matching capability
+  if (updated.assigned_agent_id) {
+    if (column_id === 'col_backlog' && agentHasCapability(updated.assigned_agent_id, 'perm_pm_planning', db) && !task.pm_approval_status) {
       triggerPmAgent(task.id);
-    } else if (column_id === 'col_inprogress') {
+    } else if (column_id === 'col_inprogress' && agentHasCapability(updated.assigned_agent_id, 'perm_coding', db)) {
       triggerDevAgent(task.id);
+    } else if (column_id === 'col_testing' && agentHasCapability(updated.assigned_agent_id, 'perm_coding_tester', db)) {
+      triggerTesterAgent(task.id);
     }
   }
 
@@ -371,6 +376,48 @@ router.post('/:id/approve_pr', requirePermission('task:approve'), (req, res) => 
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
   res.json({ ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) });
+});
+
+// GET /tasks/:id/check_pr — check GitHub; if merged, auto-advance to Testing
+router.get('/:id/check_pr', requirePermission('task:approve'), async (req, res, next) => {
+  try {
+    const db = getDb();
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+    if (!task.pr_url) return res.json({ merged: false });
+
+    const prMatch = task.pr_url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+    if (!prMatch) return res.json({ merged: false });
+
+    const [, owner, repo, prNumber] = prMatch;
+    const headers = { 'User-Agent': 'flowagent', 'Accept': 'application/vnd.github.v3+json' };
+    if (process.env.GITHUB_TOKEN) headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+
+    let prData = null;
+    try {
+      const resp = await fetch(`https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`, { headers });
+      if (resp.ok) prData = await resp.json();
+    } catch { /* network error — treat as not merged */ }
+
+    if (!prData || !prData.merged_at) return res.json({ merged: false });
+
+    // Always record the pr_approved event so the UI knows not to re-check on future opens
+    const alreadyLogged = db.prepare(`SELECT id FROM task_logs WHERE task_id = ? AND action = 'pr_approved'`).get(task.id);
+    if (!alreadyLogged) {
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), task.id, null, 'pr_approved', task.column_id, 'col_testing', 'PR merged on GitHub');
+    }
+
+    if (task.column_id === 'col_humanaction') {
+      db.prepare(`UPDATE tasks SET column_id = 'col_testing', requires_human_action = 0, human_action_reason = NULL WHERE id = ?`)
+        .run(task.id);
+    }
+
+    const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
+    res.json({ merged: true, task: { ...updated, tags: JSON.parse(updated.tags), metadata: JSON.parse(updated.metadata) } });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // POST /tasks/:id/pm_question — PM posts a clarifying question

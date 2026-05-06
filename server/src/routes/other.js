@@ -7,6 +7,11 @@ const { requirePermission, attachAgent } = require('../middleware/auth');
 
 const PROJECT_ROOT = path.join(__dirname, '../../..');
 
+// Returns true for JWT-authenticated users (Google OAuth) and legacy X-Agent-Id: human
+function isHuman(req) {
+  return !!(req.user || req.headers['x-agent-id'] === 'human');
+}
+
 // ── Agents ────────────────────────────────────────────────────────────────────
 const agentsRouter = express.Router();
 
@@ -59,7 +64,7 @@ agentsRouter.get('/:id', attachAgent, (req, res) => {
 
 agentsRouter.post('/', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can create agents' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create agents' });
 
   const db = getDb();
   const {
@@ -98,7 +103,7 @@ agentsRouter.post('/', (req, res) => {
 
 agentsRouter.post('/:id/save-as-template', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can save templates' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can save templates' });
 
   const db = getDb();
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
@@ -125,7 +130,7 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
 
 agentsRouter.patch('/:id', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can modify agents' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can modify agents' });
 
   const db = getDb();
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
@@ -184,7 +189,7 @@ agentsRouter.patch('/:id', (req, res) => {
 
 agentsRouter.post('/:id/archive', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can archive agents' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can archive agents' });
 
   const db = getDb();
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
@@ -196,7 +201,7 @@ agentsRouter.post('/:id/archive', (req, res) => {
 
 agentsRouter.post('/:id/unarchive', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can unarchive agents' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can unarchive agents' });
 
   const db = getDb();
   db.prepare('UPDATE agents SET active = 1, archived_at = NULL WHERE id = ?').run(req.params.id);
@@ -205,7 +210,7 @@ agentsRouter.post('/:id/unarchive', (req, res) => {
 
 agentsRouter.delete('/:id', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can delete agents' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can delete agents' });
 
   const db = getDb();
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
@@ -242,7 +247,7 @@ columnsRouter.get('/', attachAgent, (req, res) => {
 
 columnsRouter.post('/', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can create columns' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create columns' });
 
   const db = getDb();
   const { name, color = '#6366f1' } = req.body;
@@ -265,7 +270,7 @@ columnsRouter.post('/', (req, res) => {
 
 columnsRouter.patch('/:id', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can modify columns' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can modify columns' });
 
   const db = getDb();
   const { name, color, position } = req.body;
@@ -282,7 +287,7 @@ columnsRouter.patch('/:id', (req, res) => {
 
 columnsRouter.post('/:id/archive', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can archive columns' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can archive columns' });
 
   const db = getDb();
   const col = db.prepare('SELECT * FROM columns WHERE id = ?').get(req.params.id);
@@ -295,7 +300,7 @@ columnsRouter.post('/:id/archive', (req, res) => {
 
 columnsRouter.post('/:id/unarchive', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can unarchive columns' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can unarchive columns' });
 
   const db = getDb();
   db.prepare('UPDATE columns SET archived_at = NULL WHERE id = ?').run(req.params.id);
@@ -304,7 +309,7 @@ columnsRouter.post('/:id/unarchive', (req, res) => {
 
 columnsRouter.delete('/:id', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can delete columns' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can delete columns' });
 
   const db = getDb();
   const col = db.prepare('SELECT * FROM columns WHERE id = ?').get(req.params.id);
@@ -334,7 +339,7 @@ const secretsRouter = express.Router();
 
 secretsRouter.get('/', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can view secrets' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can view secrets' });
 
   const db = getDb();
   res.json(db.prepare('SELECT * FROM secrets ORDER BY created_at DESC').all());
@@ -359,7 +364,7 @@ secretsRouter.post('/', attachAgent, (req, res) => {
 
 secretsRouter.patch('/:id/resolve', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can resolve secrets' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can resolve secrets' });
 
   const db = getDb();
   const { status } = req.body; // 'provided' or 'rejected'
@@ -440,7 +445,7 @@ instructionsRouter.get('/:filename', attachAgent, (req, res) => {
 
 // PATCH /api/instructions/:filename — update file content
 instructionsRouter.patch('/:filename', (req, res) => {
-  if (req.headers['x-agent-id'] !== 'human') return res.status(403).json({ error: 'Only humans can edit instruction files' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can edit instruction files' });
 
   const { filename } = req.params;
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
@@ -467,7 +472,7 @@ instructionsRouter.patch('/:filename', (req, res) => {
 // POST /api/instructions — create a new .md file in instructions/
 instructionsRouter.post('/', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can create instruction files' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create instruction files' });
 
   const { name, content = '' } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
@@ -495,7 +500,7 @@ instructionsRouter.post('/', (req, res) => {
 
 // POST /api/instructions/:filename/archive — move to archived/ subfolder
 instructionsRouter.post('/:filename/archive', (req, res) => {
-  if (req.headers['x-agent-id'] !== 'human') return res.status(403).json({ error: 'Only humans can archive instruction files' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can archive instruction files' });
 
   const { filename } = req.params;
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
@@ -516,7 +521,7 @@ instructionsRouter.post('/:filename/archive', (req, res) => {
 
 // POST /api/instructions/:filename/unarchive — restore from archived/
 instructionsRouter.post('/:filename/unarchive', (req, res) => {
-  if (req.headers['x-agent-id'] !== 'human') return res.status(403).json({ error: 'Only humans can restore instruction files' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can restore instruction files' });
 
   const { filename } = req.params;
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
@@ -535,7 +540,7 @@ instructionsRouter.post('/:filename/unarchive', (req, res) => {
 
 // DELETE /api/instructions/:filename — hard delete if no agent references
 instructionsRouter.delete('/:filename', (req, res) => {
-  if (req.headers['x-agent-id'] !== 'human') return res.status(403).json({ error: 'Only humans can delete instruction files' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can delete instruction files' });
 
   const { filename } = req.params;
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
@@ -578,7 +583,7 @@ agentTemplatesRouter.get('/', attachAgent, (req, res) => {
 
 agentTemplatesRouter.post('/', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can create templates' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create templates' });
 
   const db = getDb();
   const {
@@ -602,7 +607,7 @@ agentTemplatesRouter.post('/', (req, res) => {
 
 agentTemplatesRouter.patch('/:id', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can modify templates' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can modify templates' });
 
   const db = getDb();
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(req.params.id);
@@ -634,7 +639,7 @@ agentTemplatesRouter.patch('/:id', (req, res) => {
 
 agentTemplatesRouter.post('/:id/archive', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can archive templates' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can archive templates' });
 
   const db = getDb();
   db.prepare('UPDATE agent_templates SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
@@ -643,7 +648,7 @@ agentTemplatesRouter.post('/:id/archive', (req, res) => {
 
 agentTemplatesRouter.post('/:id/unarchive', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can unarchive templates' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can unarchive templates' });
 
   const db = getDb();
   db.prepare('UPDATE agent_templates SET archived_at = NULL WHERE id = ?').run(req.params.id);
@@ -652,7 +657,7 @@ agentTemplatesRouter.post('/:id/unarchive', (req, res) => {
 
 agentTemplatesRouter.delete('/:id', (req, res) => {
   const agentId = req.headers['x-agent-id'];
-  if (agentId !== 'human') return res.status(403).json({ error: 'Only humans can delete templates' });
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can delete templates' });
 
   const db = getDb();
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(req.params.id);

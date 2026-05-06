@@ -7,9 +7,10 @@ const COMPLEXITIES = ['low', 'medium', 'high'];
 
 export default function NewTaskModal() {
   const { agents, createTask, setShowNewTask } = useStore();
+  const defaultPmAgent = agents.find(a => a.active !== 0 && Array.isArray(a.role_ids) && a.role_ids.includes('perm_pm_planning'));
   const [form, setForm] = useState({
     title: '', description: '', priority: 'medium', complexity: 'medium',
-    assigned_agent_id: 'agent_pm', tags: '', acceptance_criteria: '', auto_complete: false,
+    assigned_agent_id: defaultPmAgent?.id || '', tags: '', acceptance_criteria: '', auto_complete: false,
   });
   const [saving, setSaving] = useState(false);
 

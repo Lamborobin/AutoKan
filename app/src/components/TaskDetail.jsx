@@ -36,12 +36,17 @@ export default function TaskDetail() {
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [approvingPr, setApprovingPr] = useState(false);
+  const [checkingPr, setCheckingPr] = useState(false);
 
   const titleRef = useRef(null);
   const descRef = useRef(null);
 
   useEffect(() => {
     if (!selectedTask) return;
+    // Reset task to null so the panel can't render stale data before the fresh
+    // load arrives — this guarantees checkingPr=true is set before first render
+    setTask(null);
+    setCheckingPr(false);
     setAgentThinking(false);
     setConfirmBypass(false);
     setConfirmArchive(false);
@@ -50,21 +55,37 @@ export default function TaskDetail() {
     setEditingTitle(false);
     setEditingDescription(false);
     setEditingCriteria(false);
-    tasksApi.get(selectedTask.id).then(t => {
+    let cancelled = false;
+    (async () => {
+      const t = await tasksApi.get(selectedTask.id);
+      if (cancelled) return;
+
+      const alreadyApproved = (t.logs || []).some(l => l.action === 'pr_approved');
+      const needsPrCheck = t.column_id === 'col_humanaction' && !!t.pr_url && !alreadyApproved;
+
+      // Set task + checkingPr together so PR panel always first renders with spinner
       setTask(t);
       setLogs(t.logs || []);
       setTitleDraft(t.title || '');
       setDescriptionDraft(t.description || '');
       setCriteriaDraft(t.acceptance_criteria || '');
+      setCheckingPr(needsPrCheck);
 
-      // Auto-start polling if PM is already running when the panel opens:
-      // 'pending' = PM triggered but hasn't responded yet
-      // 'questioning' with no pending question = human answered, PM is re-evaluating
       const pmIsProcessing =
         (t.pm_approval_status === 'pending' && !t.pm_pending_question) ||
         (t.pm_approval_status === 'questioning' && !t.pm_pending_question);
       if (pmIsProcessing) setAgentThinking(true);
-    });
+
+      if (needsPrCheck) {
+        try {
+          const result = await tasksApi.checkPr(t.id);
+          if (cancelled) return;
+          if (result.merged && result.task) setTask(result.task);
+        } catch { /* GitHub unreachable — let user click manually */ }
+        finally { if (!cancelled) setCheckingPr(false); }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [selectedTask?.id]);
 
   // Focus input when editing starts
@@ -116,7 +137,7 @@ export default function TaskDetail() {
   const tags = Array.isArray(task.tags) ? task.tags : [];
   const isLocked = task.is_locked;
   const checklist = Array.isArray(task.pm_checklist) ? task.pm_checklist : [];
-  const isPmPlanning = task.column_id === 'col_backlog' && task.assigned_agent_id === 'agent_pm';
+  const isPmPlanning = !!task.pm_approval_status;
   const hasPendingQuestion = !!task.pm_pending_question;
 
   // Build conversation thread — exclude the latest pm_question when it's pending
@@ -353,11 +374,11 @@ export default function TaskDetail() {
               </div>
             )}
 
-            {/* PR Review panel */}
-            {task.pr_url && task.column_id === 'col_humanaction' && (
+            {/* PR Review panel — only when PR hasn't been approved yet */}
+            {task.pr_url && task.column_id === 'col_humanaction' && !logs.some(l => l.action === 'pr_approved') && (
               <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-blue-500/15">
-                  <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                  <div className={`w-1.5 h-1.5 rounded-full ${checkingPr ? 'bg-blue-400/50 animate-pulse' : 'bg-blue-400'}`} />
                   <span className="text-xs font-medium text-blue-300">PR Ready for Review</span>
                 </div>
                 <div className="px-4 py-3 space-y-3">
@@ -369,15 +390,40 @@ export default function TaskDetail() {
                   >
                     {task.pr_url}
                   </a>
-                  <p className="text-xs text-gray-500">Review the PR, then click below to move this task to Testing.</p>
-                  <button
-                    onClick={handleApprovePr}
-                    disabled={approvingPr}
-                    className="w-full py-2 text-xs font-medium bg-blue-600/20 text-blue-300 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {approvingPr ? 'Moving…' : 'PR Reviewed — Send to Testing'}
-                  </button>
+                  {checkingPr ? (
+                    <div className="w-full py-2.5 flex items-center justify-center gap-2.5 rounded-lg bg-blue-500/8 border border-blue-500/15">
+                      <svg className="w-3.5 h-3.5 text-blue-400/60 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      <span className="text-xs text-blue-400/70">Checking if already merged…</span>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500">Review the PR, then click below to move this task to Testing.</p>
+                      <button
+                        onClick={handleApprovePr}
+                        disabled={approvingPr}
+                        className="w-full py-2 text-xs font-medium bg-blue-600/20 text-blue-300 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {approvingPr ? 'Moving…' : 'PR Reviewed — Send to Testing'}
+                      </button>
+                    </>
+                  )}
                 </div>
+              </div>
+            )}
+
+            {/* Merged PR notice — shown when PR was already approved and task is back in Human Action */}
+            {task.pr_url && task.column_id === 'col_humanaction' && logs.some(l => l.action === 'pr_approved') && (
+              <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-500/5 border border-gray-500/15">
+                <svg className="w-3.5 h-3.5 text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
+                </svg>
+                <span className="text-xs text-gray-500">PR already merged —</span>
+                <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-gray-300 underline underline-offset-2 truncate transition-colors">
+                  {task.pr_url.replace('https://github.com/', '')}
+                </a>
               </div>
             )}
 

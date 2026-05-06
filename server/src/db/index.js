@@ -4,29 +4,7 @@ const fs = require('fs');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/flowagent.db');
 
-const PM_TEMPLATE_SYSTEM_PROMPT = `You are a Project Manager with deep technical expertise. You bridge business requirements and technical implementation — your approval is the quality gate before a developer writes a single line of code.
-
-**How you work:**
-- Lead every response with bullet-pointed areas the human needs to address or clarify
-- Ask all the missing questions regarding the tasks in one output.
-- After each human reply, assess whether it fully satisfies the open point before moving on
-- If an answer is incomplete or contradicts context (client priorities, technical constraints from your files), raise the conflict explicitly before proceeding
-
-**A task is only approved when ALL of the following are confirmed:**
-- **Title** — clear and specific (not generic; "fix bug" or "create excel list" is not acceptable)
-- **Description** — explains what to build, why it is needed, and how it fits the existing system
-- **Timeframe** — an estimate is set; use "unknown" if genuinely unclear, but never leave it blank
-- **Requirements** — a complete, unambiguous list; a developer must not need to guess anything
-- **Acceptance criteria** — defines what "done" looks like in concrete, testable terms
-- **Open comments** — every comment or concern has been addressed or incorporated into the description
-
-**Comment and scope handling:**
-- If a comment raises a valid concern not reflected in the description, incorporate it before approving
-- If a comment conflicts with client priorities or technical constraints from your context files, flag the conflict and resolve it with the human
-- If a comment is out of scope, acknowledge it clearly and explain why it will not affect this task
-- Never approve a task that has unresolved scope questions
-
-Last out is to let a human do a manual override, if needed, in order to proceed with the task to done. If the task is technically infeasible or fundamentally flawed and no rework will fix it, your last resort is to explicitly suggest creating a new task and archiving this one — state this clearly in your response.`;
+const PM_TEMPLATE_SYSTEM_PROMPT = `You are a Project Manager agent — the quality gate between client requirements and the development team. No developer writes a single line of code until you have approved the task. You communicate like a senior PM: clear, direct, and always focused on what the client actually needs, not on technical implementation details.`;
 
 // Ensure data directory exists
 const dataDir = path.dirname(DB_PATH);
@@ -248,7 +226,7 @@ function initDb() {
 
   // Migration: mark PM as template on first run only (template_system_prompt is now editable via UI)
   db.prepare(`UPDATE agents SET is_template = 1 WHERE id = 'agent_pm' AND is_template = 0`).run();
-  // Seed PM template_system_prompt only if it has never been set
+  // Seed PM template_system_prompt only if it has never been set — never overwrite user customisations
   db.prepare(`UPDATE agents SET template_system_prompt = ? WHERE id = 'agent_pm' AND template_system_prompt IS NULL`)
     .run(PM_TEMPLATE_SYSTEM_PROMPT);
 
@@ -350,9 +328,31 @@ function initDb() {
     ['perm_security_control','Security Control', 'Security analysis, vulnerability scanning, .env usage review, no modifications',      '#ef4444', 'permission'],
     ['perm_log_reader',      'Log Reader',       'Reads logs in the file system and cloud (when cloud is enabled)',                     '#f97316', 'permission'],
     ['perm_data_analytic',   'Data Analytics',   'Extracts and analyses data from appropriate areas of the app',                       '#84cc16', 'permission'],
+    ['perm_pm_planning',     'PM Planning',      'Triggers the PM planning phase when assigned to a Backlog task',                      '#a855f7', 'permission'],
   ].forEach(([id, name, description, color, type]) =>
     insertRoleIfMissing.run(id, name, description, '[]', color, type)
   );
+
+  // Always ensure agent_pm has the PM Planning capability
+  const pmRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_pm'").get()?.role_ids || '[]');
+  if (!pmRoleIds.includes('perm_pm_planning')) {
+    db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_pm'")
+      .run(JSON.stringify([...pmRoleIds, 'perm_pm_planning']));
+  }
+
+  // Always ensure agent_dev has the Coding capability
+  const devRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_dev'").get()?.role_ids || '[]');
+  if (!devRoleIds.includes('perm_coding')) {
+    db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_dev'")
+      .run(JSON.stringify([...devRoleIds, 'perm_coding']));
+  }
+
+  // Always ensure agent_test has the Coding Tester capability
+  const testRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_test'").get()?.role_ids || '[]');
+  if (!testRoleIds.includes('perm_coding_tester')) {
+    db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_test'")
+      .run(JSON.stringify([...testRoleIds, 'perm_coding_tester']));
+  }
 
   // Migration: add role_ids to agents
   if (!agentColNames.includes('role_ids')) {
