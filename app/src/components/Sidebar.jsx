@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Kanban } from 'lucide-react';
 import ArchivedTasksModal from './ArchivedTasksModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
@@ -184,16 +184,18 @@ function ProjectSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => { setOpen(o => !o); setAdding(false); }}
-        className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-surface-3 transition-colors group"
       >
-        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
-          style={{ background: current?.color ? current.color + '22' : '#6366f122', border: `1px solid ${current?.color || '#6366f1'}33` }}>
-          {current?.emoji || '📋'}
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style={{ background: current?.color ? current.color + '22' : '#6366f122', border: `1px solid ${current?.color || '#6366f1'}40` }}>
+          <Kanban size={16} style={{ color: current?.color || '#6366f1' }} />
         </div>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-semibold text-gray-100 truncate">{current?.name || 'No board'}</p>
+          <p className="text-base font-bold text-gray-100 truncate leading-tight">
+            {current?.client_name || current?.name || 'No board'}
+          </p>
           {current?.client_name && (
-            <p className="text-xs text-gray-500 truncate">{current.client_name}</p>
+            <p className="text-[10px] text-gray-600 truncate">{current.name}</p>
           )}
         </div>
         <ChevronDown size={12} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -208,13 +210,13 @@ function ProjectSwitcher() {
                 onClick={() => { setCurrentProject(p.id); setOpen(false); }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-3 transition-colors"
               >
-                <div className="w-6 h-6 rounded flex items-center justify-center text-sm shrink-0"
-                  style={{ background: p.color + '22' }}>
-                  {p.emoji || '📋'}
+                <div className="w-6 h-6 rounded flex items-center justify-center shrink-0"
+                  style={{ background: p.color ? p.color + '22' : '#6366f122' }}>
+                  <Kanban size={13} style={{ color: p.color || '#6366f1' }} />
                 </div>
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium text-gray-300 truncate">{p.name}</p>
-                  {p.client_name && <p className="text-xs text-gray-600 truncate">{p.client_name}</p>}
+                  <p className="text-sm font-medium text-gray-200 truncate">{p.client_name || p.name}</p>
+                  {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.name}</p>}
                 </div>
                 {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
               </button>
