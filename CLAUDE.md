@@ -11,7 +11,7 @@
 
 ## Monorepo Structure
 ```
-flowagent/
+AutoKan/
 ├── instructions/            # Agent system prompts + context files (selectable in UI)
 │   ├── pm.md                # PM agent system prompt (methodology, not identity)
 │   ├── developer.md         # Developer agent system prompt

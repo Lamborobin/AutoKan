@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'flowagent-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'AutoKan-dev-secret-change-in-production';
 
 /**
  * Decode a Bearer JWT if present — populates req.user and treats caller as 'human'.

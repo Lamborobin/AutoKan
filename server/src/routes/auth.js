@@ -7,7 +7,7 @@ const { getDb } = require('../db');
 const router = express.Router();
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const JWT_SECRET = process.env.JWT_SECRET || 'flowagent-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'AutoKan-dev-secret-change-in-production';
 const JWT_EXPIRES = '30d';
 
 let oauthClient;

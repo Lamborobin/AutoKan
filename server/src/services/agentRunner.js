@@ -59,7 +59,7 @@ function githubRequest({ path, method = 'GET', body = null }) {
   const payload = body ? JSON.stringify(body) : null;
   const headers = {
     'Authorization': `token ${token}`,
-    'User-Agent': 'flowagent-dev-runner',
+    'User-Agent': 'AutoKan-dev-runner',
     'Accept': 'application/vnd.github.v3+json',
   };
   if (payload) {
@@ -110,7 +110,7 @@ async function mergeGithubPr(prNumber) {
 // ---------------------------------------------------------------------------
 
 function createWorktree(taskId) {
-  const worktreePath = path.resolve(PROJECT_ROOT, '..', `flowagent-wt-${taskId}`);
+  const worktreePath = path.resolve(PROJECT_ROOT, '..', `AutoKan-wt-${taskId}`);
   const branch = `feature/${taskId}`;
 
   if (fs.existsSync(worktreePath)) {

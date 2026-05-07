@@ -413,7 +413,7 @@ router.get('/:id/check_pr', requirePermission('task:approve'), async (req, res, 
     if (!prMatch) return res.json({ merged: false });
 
     const [, owner, repo, prNumber] = prMatch;
-    const headers = { 'User-Agent': 'flowagent', 'Accept': 'application/vnd.github.v3+json' };
+    const headers = { 'User-Agent': 'AutoKan', 'Accept': 'application/vnd.github.v3+json' };
     if (process.env.GITHUB_TOKEN) headers['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
 
     let prData = null;

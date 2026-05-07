@@ -5,7 +5,7 @@ Autonomous AI agent task orchestration system. A kanban board where AI agents (P
 ## Architecture
 
 ```
-flowagent/
+AutoKan/
 ├── server/          # Node.js + Express + SQLite API
 ├── app/             # React + Tailwind frontend
 ├── agents/          # Agent prompts + config

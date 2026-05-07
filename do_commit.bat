@@ -1,5 +1,5 @@
 @echo off
-cd /d C:\Users\roblar\source\repos\flowagent
+cd /d C:\Users\roblar\source\repos\AutoKan
 
 REM Remove stale lock file
 if exist .git\index.lock del /f .git\index.lock

@@ -4,7 +4,7 @@
       "Bash(git init *)",
       "Bash(git config *)",
       "Bash(git add *)",
-      "Bash(git commit -m 'Initial commit: FlowAgent autonomous AI agent orchestration system *)",
+      "Bash(git commit -m 'Initial commit: AutoKan autonomous AI agent orchestration system *)",
       "Bash(gh repo *)",
       "Bash(git remote *)",
       "Bash(git push *)",
@@ -23,7 +23,18 @@
       "Bash(node -e \"require\\('./src/services/agentRunner'\\)\")",
       "Bash(node -e \"require\\('./src/routes/tasks'\\)\")",
       "Bash(node -e \"require\\('./src/routes/tasks'\\); require\\('./src/services/agentRunner'\\)\")",
-      "Bash(node -e \"require\\('./src/services/agentRunner'\\); require\\('./src/db'\\)\")"
+      "Bash(node -e \"require\\('./src/services/agentRunner'\\); require\\('./src/db'\\)\")",
+      "Bash(grep -E \"^d|\\\\.json$\")",
+      "Bash(node -e \"require\\('google-auth-library'\\); require\\('jsonwebtoken'\\); console.log\\('OK'\\)\")",
+      "Bash(node -e \"require.resolve\\('@react-oauth/google'\\); console.log\\('OK'\\)\")",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "Bash(curl -s http://localhost:3001/api/auth/me)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_in_Chrome__browser_batch",
+      "mcp__Claude_in_Chrome__navigate",
+      "mcp__Claude_in_Chrome__computer",
+      "mcp__Claude_in_Chrome__read_console_messages",
+      "Bash(curl -s -D - -o /dev/null 'https://accounts.google.com/o/oauth2/v2/auth?client_id=16161844699-41hcpgqtg7s9do6k5m4tls8de6jjesca.apps.googleusercontent.com&response_type=code&scope=openid+email+profile&redirect_uri=http://localhost:5173')"
     ]
   }
 }

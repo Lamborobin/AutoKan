@@ -14,7 +14,7 @@ An autonomous AI agent task orchestration system — a kanban board where AI age
 
 ## Project Structure
 ```
-flowagent/
+AutoKan/
 ├── server/src/
 │   ├── db/index.js          # Schema + seeding
 │   ├── middleware/auth.js   # Agent auth via X-Agent-Id header
