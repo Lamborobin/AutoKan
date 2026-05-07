@@ -12,7 +12,7 @@ const PRIORITIES = ['low', 'medium', 'high', 'critical'];
 const COMPLEXITIES = ['low', 'medium', 'high'];
 
 export default function TaskDetail() {
-  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, moveTask, deleteTask, updateTask, archiveTask, bypassPm } = useStore();
+  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent } = useStore();
   const [task, setTask] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -37,6 +37,7 @@ export default function TaskDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [approvingPr, setApprovingPr] = useState(false);
   const [checkingPr, setCheckingPr] = useState(false);
+  const [pendingEditAgent, setPendingEditAgent] = useState(null);
 
   const titleRef = useRef(null);
   const descRef = useRef(null);
@@ -289,12 +290,50 @@ export default function TaskDetail() {
     setTask(t => ({ ...t, assigned_agent_id: agentId || null }));
   }
 
+  function hasUnsavedChanges() {
+    return (
+      (editingTitle && titleDraft.trim() !== (task.title || '')) ||
+      (editingDescription && descriptionDraft.trim() !== (task.description || '')) ||
+      (editingCriteria && criteriaDraft.trim() !== (task.acceptance_criteria || ''))
+    );
+  }
+
+  function handleOpenEditAgent() {
+    const assignedAgent = agents.find(a => a.id === task.assigned_agent_id);
+    if (!assignedAgent) return;
+    if (hasUnsavedChanges()) {
+      setPendingEditAgent(assignedAgent);
+    } else {
+      setSelectedTask(null);
+      setEditingAgent(assignedAgent);
+    }
+  }
+
+  async function handleEditAgentSaveFirst() {
+    const agent = pendingEditAgent;
+    setPendingEditAgent(null);
+    if (editingTitle && titleDraft.trim() !== (task.title || '')) await saveTitle();
+    if (editingDescription && descriptionDraft.trim() !== (task.description || '')) await saveDescription();
+    if (editingCriteria && criteriaDraft.trim() !== (task.acceptance_criteria || '')) await saveCriteria();
+    setSelectedTask(null);
+    setEditingAgent(agent);
+  }
+
+  function handleEditAgentDiscard() {
+    const agent = pendingEditAgent;
+    setPendingEditAgent(null);
+    setEditingTitle(false);
+    setEditingDescription(false);
+    setEditingCriteria(false);
+    setSelectedTask(null);
+    setEditingAgent(agent);
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-      onClick={e => e.target === e.currentTarget && setSelectedTask(null)}
     >
       <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in overflow-hidden">
 
@@ -883,7 +922,19 @@ export default function TaskDetail() {
 
             {/* Assigned agent */}
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Agent</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-gray-500">Assigned Agent</label>
+                {task.assigned_agent_id && (
+                  <button
+                    onClick={handleOpenEditAgent}
+                    className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-accent transition-colors"
+                    title="Edit this agent"
+                  >
+                    <Pencil size={10} />
+                    Edit agent
+                  </button>
+                )}
+              </div>
               <select
                 value={task.assigned_agent_id || ''}
                 onChange={e => handleAgentChange(e.target.value)}
@@ -896,6 +947,38 @@ export default function TaskDetail() {
                 ))}
               </select>
             </div>
+
+            {/* Unsaved changes prompt — shown when user tries to open agent editor */}
+            {pendingEditAgent && (
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-200">Unsaved changes</h3>
+                    <p className="text-xs text-gray-500 mt-1">You have unsaved changes in this task. Would you like to save them before opening the agent editor?</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPendingEditAgent(null)}
+                      className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-300 rounded-lg border border-border hover:bg-surface-3 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleEditAgentDiscard}
+                      className="flex-1 py-2 text-sm text-gray-400 hover:text-gray-200 rounded-lg border border-border hover:bg-surface-3 transition-colors"
+                    >
+                      Discard
+                    </button>
+                    <button
+                      onClick={handleEditAgentSaveFirst}
+                      className="flex-1 py-2 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Tags */}
             {tags.length > 0 && (

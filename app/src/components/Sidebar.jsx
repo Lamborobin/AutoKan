@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, AlignStartHorizontal, Home, Archive, LogOut, Check, FolderOpen, Briefcase } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase } from 'lucide-react';
 import ArchivedTasksModal from './ArchivedTasksModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
@@ -113,13 +113,13 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
         }`}
         title="Click to expand · Drag to assign to a task"
       >
-        <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
           style={{ background: agent.color }}>
           {agent.name[0]}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="text-xs font-medium text-gray-300 truncate">{agent.name}</p>
+            <p className="text-sm font-medium text-gray-300 truncate">{agent.name}</p>
             {showTemplateBadge && (
               <span
                 title={originTemplate ? `From template: ${originTemplate.name}${templateArchived ? ' (archived)' : ''}` : 'Template agent'}
@@ -132,7 +132,7 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
               </span>
             )}
           </div>
-          <p className="text-[10px] text-gray-600 truncate">{agent.role}</p>
+          <p className="text-xs text-gray-600 truncate">{agent.role}</p>
         </div>
       </button>
     </div>
@@ -184,24 +184,23 @@ function ProjectSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => { setOpen(o => !o); setAdding(false); }}
-        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-surface-3 transition-colors group"
+        className="w-full flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
       >
-        <div className="w-6 h-6 rounded-md flex items-center justify-center text-sm shrink-0"
+        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-base shrink-0"
           style={{ background: current?.color ? current.color + '22' : '#6366f122', border: `1px solid ${current?.color || '#6366f1'}33` }}>
           {current?.emoji || '📋'}
         </div>
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-xs font-semibold text-gray-200 truncate">{current?.name || 'No board'}</p>
+          <p className="text-sm font-semibold text-gray-100 truncate">{current?.name || 'No board'}</p>
           {current?.client_name && (
-            <p className="text-[10px] text-gray-600 truncate">{current.client_name}</p>
+            <p className="text-xs text-gray-500 truncate">{current.client_name}</p>
           )}
         </div>
-        <ChevronDown size={10} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-          {/* Project list */}
           <div className="py-1 max-h-48 overflow-y-auto">
             {active.map(p => (
               <button
@@ -209,15 +208,15 @@ function ProjectSwitcher() {
                 onClick={() => { setCurrentProject(p.id); setOpen(false); }}
                 className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-3 transition-colors"
               >
-                <div className="w-5 h-5 rounded flex items-center justify-center text-xs shrink-0"
+                <div className="w-6 h-6 rounded flex items-center justify-center text-sm shrink-0"
                   style={{ background: p.color + '22' }}>
                   {p.emoji || '📋'}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-xs font-medium text-gray-300 truncate">{p.name}</p>
-                  {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.client_name}</p>}
+                  <p className="text-sm font-medium text-gray-300 truncate">{p.name}</p>
+                  {p.client_name && <p className="text-xs text-gray-600 truncate">{p.client_name}</p>}
                 </div>
-                {p.id === currentProjectId && <Check size={11} className="text-accent shrink-0" />}
+                {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
               </button>
             ))}
           </div>
@@ -230,21 +229,21 @@ function ProjectSwitcher() {
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   placeholder="Board name"
-                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                 />
                 <input
                   value={newClient}
                   onChange={e => setNewClient(e.target.value)}
                   placeholder="Client name (optional)"
-                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                 />
                 <div className="flex gap-1.5">
                   <button type="button" onClick={() => setAdding(false)}
-                    className="flex-1 py-1 text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                    className="flex-1 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition-colors">
                     Cancel
                   </button>
                   <button type="submit" disabled={creating || !newName.trim()}
-                    className="flex-1 py-1 text-xs font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
+                    className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
                     {creating ? '...' : 'Create'}
                   </button>
                 </div>
@@ -252,9 +251,9 @@ function ProjectSwitcher() {
             ) : (
               <button
                 onClick={() => setAdding(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors"
               >
-                <Plus size={11} />
+                <Plus size={13} />
                 New board
               </button>
             )}
@@ -265,112 +264,126 @@ function ProjectSwitcher() {
   );
 }
 
-function UserMenu() {
+function UserProfileModal({ onClose }) {
   const { user, logout, updateProfile } = useStore();
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [company, setCompany] = useState(user?.company_name || '');
   const [saving, setSaving] = useState(false);
-  const ref = useRef(null);
 
-  useEffect(() => {
-    function handleOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) { setOpen(false); setEditing(false); }
-    }
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, []);
+  const displayName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : '';
 
   async function handleSave() {
     setSaving(true);
     try {
       await updateProfile({ company_name: company });
-      setEditing(false);
+      onClose();
     } finally {
       setSaving(false);
     }
   }
 
+  function handleLogout() {
+    onClose();
+    logout();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-gray-200">Your Profile</h2>
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300">
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Avatar + name */}
+          <div className="flex items-center gap-3">
+            {user?.picture ? (
+              <img src={user.picture} alt="" className="w-12 h-12 rounded-full ring-2 ring-border" />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-lg font-bold text-accent shrink-0">
+                {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-200 truncate">{displayName}</p>
+              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+            </div>
+          </div>
+
+          {/* Company name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
+              <Briefcase size={11} />
+              Company
+            </label>
+            <input
+              value={company}
+              onChange={e => setCompany(e.target.value)}
+              placeholder="Enter company name…"
+              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 transition-colors"
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+            />
+          </div>
+        </div>
+
+        {/* Footer actions */}
+        <div className="px-5 pb-5 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-300 transition-colors rounded-lg border border-border hover:bg-surface-3">
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              className="flex-1 py-2 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-600 hover:text-red-400 hover:bg-surface-3 rounded-lg transition-colors"
+          >
+            <LogOut size={13} />
+            Sign out
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UserMenu() {
+  const { user } = useStore();
+  const [showModal, setShowModal] = useState(false);
+
   const displayName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : '';
 
   return (
-    <div className="relative" ref={ref}>
+    <>
       <button
-        onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-surface-3 transition-colors"
+        onClick={() => setShowModal(true)}
+        className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-3 transition-colors"
         title={displayName}
       >
         {user?.picture ? (
-          <img src={user.picture} alt="" className="w-6 h-6 rounded-full shrink-0 ring-1 ring-border" />
+          <img src={user.picture} alt="" className="w-7 h-7 rounded-full shrink-0 ring-1 ring-border" />
         ) : (
-          <div className="w-6 h-6 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-[10px] font-bold text-accent shrink-0">
+          <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent shrink-0">
             {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
           </div>
         )}
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-xs font-medium text-gray-300 truncate">{displayName || user?.email}</p>
+          <p className="text-sm font-medium text-gray-300 truncate">{displayName || user?.email}</p>
           {user?.company_name && (
-            <p className="text-[10px] text-gray-600 truncate">{user.company_name}</p>
+            <p className="text-xs text-gray-500 truncate">{user.company_name}</p>
           )}
         </div>
-        <ChevronDown size={10} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
-      {open && (
-        <div className="absolute left-0 right-0 bottom-full mb-1 bg-surface-2 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-          {/* Profile header */}
-          <div className="px-3 py-3 border-b border-border">
-            <div className="flex items-center gap-2.5 mb-2.5">
-              {user?.picture ? (
-                <img src={user.picture} alt="" className="w-8 h-8 rounded-full ring-1 ring-border" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-sm font-bold text-accent">
-                  {(user?.first_name?.[0] || '?').toUpperCase()}
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-200 truncate">{displayName}</p>
-                <p className="text-[10px] text-gray-600 truncate">{user?.email}</p>
-              </div>
-            </div>
-
-            {editing ? (
-              <div className="space-y-1.5">
-                <input
-                  value={company}
-                  onChange={e => setCompany(e.target.value)}
-                  placeholder="Company name"
-                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-                  autoFocus
-                  onKeyDown={e => e.key === 'Enter' && handleSave()}
-                />
-                <div className="flex gap-1">
-                  <button onClick={() => setEditing(false)} className="flex-1 py-1 text-[10px] text-gray-600 hover:text-gray-400">Cancel</button>
-                  <button onClick={handleSave} disabled={saving}
-                    className="flex-1 py-1 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded transition-colors disabled:opacity-40">
-                    {saving ? '...' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => { setCompany(user?.company_name || ''); setEditing(true); }}
-                className="w-full flex items-center gap-1.5 text-[10px] text-gray-600 hover:text-accent transition-colors">
-                <Briefcase size={9} />
-                {user?.company_name ? user.company_name : 'Add company name…'}
-              </button>
-            )}
-          </div>
-
-          <button
-            onClick={() => { setOpen(false); logout(); }}
-            className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-gray-500 hover:text-red-400 hover:bg-surface-3 transition-colors"
-          >
-            <LogOut size={11} />
-            Sign out
-          </button>
-        </div>
-      )}
-    </div>
+      {showModal && <UserProfileModal onClose={() => setShowModal(false)} />}
+    </>
   );
 }
 
@@ -403,29 +416,29 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="w-56 bg-surface-1 border-r border-border flex flex-col shrink-0">
-        {/* Header — project switcher + nav */}
-        <div className="p-3 border-b border-border space-y-1">
-          <div className="flex items-center justify-between px-0.5 mb-1.5">
-            <span className="text-[10px] font-medium text-gray-600 uppercase tracking-widest">FlowAgent</span>
-            {/* Nav menu */}
+      <aside className="w-64 bg-surface-1 border-r border-border flex flex-col shrink-0">
+        {/* Header — brand + nav */}
+        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-lg font-bold text-gray-100 tracking-tight">AutoKan</span>
+            {/* Hamburger nav menu */}
             <div className="relative" ref={navRef}>
               <button
                 onClick={() => setNavOpen(o => !o)}
-                className={`p-1.5 rounded-md transition-colors ${navOpen ? 'bg-surface-3 text-gray-300' : 'text-gray-600 hover:text-gray-300 hover:bg-surface-3'}`}
-                title="Navigate"
+                className={`p-2 rounded-lg transition-colors ${navOpen ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
+                title="Menu"
               >
-                <AlignStartHorizontal size={13} />
+                <Menu size={18} />
               </button>
               {navOpen && (
-                <div className="absolute left-0 top-full mt-1.5 w-36 bg-surface-2 border border-border rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+                <div className="absolute left-0 top-full mt-1.5 w-40 bg-surface-2 border border-border rounded-xl shadow-xl z-50 py-1 overflow-hidden">
                   {NAV_ITEMS.map(({ label, icon: Icon, page }) => (
                     <button
                       key={page}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-xs hover:bg-surface-3 transition-colors ${currentPage === page ? 'text-accent' : 'text-gray-400 hover:text-gray-100'}`}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-surface-3 transition-colors ${currentPage === page ? 'text-accent' : 'text-gray-400 hover:text-gray-100'}`}
                       onClick={() => { setCurrentPage(page); setNavOpen(false); }}
                     >
-                      <Icon size={12} />
+                      <Icon size={14} />
                       {label}
                     </button>
                   ))}
@@ -440,26 +453,26 @@ export default function Sidebar() {
         <nav className="p-3 space-y-1 border-b border-border">
           <button
             onClick={() => setShowNewTask(true)}
-            className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-accent/10 text-accent text-sm font-medium hover:bg-accent/20 transition-colors"
           >
-            <Plus size={14} />
+            <Plus size={15} />
             New Task
           </button>
 
           {archivedTasks.length > 0 && (
             <button
               onClick={() => setShowArchivedModal(true)}
-              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-surface-3 text-xs transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 text-sm transition-colors"
             >
-              <Archive size={12} />
+              <Archive size={13} />
               Archived tasks
-              <span className="ml-auto font-mono text-[10px]">{archivedTasks.length}</span>
+              <span className="ml-auto font-mono text-xs">{archivedTasks.length}</span>
             </button>
           )}
 
           {humanActionCount > 0 && (
-            <button className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-amber-400 hover:bg-surface-3 text-sm transition-colors">
-              <AlertCircle size={14} />
+            <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-amber-400 hover:bg-surface-3 text-sm transition-colors">
+              <AlertCircle size={15} />
               Human Action
               <span className="ml-auto bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full font-mono">
                 {humanActionCount}
@@ -472,13 +485,13 @@ export default function Sidebar() {
         <div className="flex-1 overflow-y-auto p-3">
           <button
             onClick={() => setAgentsOpen(o => !o)}
-            className="w-full flex items-center justify-between px-1 py-1 mb-1 text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors"
+            className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-xs font-semibold text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest"
           >
             <span className="flex items-center gap-1.5">
-              <Bot size={11} />
-              AGENTS
+              <Bot size={12} />
+              Agents
             </span>
-            {agentsOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {agentsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
 
           {agentsOpen && (
@@ -512,16 +525,16 @@ export default function Sidebar() {
               })}
 
               <button onClick={() => setShowNewAgent(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors text-xs">
-                <Plus size={11} />
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 transition-colors text-sm">
+                <Plus size={13} />
                 Add agent
               </button>
               <button onClick={() => setShowTemplates(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors text-xs">
-                <LayoutTemplate size={11} />
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 transition-colors text-sm">
+                <LayoutTemplate size={13} />
                 Templates
                 {agentTemplates.filter(t => !t.archived_at).length > 0 && (
-                  <span className="ml-auto text-[10px] font-mono text-gray-600">
+                  <span className="ml-auto text-xs font-mono text-gray-600">
                     {agentTemplates.filter(t => !t.archived_at).length}
                   </span>
                 )}
@@ -534,11 +547,11 @@ export default function Sidebar() {
         <div className="p-3 border-t border-border space-y-1">
           <button
             onClick={() => setCurrentPage(currentPage === 'settings' ? 'board' : 'settings')}
-            className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs ${
-              currentPage === 'settings' ? 'bg-accent/15 text-accent' : 'text-gray-600 hover:text-gray-400 hover:bg-surface-3'
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-sm ${
+              currentPage === 'settings' ? 'bg-accent/15 text-accent' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'
             }`}
           >
-            <Settings size={12} />
+            <Settings size={14} />
             Settings
           </button>
           <UserMenu />
