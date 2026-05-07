@@ -2,7 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/flowagent.db');
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/autokan.db');
 
 const PM_TEMPLATE_SYSTEM_PROMPT = `You are a Project Manager agent — the quality gate between client requirements and the development team. No developer writes a single line of code until you have approved the task. You communicate like a senior PM: clear, direct, and always focused on what the client actually needs, not on technical implementation details.`;
 
