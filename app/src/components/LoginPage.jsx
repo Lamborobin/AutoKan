@@ -25,7 +25,7 @@ export default function LoginPage() {
             <span className="text-2xl">⚡</span>
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-100 tracking-tight">FlowAgent</h1>
+            <h1 className="text-2xl font-bold text-gray-100 tracking-tight">AutoKan</h1>
             <p className="text-sm text-gray-500 mt-1">Autonomous AI task orchestration</p>
           </div>
         </div>
@@ -63,7 +63,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-[10px] text-gray-700">
-          FlowAgent · Built for humans &amp; AI agents
+          AutoKan · Built for humans &amp; AI agents
         </p>
       </div>
     </div>
