@@ -554,7 +554,7 @@ function initDb() {
   if (!velourExists) {
     db.prepare(`
       INSERT INTO projects (id, name, description, client_name, color, emoji)
-      VALUES ('proj_velour', 'FlowAgent', 'Internal development of the FlowAgent platform', 'Velour', '#6366f1', '⚡')
+      VALUES ('proj_velour', 'AutoKan', 'Internal development of the AutoKan platform', 'Velour', '#6366f1', '⚡')
     `).run();
     // Assign all existing tasks to the Velour project
     db.prepare("UPDATE tasks SET project_id = 'proj_velour' WHERE project_id IS NULL").run();

@@ -54,6 +54,6 @@ app.use((err, req, res, next) => {
 // Init DB and start
 initDb();
 app.listen(PORT, () => {
-  console.log(`\n🚀 FlowAgent server running at http://localhost:${PORT}`);
+  console.log(`\n🚀 AutoKan server running at http://localhost:${PORT}`);
   console.log(`   API health: http://localhost:${PORT}/api/health\n`);
 });

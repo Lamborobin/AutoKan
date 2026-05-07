@@ -1,4 +1,4 @@
-# FlowAgent — Claude Code Orientation
+# AutoKan — Claude Code Orientation
 
 **What This Is**: Autonomous AI agent task orchestration system — a kanban board where AI agents (PM, Developer, Tester) work through tasks autonomously with human checkpoints. Built for full ownership without third-party dependencies.
 
