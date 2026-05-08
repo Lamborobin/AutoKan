@@ -2,7 +2,8 @@ const express = require('express');
 const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { getDb } = require('../db');
+const { getDb, generateProjectId, VELOUR_ID } = require('../db');
+const { scaffoldProjectInstructions } = require('../utils/instructions');
 
 const router = express.Router();
 
@@ -52,9 +53,22 @@ router.post('/google', async (req, res) => {
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
       // Assign all unowned Velour project tasks to this user if they're the first user
-      const projectOwner = db.prepare("SELECT owner_id FROM projects WHERE id = 'proj_velour'").get();
+      const projectOwner = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(VELOUR_ID);
       if (!projectOwner?.owner_id) {
-        db.prepare("UPDATE projects SET owner_id = ? WHERE id = 'proj_velour'").run(id);
+        db.prepare('UPDATE projects SET owner_id = ? WHERE id = ?').run(id, VELOUR_ID);
+      }
+
+      // Create a personal board for this new user
+      const personalProjectId = generateProjectId();
+      const personalExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(personalProjectId);
+      if (!personalExists) {
+        const displayName = firstName ? `${firstName}'s Board` : 'My Board';
+        db.prepare(`
+          INSERT INTO projects (id, name, description, color, emoji, owner_id)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(personalProjectId, displayName, 'Personal workspace', '#10b981', '🧑', id);
+        try { scaffoldProjectInstructions(personalProjectId); } catch (e) { console.warn('Could not scaffold personal board instructions:', e.message); }
+        console.log(`✅ Created personal board for ${email}`);
       }
     }
 

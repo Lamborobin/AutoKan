@@ -140,7 +140,7 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
 }
 
 function ProjectSwitcher() {
-  const { projects, currentProjectId, setCurrentProject, createProject } = useStore();
+  const { projects, currentProjectId, setCurrentProject, createProject, user } = useStore();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -151,6 +151,10 @@ function ProjectSwitcher() {
 
   const current = projects.find(p => p.id === currentProjectId) || projects[0];
   const active = projects.filter(p => !p.archived_at);
+
+  // Separate personal boards (no client_name) from client boards (has client_name)
+  const personalBoards = active.filter(p => !p.client_name);
+  const clientBoards = active.filter(p => !!p.client_name);
 
   useEffect(() => {
     function handleOutside(e) {
@@ -180,6 +184,26 @@ function ProjectSwitcher() {
     }
   }
 
+  function BoardRow({ p }) {
+    return (
+      <button
+        key={p.id}
+        onClick={() => { setCurrentProject(p.id); setOpen(false); }}
+        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-3 transition-colors"
+      >
+        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color || '#6366f1' }} />
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-sm font-medium text-gray-200 truncate">{p.client_name || p.name}</p>
+          {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.name}</p>}
+        </div>
+        {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
+      </button>
+    );
+  }
+
+  // Label for current board shown in trigger button
+  const currentLabel = current?.client_name || current?.name || 'No board';
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -187,29 +211,30 @@ function ProjectSwitcher() {
         className="w-full flex items-center gap-2 px-1 py-1.5 rounded-lg hover:bg-surface-3/50 transition-colors"
       >
         <Layers size={13} className="text-gray-500 shrink-0" />
-        <span className="flex-1 text-sm font-bold text-gray-100 truncate text-left">
-          {current?.client_name || current?.name || 'No board'}
-        </span>
+        <span className="flex-1 text-sm font-bold text-gray-100 truncate text-left">{currentLabel}</span>
         <ChevronDown size={11} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="py-1 max-h-48 overflow-y-auto">
-            {active.map(p => (
-              <button
-                key={p.id}
-                onClick={() => { setCurrentProject(p.id); setOpen(false); }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-surface-3 transition-colors"
-              >
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color || '#6366f1' }} />
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium text-gray-200 truncate">{p.client_name || p.name}</p>
-                  {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.name}</p>}
-                </div>
-                {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
-              </button>
-            ))}
+          <div className="max-h-64 overflow-y-auto">
+            {personalBoards.length > 0 && (
+              <>
+                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">Personal</p>
+                {personalBoards.map(p => <BoardRow key={p.id} p={p} />)}
+              </>
+            )}
+            {clientBoards.length > 0 && (
+              <>
+                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600 ${personalBoards.length > 0 ? 'pt-2 border-t border-border/50 mt-1' : 'pt-2.5'}`}>
+                  Clients
+                </p>
+                {clientBoards.map(p => <BoardRow key={p.id} p={p} />)}
+              </>
+            )}
+            {active.length === 0 && (
+              <p className="px-3 py-4 text-sm text-gray-600 text-center">No boards yet</p>
+            )}
           </div>
 
           <div className="border-t border-border">
@@ -367,13 +392,16 @@ function UserProfileModal({ onClose }) {
               <div className="px-3 pb-1 pt-3">
                 <p className="px-2 pb-1 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Preferences</p>
 
-                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors">
+                <button
+                  onClick={() => setActiveSection('notifications')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
+                >
                   <div className="w-8 h-8 rounded-lg bg-yellow-500/15 flex items-center justify-center shrink-0">
                     <Bell size={15} className="text-yellow-400" />
                   </div>
-                  <span className="flex-1 text-sm text-gray-300">Notifications</span>
-                  <Toggle on={notifications} onToggle={() => setNotifications(n => !n)} />
-                </div>
+                  <span className="flex-1 text-sm text-gray-300 text-left group-hover:text-gray-200">Notifications</span>
+                  <ChevronRight size={14} className="text-gray-600" />
+                </button>
 
                 <button
                   onClick={() => setActiveSection('language')}
@@ -477,6 +505,23 @@ function UserProfileModal({ onClose }) {
                 </button>
               ))}
               <p className="px-3 pt-3 pb-1 text-xs text-gray-600">Full translation support coming soon.</p>
+            </div>
+          </>
+        )}
+
+        {/* ── Notifications ── */}
+        {activeSection === 'notifications' && (
+          <>
+            <SectionHeader onBack={() => setActiveSection(null)} title="Notifications" onClose={onClose} />
+            <div className="px-3 py-2">
+              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Alerts</p>
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-yellow-500/15 flex items-center justify-center shrink-0">
+                  <Bell size={15} className="text-yellow-400" />
+                </div>
+                <span className="flex-1 text-sm text-gray-300">Enable notifications</span>
+                <Toggle on={notifications} onToggle={() => setNotifications(n => !n)} />
+              </div>
             </div>
           </>
         )}

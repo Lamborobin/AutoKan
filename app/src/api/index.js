@@ -62,7 +62,7 @@ export const columnsApi = {
 };
 
 export const agentsApi = {
-  list: () => api.get('/agents').then(r => r.data),
+  list: (projectId = null) => api.get('/agents', { params: projectId ? { project_id: projectId } : {} }).then(r => r.data),
   get: (id) => api.get(`/agents/${id}`).then(r => r.data),
   create: (data) => api.post('/agents', data).then(r => r.data),
   update: (id, data) => api.patch(`/agents/${id}`, data).then(r => r.data),
@@ -78,13 +78,20 @@ export const secretsApi = {
 };
 
 export const instructionsApi = {
-  list: (includeArchived = false) => api.get('/instructions', { params: { include_archived: includeArchived } }).then(r => r.data),
-  get: (filename) => api.get(`/instructions/${filename}`).then(r => r.data),
-  create: (data) => api.post('/instructions', data).then(r => r.data),
-  update: (filename, content) => api.patch(`/instructions/${filename}`, { content }).then(r => r.data),
-  archive: (filename) => api.post(`/instructions/${filename}/archive`).then(r => r.data),
-  unarchive: (filename) => api.post(`/instructions/${filename}/unarchive`).then(r => r.data),
-  delete: (filename) => api.delete(`/instructions/${filename}`).then(r => r.data),
+  list: (includeArchived = false, projectId = null) =>
+    api.get('/instructions', { params: { include_archived: includeArchived, project_id: projectId || undefined } }).then(r => r.data),
+  get: (filename, projectId = null) =>
+    api.get(`/instructions/${filename}`, { params: { project_id: projectId || undefined } }).then(r => r.data),
+  create: (data, projectId = null) =>
+    api.post('/instructions', data, { params: { project_id: projectId || undefined } }).then(r => r.data),
+  update: (filename, content, projectId = null) =>
+    api.patch(`/instructions/${filename}`, { content }, { params: { project_id: projectId || undefined } }).then(r => r.data),
+  archive: (filename, projectId = null) =>
+    api.post(`/instructions/${filename}/archive`, {}, { params: { project_id: projectId || undefined } }).then(r => r.data),
+  unarchive: (filename, projectId = null) =>
+    api.post(`/instructions/${filename}/unarchive`, {}, { params: { project_id: projectId || undefined } }).then(r => r.data),
+  delete: (filename, projectId = null) =>
+    api.delete(`/instructions/${filename}`, { params: { project_id: projectId || undefined } }).then(r => r.data),
 };
 
 export const rolesApi = {

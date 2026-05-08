@@ -1,6 +1,27 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
+const { scaffoldProjectInstructions } = require('../utils/instructions');
+
+// Stable IDs for seeded projects — never change these after first migration
+const VELOUR_ID = 'prj_a1b2c3d4';
+const TGH_ID    = 'prj_e5f6a7b8';
+
+// Generates a new project ID: prj_ + 8 random hex chars
+function generateProjectId() {
+  return 'prj_' + crypto.randomBytes(4).toString('hex');
+}
+
+// Deterministically maps a legacy proj_* ID to a new prj_* ID
+function legacyIdToNew(oldId) {
+  if (oldId === 'proj_velour') return VELOUR_ID;
+  if (oldId === 'proj_tgh')    return TGH_ID;
+  return 'prj_' + crypto.createHash('sha256').update(oldId).digest('hex').slice(0, 8);
+}
+
+module.exports.VELOUR_ID = VELOUR_ID;
+module.exports.TGH_ID    = TGH_ID;
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/autokan.db');
 
@@ -40,7 +61,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS agents (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      role TEXT NOT NULL UNIQUE,
+      role TEXT NOT NULL,
       model TEXT DEFAULT 'claude-opus-4-5',
       description TEXT,
       permissions TEXT NOT NULL DEFAULT '[]',
@@ -240,6 +261,48 @@ function initDb() {
     console.log('✅ Migrated: added archived_at to agents');
   }
 
+  // Migration: add project_id to agents
+  if (!agentColNames.includes('project_id')) {
+    db.exec('ALTER TABLE agents ADD COLUMN project_id TEXT REFERENCES projects(id)');
+    db.prepare('UPDATE agents SET project_id = ? WHERE project_id IS NULL').run(VELOUR_ID);
+    console.log('✅ Migrated: added project_id to agents, assigned existing to Velour');
+  }
+
+  // Migration: drop global UNIQUE constraint on agents.role (now unique per-project only)
+  // SQLite can't drop constraints directly — requires table recreation
+  const agentRoleUniqueExists = db.prepare("PRAGMA index_list(agents)").all()
+    .some(idx => idx.unique && idx.origin === 'u');
+  if (agentRoleUniqueExists) {
+    // Get current column list for dynamic recreation
+    const currentAgentCols = db.prepare('PRAGMA table_info(agents)').all();
+    const colDefs = currentAgentCols.map(c => {
+      let def = `${c.name} ${c.type}`;
+      if (c.pk) def += ' PRIMARY KEY';
+      if (c.notnull && !c.pk) def += ' NOT NULL';
+      if (c.dflt_value !== null) def += ` DEFAULT ${c.dflt_value}`;
+      return def;
+    }).join(',\n      ');
+    const colNames = currentAgentCols.map(c => c.name).join(', ');
+
+    // Temporarily disable FK checks so we can drop and recreate the agents table
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.exec(`
+        BEGIN;
+        CREATE TABLE agents_new (
+          ${colDefs}
+        );
+        INSERT INTO agents_new SELECT ${colNames} FROM agents;
+        DROP TABLE agents;
+        ALTER TABLE agents_new RENAME TO agents;
+        COMMIT;
+      `);
+      console.log('✅ Migrated: dropped global UNIQUE constraint on agents.role (now per-project)');
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
+
   // Migration: add template_system_prompt to agent_templates if missing
   const tplCols = db.prepare('PRAGMA table_info(agent_templates)').all().map(c => c.name);
   if (!tplCols.includes('template_system_prompt')) {
@@ -420,8 +483,8 @@ function initDb() {
   const agentCount = db.prepare('SELECT COUNT(*) as c FROM agents').get();
   if (agentCount.c === 0) {
     const insertAgent = db.prepare(`
-      INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, is_template, template_system_prompt, color, created_from_template_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, is_template, template_system_prompt, color, created_from_template_id, project_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const defaultAgents = [
       [
@@ -432,7 +495,7 @@ function initDb() {
         'instructions/pm.md',
         JSON.stringify(['instructions/client.md']),   // PM: client context only, no codebase
         1, PM_TEMPLATE_SYSTEM_PROMPT,
-        '#6366f1', 'tpl_pm'
+        '#6366f1', 'tpl_pm', VELOUR_ID
       ],
       [
         'agent_dev', 'Developer', 'developer',
@@ -442,7 +505,7 @@ function initDb() {
         'instructions/developer.md',
         JSON.stringify(['instructions/project.md', 'instructions/client.md']), // dev: full context
         0, null,
-        '#3b82f6', 'tpl_dev'
+        '#3b82f6', 'tpl_dev', VELOUR_ID
       ],
       [
         'agent_test', 'Tester', 'tester',
@@ -452,7 +515,7 @@ function initDb() {
         'instructions/tester.md',
         JSON.stringify(['instructions/project.md', 'instructions/client.md']), // tester: full context
         0, null,
-        '#8b5cf6', 'tpl_test'
+        '#8b5cf6', 'tpl_test', VELOUR_ID
       ],
     ];
     defaultAgents.forEach(a => insertAgent.run(...a));
@@ -549,23 +612,145 @@ function initDb() {
     console.log('✅ Migrated: added project_id to tasks');
   }
 
+  // ── Migration: rename legacy proj_* IDs → prj_* format ──────────────────
+  // Deterministic so it can safely re-run on every restart without side-effects
+  const PROJECT_ROOT_PATH = path.join(__dirname, '../../..');
+  const legacyProjects = db.prepare("SELECT * FROM projects WHERE id LIKE 'proj_%'").all();
+  for (const project of legacyProjects) {
+    const newId = legacyIdToNew(project.id);
+    const newExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(newId);
+    if (newExists) {
+      // Already migrated — clean up the stale legacy row
+      db.prepare('DELETE FROM projects WHERE id = ?').run(project.id);
+      continue;
+    }
+    db.prepare(`
+      INSERT INTO projects (id, name, description, client_name, color, emoji, owner_id, archived_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(newId, project.name, project.description, project.client_name, project.color,
+           project.emoji, project.owner_id, project.archived_at, project.created_at, project.updated_at);
+    db.prepare('UPDATE tasks SET project_id = ? WHERE project_id = ?').run(newId, project.id);
+    db.prepare('DELETE FROM projects WHERE id = ?').run(project.id);
+    // Rename instruction folder
+    const oldDir = path.join(PROJECT_ROOT_PATH, `instructions-${project.id}`);
+    const newDir = path.join(PROJECT_ROOT_PATH, `instructions-${newId}`);
+    if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
+      try { fs.renameSync(oldDir, newDir); } catch (e) { console.warn(`Could not rename folder for ${project.id}:`, e.message); }
+    }
+    console.log(`✅ Migrated project ID ${project.id} → ${newId}`);
+  }
+
   // Migration: rename legacy project name 'AutoKan' → 'Public Website'
-  db.prepare("UPDATE projects SET name = 'Public Website' WHERE id = 'proj_velour' AND name = 'AutoKan'").run();
+  db.prepare(`UPDATE projects SET name = 'Public Website' WHERE id = ? AND name = 'AutoKan'`).run(VELOUR_ID);
 
   // Seed default "Velour" project (idempotent)
-  const velourExists = db.prepare("SELECT id FROM projects WHERE id = 'proj_velour'").get();
+  const velourExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(VELOUR_ID);
   if (!velourExists) {
     db.prepare(`
       INSERT INTO projects (id, name, description, client_name, color, emoji)
-      VALUES ('proj_velour', 'Public Website', 'Internal development of the AutoKan platform', 'Velour', '#6366f1', '⚡')
-    `).run();
-    // Assign all existing tasks to the Velour project
-    db.prepare("UPDATE tasks SET project_id = 'proj_velour' WHERE project_id IS NULL").run();
+      VALUES (?, 'Public Website', 'Internal development of the AutoKan platform', 'Velour', '#6366f1', '⚡')
+    `).run(VELOUR_ID);
+    db.prepare('UPDATE tasks SET project_id = ? WHERE project_id IS NULL').run(VELOUR_ID);
     console.log('✅ Seeded Velour project and migrated existing tasks');
   }
+
+  // Seed TGH Iron & Steel project (idempotent)
+  const tghExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(TGH_ID);
+  if (!tghExists) {
+    db.prepare(`
+      INSERT INTO projects (id, name, description, client_name, color, emoji)
+      VALUES (?, 'Steel Platform', 'Industrial quoting and order management platform', 'TGH Iron & Steel', '#dc2626', '🏗️')
+    `).run(TGH_ID);
+    console.log('✅ Seeded TGH Iron & Steel project');
+  }
+
+  // Scaffold per-project instruction folders for all known projects (idempotent — never overwrites)
+  const tghClientMd = `# Client Context — TGH Iron & Steel
+
+This file describes the client, their business, and what they care about. Agents should use this when planning tasks to ensure work aligns with business goals and operational requirements.
+
+## About the Client
+
+**TGH Iron & Steel** is a mid-sized industrial manufacturer and distributor specialising in structural steel, iron castings, and custom metal fabrication for the construction and engineering sectors.
+
+The business provides:
+- **Structural steel**: beams, columns, channels, and plates for commercial and residential construction
+- **Iron castings**: custom and standard components for heavy machinery and infrastructure
+- **Metal fabrication**: cut-to-size, welding, drilling, and surface treatment services
+- **Distribution**: wholesale supply to contractors, engineers, and regional distributors
+
+The business is B2B-focused with two production facilities and a national distribution network.
+
+## Platform Goal
+
+TGH is replacing a legacy quoting and order management system with a modern web platform. The new platform will:
+1. Let customers request and track quotes online with full specification detail
+2. Allow the internal team to process orders, manage production stages, and coordinate delivery
+3. Give sales reps a CRM-adjacent view of client accounts and quote history
+4. Integrate with their inventory system for near-real-time stock of raw materials and finished goods
+
+## Client Priorities (in order)
+
+1. **Quote accuracy** — incorrect quotes cause margin erosion and customer trust failures
+2. **Order visibility** — customers and internal teams must always know where an order stands
+3. **Integration reliability** — inventory sync must be near-real-time; stale stock causes broken promises
+4. **Audit trail** — all quote changes and order modifications must be logged (ISO 9001 requirement)
+5. **Simplicity for field users** — sales reps and plant operators are not technical; the UI must be obvious
+
+## Target Users
+
+**External (Customers):**
+- Procurement managers at construction firms
+- Project engineers ordering to spec
+- Distributor buyers placing high-volume repeat orders
+
+**Internal:**
+- Sales reps processing quotes and following up on opportunities
+- Operations staff tracking production progress and logistics
+- Finance team handling invoicing and credit limits
+
+## Communication Style
+
+- Formal and precise — this is a B2B industrial context; avoid casual language
+- Technical detail is welcome; this is an engineering audience
+- Compliance and audit context always matters ("this must be logged because ISO 9001")
+- Prefer concrete examples over abstract principles
+
+## What the Client Considers Done
+
+A feature is "done" when:
+- It handles edge cases typical in industrial ordering (partial shipments, spec changes mid-order, credit holds)
+- It has an audit log entry for every state change
+- Internal and external views are correctly separated (customers cannot see cost prices or margin data)
+- It works reliably on desktop (back-office tool; mobile is secondary)
+
+## Things to Avoid
+
+- Rounding cost or margin data — precision matters in industrial pricing
+- Removing audit log fields — even if they look unnecessary, they may be compliance-required
+- Exposing internal pricing or margin data in customer-facing views
+- Skipping validation on numeric inputs — incorrect weights or dimensions cost real money
+- Over-building before validation — ship small, iterate based on ops team feedback
+`;
+
+  // Scaffold per-project instruction folders — only client.md + project.md per board (idempotent)
+  try { scaffoldProjectInstructions(VELOUR_ID); } catch (e) { console.warn('Could not scaffold Velour instructions:', e.message); }
+  try { scaffoldProjectInstructions(TGH_ID, tghClientMd, '# TGH Iron & Steel — Project Context\n\nAdd project-specific context here.\n'); } catch (e) { console.warn('Could not scaffold TGH instructions:', e.message); }
+
+  // Migration: remove system files (pm.md, developer.md, tester.md) from per-project folders
+  const SYSTEM_ONLY_FILES = ['pm.md', 'developer.md', 'tester.md'];
+  try {
+    for (const { id } of db.prepare('SELECT id FROM projects').all()) {
+      const projectDir = path.join(__dirname, `../../../instructions-${id}`);
+      for (const file of SYSTEM_ONLY_FILES) {
+        const fp = path.join(projectDir, file);
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      }
+    }
+  } catch (e) { console.warn('Could not clean system files from project folders:', e.message); }
 
   console.log('✅ Database initialized at', DB_PATH);
   return db;
 }
 
-module.exports = { getDb, initDb };
+module.exports = { getDb, initDb, VELOUR_ID, TGH_ID, generateProjectId };

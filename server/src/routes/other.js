@@ -52,7 +52,10 @@ function parseTemplate(t) {
 
 agentsRouter.get('/', attachAgent, (req, res) => {
   const db = getDb();
-  const agents = db.prepare('SELECT * FROM agents ORDER BY created_at ASC').all();
+  const projectId = req.query.project_id || null;
+  const agents = projectId
+    ? db.prepare('SELECT * FROM agents WHERE project_id = ? ORDER BY created_at ASC').all(projectId)
+    : db.prepare('SELECT * FROM agents ORDER BY created_at ASC').all();
   res.json(agents.map(parseAgent));
 });
 
@@ -72,13 +75,18 @@ agentsRouter.post('/', (req, res) => {
     name, role, model = 'claude-sonnet-4-5', description,
     permissions = [], prompt_file, instruction_files = [], color = '#6366f1',
     created_from_template_id, template_system_prompt: bodyTemplatePrompt,
+    project_id,
   } = req.body;
   if (!name || !role) return res.status(400).json({ error: 'name and role are required' });
 
-  const existing = db.prepare('SELECT id FROM agents WHERE role = ?').get(role);
+  // Uniqueness is per-project (same role name is allowed on different boards)
+  const existing = project_id
+    ? db.prepare('SELECT id FROM agents WHERE role = ? AND project_id = ?').get(role, project_id)
+    : db.prepare('SELECT id FROM agents WHERE role = ? AND project_id IS NULL').get(role);
   if (existing) return res.status(409).json({ error: `Agent with role "${role}" already exists` });
 
-  const id = 'agent_' + role.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+  // Use random hex to avoid collisions across boards with the same role name
+  const id = 'agent_' + require('crypto').randomBytes(4).toString('hex');
 
   // is_template = 1 only when the source template has a behaviour prompt (not just because the user typed one manually)
   let is_template_flag = 0;
@@ -94,9 +102,9 @@ agentsRouter.post('/', (req, res) => {
   const role_ids_val = req.body.role_ids?.length ? JSON.stringify(req.body.role_ids) : JSON.stringify(['role_any']);
 
   db.prepare(`
-    INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, color, created_from_template_id, is_template, template_system_prompt, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, role, model, description, JSON.stringify(permissions), prompt_file, JSON.stringify(instruction_files), color, created_from_template_id || null, is_template_flag, template_system_prompt_val, role_ids_val);
+    INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, color, created_from_template_id, is_template, template_system_prompt, role_ids, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, role, model, description, JSON.stringify(permissions), prompt_file, JSON.stringify(instruction_files), color, created_from_template_id || null, is_template_flag, template_system_prompt_val, role_ids_val, project_id || null);
 
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   res.status(201).json(parseAgent(agent));
@@ -389,30 +397,45 @@ secretsRouter.patch('/:id/resolve', (req, res) => {
 // ── Instructions ──────────────────────────────────────────────────────────────
 const instructionsRouter = express.Router();
 
-const DEFAULT_INSTRUCTION_FILES = ['client.md', 'project.md'];
-const INSTRUCTIONS_DIR = path.join(PROJECT_ROOT, 'instructions');
-const ARCHIVED_DIR = path.join(INSTRUCTIONS_DIR, 'archived');
+// All global (system) files are protected — they live in instructions/ and affect all boards
+const GLOBAL_INSTRUCTIONS_DIR = path.join(PROJECT_ROOT, 'instructions');
 
-function listInstructionFiles(includeArchived = false) {
-  const active = fs.existsSync(INSTRUCTIONS_DIR)
-    ? fs.readdirSync(INSTRUCTIONS_DIR)
+function getInstructionsDirs(projectId) {
+  if (!projectId) {
+    return { dir: GLOBAL_INSTRUCTIONS_DIR, archivedDir: path.join(GLOBAL_INSTRUCTIONS_DIR, 'archived'), projectId: null };
+  }
+  const dir = path.join(PROJECT_ROOT, `instructions-${projectId}`);
+  return { dir, archivedDir: path.join(dir, 'archived'), projectId };
+}
+
+function folderPrefix(projectId) {
+  return projectId ? `instructions-${projectId}` : 'instructions';
+}
+
+function listInstructionFiles(includeArchived, projectId) {
+  const { dir, archivedDir } = getInstructionsDirs(projectId);
+  const prefix = folderPrefix(projectId);
+  const isGlobal = !projectId;
+
+  const active = fs.existsSync(dir)
+    ? fs.readdirSync(dir)
         .filter(f => f.endsWith('.md'))
         .map(f => ({
-          path: `instructions/${f}`,
+          path: `${prefix}/${f}`,
           name: f.replace('.md', ''),
           label: f.replace('.md', '').replace(/_/g, ' '),
-          is_default: DEFAULT_INSTRUCTION_FILES.includes(f),
+          is_default: isGlobal,
           archived: false,
         }))
     : [];
 
   if (!includeArchived) return active;
 
-  const archived = fs.existsSync(ARCHIVED_DIR)
-    ? fs.readdirSync(ARCHIVED_DIR)
+  const archived = fs.existsSync(archivedDir)
+    ? fs.readdirSync(archivedDir)
         .filter(f => f.endsWith('.md'))
         .map(f => ({
-          path: `instructions/archived/${f}`,
+          path: `${prefix}/archived/${f}`,
           name: f.replace('.md', ''),
           label: f.replace('.md', '').replace(/_/g, ' '),
           is_default: false,
@@ -423,39 +446,47 @@ function listInstructionFiles(includeArchived = false) {
   return [...active, ...archived];
 }
 
-function getAgentReferences(db, filename) {
-  const filePath = `instructions/${filename}`;
-  const agents = db.prepare('SELECT id FROM agents WHERE prompt_file = ? OR instruction_files LIKE ?').all(
-    filePath, `%${filePath}%`
-  );
+function getAgentReferences(db, filename, projectId) {
+  const prefix = folderPrefix(projectId);
+  const filePath = `${prefix}/${filename}`;
+  // Also check global path for backward compat
+  const globalPath = `instructions/${filename}`;
+  const agents = db.prepare(
+    'SELECT id FROM agents WHERE prompt_file IN (?,?) OR instruction_files LIKE ? OR instruction_files LIKE ?'
+  ).all(filePath, globalPath, `%${filePath}%`, `%${globalPath}%`);
   return agents.map(a => a.id);
 }
 
-// GET /api/instructions — list all .md files in instructions/ folder
+// GET /api/instructions?project_id=xxx — list files (project-scoped or global)
 instructionsRouter.get('/', attachAgent, (req, res) => {
   const includeArchived = req.query.include_archived === 'true';
-  res.json(listInstructionFiles(includeArchived));
+  const projectId = req.query.project_id || null;
+  res.json(listInstructionFiles(includeArchived, projectId));
 });
 
-// GET /api/instructions/:filename — read file content
+// GET /api/instructions/:filename?project_id=xxx — read file content
 instructionsRouter.get('/:filename', attachAgent, (req, res) => {
   const { filename } = req.params;
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
-  const filePath = path.join(INSTRUCTIONS_DIR, filename);
-  const archivedPath = path.join(ARCHIVED_DIR, filename);
+  const projectId = req.query.project_id || null;
+  const { dir, archivedDir } = getInstructionsDirs(projectId);
 
-  if (fs.existsSync(filePath)) {
-    return res.json({ content: fs.readFileSync(filePath, 'utf8'), archived: false });
+  if (fs.existsSync(path.join(dir, filename))) {
+    return res.json({ content: fs.readFileSync(path.join(dir, filename), 'utf8'), archived: false });
   }
-  if (fs.existsSync(archivedPath)) {
-    return res.json({ content: fs.readFileSync(archivedPath, 'utf8'), archived: true });
+  if (fs.existsSync(path.join(archivedDir, filename))) {
+    return res.json({ content: fs.readFileSync(path.join(archivedDir, filename), 'utf8'), archived: true });
+  }
+  // Fallback: try global file for project-scoped requests (covers legacy agents)
+  if (projectId && fs.existsSync(path.join(GLOBAL_INSTRUCTIONS_DIR, filename))) {
+    return res.json({ content: fs.readFileSync(path.join(GLOBAL_INSTRUCTIONS_DIR, filename), 'utf8'), archived: false });
   }
   res.status(404).json({ error: 'File not found' });
 });
 
-// PATCH /api/instructions/:filename — update file content
+// PATCH /api/instructions/:filename?project_id=xxx — update file content
 instructionsRouter.patch('/:filename', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can edit instruction files' });
 
@@ -463,33 +494,30 @@ instructionsRouter.patch('/:filename', (req, res) => {
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
-
   const { content } = req.body;
   if (content === undefined) return res.status(400).json({ error: 'content is required' });
 
-  const filePath = path.join(INSTRUCTIONS_DIR, filename);
-  const archivedPath = path.join(ARCHIVED_DIR, filename);
+  const projectId = req.query.project_id || null;
+  const { dir, archivedDir } = getInstructionsDirs(projectId);
 
-  if (fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, content, 'utf8');
+  if (fs.existsSync(path.join(dir, filename))) {
+    fs.writeFileSync(path.join(dir, filename), content, 'utf8');
     return res.json({ ok: true });
   }
-  if (fs.existsSync(archivedPath)) {
-    fs.writeFileSync(archivedPath, content, 'utf8');
+  if (fs.existsSync(path.join(archivedDir, filename))) {
+    fs.writeFileSync(path.join(archivedDir, filename), content, 'utf8');
     return res.json({ ok: true });
   }
   res.status(404).json({ error: 'File not found' });
 });
 
-// POST /api/instructions — create a new .md file in instructions/
+// POST /api/instructions?project_id=xxx — create a new .md file
 instructionsRouter.post('/', (req, res) => {
-  const agentId = req.headers['x-agent-id'];
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create instruction files' });
 
   const { name, content = '' } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
-  // Sanitise: lowercase, alphanumeric + underscores/hyphens only, max 100 chars
   const safeName = name.trim().toLowerCase()
     .replace(/\.md$/i, '')
     .replace(/[^a-z0-9_-]+/g, '_')
@@ -499,18 +527,24 @@ instructionsRouter.post('/', (req, res) => {
 
   if (!safeName) return res.status(400).json({ error: 'Invalid file name' });
 
+  const projectId = req.query.project_id || req.body.project_id || null;
+  const { dir } = getInstructionsDirs(projectId);
+  const prefix = folderPrefix(projectId);
+
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
   const filename = `${safeName}.md`;
-  const filePath = path.join(INSTRUCTIONS_DIR, filename);
+  const filePath = path.join(dir, filename);
 
   if (fs.existsSync(filePath)) {
     return res.status(409).json({ error: `File "${filename}" already exists` });
   }
 
   fs.writeFileSync(filePath, content, 'utf8');
-  res.status(201).json({ path: `instructions/${filename}`, name: safeName, is_default: false, archived: false });
+  res.status(201).json({ path: `${prefix}/${filename}`, name: safeName, is_default: false, archived: false });
 });
 
-// POST /api/instructions/:filename/archive — move to archived/ subfolder
+// POST /api/instructions/:filename/archive?project_id=xxx
 instructionsRouter.post('/:filename/archive', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can archive instruction files' });
 
@@ -518,20 +552,20 @@ instructionsRouter.post('/:filename/archive', (req, res) => {
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
-  if (DEFAULT_INSTRUCTION_FILES.includes(filename)) {
-    return res.status(403).json({ error: 'Default files cannot be archived' });
-  }
 
-  const src = path.join(INSTRUCTIONS_DIR, filename);
+  const projectId = req.query.project_id || null;
+  if (!projectId) return res.status(403).json({ error: 'System files cannot be archived' });
+
+  const { dir, archivedDir } = getInstructionsDirs(projectId);
+  const src = path.join(dir, filename);
   if (!fs.existsSync(src)) return res.status(404).json({ error: 'File not found' });
 
-  if (!fs.existsSync(ARCHIVED_DIR)) fs.mkdirSync(ARCHIVED_DIR, { recursive: true });
-
-  fs.renameSync(src, path.join(ARCHIVED_DIR, filename));
+  if (!fs.existsSync(archivedDir)) fs.mkdirSync(archivedDir, { recursive: true });
+  fs.renameSync(src, path.join(archivedDir, filename));
   res.json({ ok: true, archived: true });
 });
 
-// POST /api/instructions/:filename/unarchive — restore from archived/
+// POST /api/instructions/:filename/unarchive?project_id=xxx
 instructionsRouter.post('/:filename/unarchive', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can restore instruction files' });
 
@@ -540,17 +574,20 @@ instructionsRouter.post('/:filename/unarchive', (req, res) => {
     return res.status(400).json({ error: 'Invalid filename' });
   }
 
-  const src = path.join(ARCHIVED_DIR, filename);
+  const projectId = req.query.project_id || null;
+  const { dir, archivedDir } = getInstructionsDirs(projectId);
+
+  const src = path.join(archivedDir, filename);
   if (!fs.existsSync(src)) return res.status(404).json({ error: 'Archived file not found' });
 
-  const dest = path.join(INSTRUCTIONS_DIR, filename);
-  if (fs.existsSync(dest)) return res.status(409).json({ error: `A file named "${filename}" already exists in instructions/` });
+  const dest = path.join(dir, filename);
+  if (fs.existsSync(dest)) return res.status(409).json({ error: `A file named "${filename}" already exists` });
 
   fs.renameSync(src, dest);
   res.json({ ok: true, archived: false });
 });
 
-// DELETE /api/instructions/:filename — hard delete if no agent references
+// DELETE /api/instructions/:filename?project_id=xxx
 instructionsRouter.delete('/:filename', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can delete instruction files' });
 
@@ -558,25 +595,23 @@ instructionsRouter.delete('/:filename', (req, res) => {
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
-  if (DEFAULT_INSTRUCTION_FILES.includes(filename)) {
-    return res.status(403).json({ error: 'Default files cannot be deleted' });
-  }
+
+  const projectId = req.query.project_id || null;
+  if (!projectId) return res.status(403).json({ error: 'System files cannot be deleted' });
 
   const db = getDb();
-  const refs = getAgentReferences(db, filename);
+  const refs = getAgentReferences(db, filename, projectId);
   if (refs.length > 0) {
     return res.status(409).json({ error: 'File is referenced by agents — archive it instead', has_dependencies: true, agents: refs });
   }
 
-  const activePath = path.join(INSTRUCTIONS_DIR, filename);
-  const archivedPath = path.join(ARCHIVED_DIR, filename);
-
-  if (fs.existsSync(activePath)) {
-    fs.unlinkSync(activePath);
+  const { dir, archivedDir } = getInstructionsDirs(projectId);
+  if (fs.existsSync(path.join(dir, filename))) {
+    fs.unlinkSync(path.join(dir, filename));
     return res.json({ ok: true, deleted: true });
   }
-  if (fs.existsSync(archivedPath)) {
-    fs.unlinkSync(archivedPath);
+  if (fs.existsSync(path.join(archivedDir, filename))) {
+    fs.unlinkSync(path.join(archivedDir, filename));
     return res.json({ ok: true, deleted: true });
   }
   res.status(404).json({ error: 'File not found' });

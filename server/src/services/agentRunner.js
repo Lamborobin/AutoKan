@@ -7,6 +7,7 @@ const { exec, execSync } = require('child_process');
 const util = require('util');
 const { getDb } = require('../db');
 const { broadcast } = require('../sse');
+const { resolveInstructionPath } = require('../utils/instructions');
 
 function broadcastTask(db, taskId) {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
@@ -222,15 +223,16 @@ const PM_TOOLS = [
   }
 ];
 
-function readFile(filePath) {
+function readFile(filePath, projectId) {
   try {
-    return fs.readFileSync(path.join(PROJECT_ROOT, filePath), 'utf8');
+    const resolved = projectId ? resolveInstructionPath(filePath, projectId) : path.join(PROJECT_ROOT, filePath);
+    return fs.readFileSync(resolved, 'utf8');
   } catch {
     return '';
   }
 }
 
-function buildContextBlock(agent) {
+function buildContextBlock(agent, projectId) {
   const instructionFiles = JSON.parse(agent.instruction_files || '[]');
   // PM role: client context only — no codebase files.
   // Technical roles (developer, tester): get codebase files too.
@@ -239,7 +241,7 @@ function buildContextBlock(agent) {
   const sections = [];
 
   for (const filePath of allContextFiles) {
-    const content = readFile(filePath);
+    const content = readFile(filePath, projectId);
     if (content) {
       const label = path.basename(filePath, '.md').toUpperCase();
       sections.push(`## [${label}]\n${content}`);
@@ -249,8 +251,8 @@ function buildContextBlock(agent) {
   return sections.join('\n\n---\n\n');
 }
 
-function buildSystemPrompt(agent) {
-  const promptFileContent = readFile(agent.prompt_file || '');
+function buildSystemPrompt(agent, projectId) {
+  const promptFileContent = readFile(agent.prompt_file || '', projectId);
 
   if (agent.is_template) {
     // Template agents: internal behavioural prompt + role-specific prompt file
@@ -290,8 +292,8 @@ async function runPmAgent(taskId) {
     ORDER BY created_at ASC
   `).all(taskId);
 
-  const systemPrompt = buildSystemPrompt(pmAgent);
-  const contextBlock = buildContextBlock(pmAgent);
+  const systemPrompt = buildSystemPrompt(pmAgent, task.project_id);
+  const contextBlock = buildContextBlock(pmAgent, task.project_id);
 
   // Build a clear picture of the task + conversation so far
   const conversationText = conversationLogs.length === 0
@@ -569,8 +571,8 @@ async function runDevAgent(taskId) {
     return;
   }
 
-  const systemPrompt = buildSystemPrompt(devAgent);
-  const contextBlock = buildContextBlock(devAgent);
+  const systemPrompt = buildSystemPrompt(devAgent, task.project_id);
+  const contextBlock = buildContextBlock(devAgent, task.project_id);
 
   const initialPrompt = [
     contextBlock ? `## Context Files\n${contextBlock}` : '',
@@ -823,8 +825,8 @@ async function runTesterAgent(taskId) {
     if (!JSON.parse(testerAgent.role_ids || '[]').includes('perm_coding_tester')) return;
   } catch { return; }
 
-  const systemPrompt = buildSystemPrompt(testerAgent);
-  const contextBlock = buildContextBlock(testerAgent);
+  const systemPrompt = buildSystemPrompt(testerAgent, task.project_id);
+  const contextBlock = buildContextBlock(testerAgent, task.project_id);
 
   const metadata = JSON.parse(task.metadata || '{}');
   const retryCount = metadata.test_retry_count || 0;

@@ -1,7 +1,7 @@
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const { getDb } = require('../db');
+const { getDb, generateProjectId, VELOUR_ID } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { scaffoldProjectInstructions } = require('../utils/instructions');
 
 const router = express.Router();
 
@@ -38,13 +38,17 @@ router.post('/', requireAuth, (req, res) => {
   const { name, description, client_name, color = '#6366f1', emoji = '📋' } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
 
-  const id = 'proj_' + uuidv4().replace(/-/g, '').slice(0, 10);
+  const id = generateProjectId();
   db.prepare(`
     INSERT INTO projects (id, name, description, client_name, color, emoji, owner_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(id, name.trim(), description || null, client_name || null, color, emoji, req.user?.id || null);
 
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+
+  // Scaffold per-project instruction files (copies system defaults + blank client.md)
+  try { scaffoldProjectInstructions(id); } catch (e) { console.warn('Could not scaffold instructions:', e.message); }
+
   res.status(201).json(project);
 });
 
@@ -74,7 +78,7 @@ router.post('/:id/archive', requireAuth, (req, res) => {
   const db = getDb();
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (project.id === 'proj_velour') return res.status(400).json({ error: 'Cannot archive the default project' });
+  if (project.id === VELOUR_ID) return res.status(400).json({ error: 'Cannot archive the default project' });
 
   db.prepare('UPDATE projects SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
@@ -90,7 +94,7 @@ router.post('/:id/unarchive', requireAuth, (req, res) => {
 // DELETE /api/projects/:id
 router.delete('/:id', requireAuth, (req, res) => {
   const db = getDb();
-  if (req.params.id === 'proj_velour') return res.status(400).json({ error: 'Cannot delete the default project' });
+  if (req.params.id === VELOUR_ID) return res.status(400).json({ error: 'Cannot delete the default project' });
 
   const taskCount = db.prepare('SELECT COUNT(*) AS c FROM tasks WHERE project_id = ?').get(req.params.id);
   if (taskCount.c > 0) {

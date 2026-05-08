@@ -15,7 +15,8 @@ export const COLORS = [
 ];
 
 export function displayName(filePath) {
-  return filePath.replace(/^instructions\//, '').replace(/\.md$/, '');
+  // Strip both global "instructions/" and project-scoped "instructions-{id}/" prefixes
+  return filePath.replace(/^instructions(-[^/]+)?\//, '').replace(/\.md$/, '');
 }
 
 export function slugify(str) {
@@ -34,6 +35,7 @@ export function sanitizeFileName(str) {
 }
 
 export function useAgentForm(initial = {}) {
+  const currentProjectId = useStore(s => s.currentProjectId);
   const [form, setForm] = useState({
     name: '',
     model: 'claude-sonnet-4-5',
@@ -53,8 +55,16 @@ export function useAgentForm(initial = {}) {
   const [newPrompt, setNewPrompt] = useState({ active: false, name: '', content: '' });
 
   useEffect(() => {
-    instructionsApi.list().then(setAvailableFiles).catch(() => {});
-  }, []);
+    Promise.all([
+      instructionsApi.list(false, null),             // system (global) files
+      instructionsApi.list(false, currentProjectId), // custom (per-board) files
+    ]).then(([system, custom]) => {
+      setAvailableFiles([
+        ...system.map(f => ({ ...f, scope: 'system' })),
+        ...custom.map(f => ({ ...f, scope: 'custom' })),
+      ]);
+    }).catch(() => {});
+  }, [currentProjectId]);
 
   function handleNameChange(name) {
     setForm(f => ({ ...f, name }));
@@ -80,8 +90,14 @@ export function useAgentForm(initial = {}) {
     if (newPrompt.active && newPrompt.name.trim()) {
       const safeName = sanitizeFileName(newPrompt.name);
       if (!safeName) throw new Error('Invalid system prompt file name');
-      const result = await instructionsApi.create({ name: safeName, content: newPrompt.content });
-      instructionsApi.list().then(setAvailableFiles).catch(() => {});
+      const result = await instructionsApi.create({ name: safeName, content: newPrompt.content }, currentProjectId);
+      Promise.all([
+        instructionsApi.list(false, null),
+        instructionsApi.list(false, currentProjectId),
+      ]).then(([sys, cus]) => setAvailableFiles([
+        ...sys.map(f => ({ ...f, scope: 'system' })),
+        ...cus.map(f => ({ ...f, scope: 'custom' })),
+      ])).catch(() => {});
       return result.path;
     }
     return form.prompt_file || undefined;
@@ -159,7 +175,10 @@ export function ColorField({ value, onChange }) {
 export function SystemPromptField({ promptFile, onSelectFile, availableFiles, newPrompt, setNewPromptField }) {
   const showCreate = newPrompt.active;
   const sanitized = sanitizeFileName(newPrompt.name);
-  const fileExists = sanitized && availableFiles.some(f => f.path === `instructions/${sanitized}.md`);
+  const fileExists = sanitized && availableFiles.some(f => f.name === sanitized && f.scope === 'custom');
+
+  const systemFiles = availableFiles.filter(f => f.scope === 'system');
+  const customFiles = availableFiles.filter(f => f.scope === 'custom');
 
   return (
     <div className="space-y-2">
@@ -193,7 +212,7 @@ export function SystemPromptField({ promptFile, onSelectFile, availableFiles, ne
             </div>
             {newPrompt.name && (
               <p className="mt-0.5 text-[10px] font-mono text-gray-600">
-                → instructions/{sanitized || '…'}.md
+                → saved as custom file: {sanitized || '…'}.md
               </p>
             )}
             {fileExists && (
@@ -215,7 +234,6 @@ export function SystemPromptField({ promptFile, onSelectFile, availableFiles, ne
         </div>
       ) : (
         <div>
-          <p className="text-[10px] text-gray-600 mb-1.5">Select an existing file from instructions/</p>
           {availableFiles.length > 0 ? (
             <select
               value={promptFile}
@@ -223,9 +241,20 @@ export function SystemPromptField({ promptFile, onSelectFile, availableFiles, ne
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent"
             >
               <option value="">— none —</option>
-              {availableFiles.map(f => (
-                <option key={f.path} value={f.path}>{displayName(f.path)}</option>
-              ))}
+              {systemFiles.length > 0 && (
+                <optgroup label="System (all boards)">
+                  {systemFiles.map(f => (
+                    <option key={f.path} value={f.path}>{displayName(f.path)}</option>
+                  ))}
+                </optgroup>
+              )}
+              {customFiles.length > 0 && (
+                <optgroup label="Custom (this board)">
+                  {customFiles.map(f => (
+                    <option key={f.path} value={f.path}>{displayName(f.path)}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           ) : (
             <p className="text-[10px] text-gray-600 italic">No instruction files found. Create one above.</p>
@@ -399,33 +428,58 @@ export function ContextFilesField({ availableFiles, selectedFiles, onToggle, pro
   const contextOptions = availableFiles.filter(f => f.path !== promptFile);
   if (contextOptions.length === 0) return null;
 
+  const systemOptions = contextOptions.filter(f => f.scope === 'system');
+  const customOptions = contextOptions.filter(f => f.scope === 'custom');
+
+  function FileCheckbox({ f }) {
+    return (
+      <label key={f.path} className="flex items-center gap-2.5 cursor-pointer group">
+        <div
+          onClick={() => onToggle(f.path)}
+          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+            selectedFiles.includes(f.path)
+              ? 'bg-accent border-accent'
+              : 'border-border bg-surface-1 group-hover:border-accent/50'
+          }`}
+        >
+          {selectedFiles.includes(f.path) && (
+            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
+              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+        </div>
+        <FileText size={11} className="text-gray-600 shrink-0" />
+        <span className="text-xs text-gray-400 group-hover:text-gray-300">{displayName(f.path)}</span>
+      </label>
+    );
+  }
+
   return (
     <div>
       <label className="block text-xs font-medium text-gray-400 mb-1">Context Files</label>
       <p className="text-[10px] text-gray-600 mb-2">
         Loaded as additional context. <span className="font-mono">CLAUDE.md</span> and <span className="font-mono">README.md</span> are always included.
       </p>
-      <div className="space-y-1.5 bg-surface-3 border border-border rounded-lg p-3">
-        {contextOptions.map(f => (
-          <label key={f.path} className="flex items-center gap-2.5 cursor-pointer group">
-            <div
-              onClick={() => onToggle(f.path)}
-              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-                selectedFiles.includes(f.path)
-                  ? 'bg-accent border-accent'
-                  : 'border-border bg-surface-1 group-hover:border-accent/50'
-              }`}
-            >
-              {selectedFiles.includes(f.path) && (
-                <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
-                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
+      <div className="bg-surface-3 border border-border rounded-lg p-3 space-y-3">
+        {systemOptions.length > 0 && (
+          <div>
+            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-1.5">System</p>
+            <div className="space-y-1.5">
+              {systemOptions.map(f => <FileCheckbox key={f.path} f={f} />)}
             </div>
-            <FileText size={11} className="text-gray-600 shrink-0" />
-            <span className="text-xs text-gray-400 group-hover:text-gray-300">{displayName(f.path)}</span>
-          </label>
-        ))}
+          </div>
+        )}
+        {systemOptions.length > 0 && customOptions.length > 0 && (
+          <div className="border-t border-border" />
+        )}
+        {customOptions.length > 0 && (
+          <div>
+            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-1.5">Custom</p>
+            <div className="space-y-1.5">
+              {customOptions.map(f => <FileCheckbox key={f.path} f={f} />)}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -52,15 +52,15 @@ export const useStore = create((set, get) => ({
 
   // ── Projects ─────────────────────────────────────────────────
   projects: [],
-  currentProjectId: localStorage.getItem('fa_project') || 'proj_velour',
+  currentProjectId: localStorage.getItem('fa_project') || null,
 
   async loadProjects() {
     const projects = await projectsApi.list();
     set({ projects });
-    // Ensure current project is valid
+    // Ensure current project is valid; fall back to first available
     const { currentProjectId } = get();
     if (!projects.find(p => p.id === currentProjectId)) {
-      const fallback = projects[0]?.id || 'proj_velour';
+      const fallback = projects[0]?.id || null;
       get().setCurrentProject(fallback);
     }
   },
@@ -133,7 +133,7 @@ export const useStore = create((set, get) => ({
         columnsApi.list(true),
         tasksApi.list(params),
         tasksApi.list({ ...params, include_archived: true }).then(all => all.filter(t => t.archived_at)),
-        agentsApi.list(),
+        agentsApi.list(currentProjectId),
         agentTemplatesApi.list(true),
         rolesApi.list(),
       ]);
@@ -148,7 +148,13 @@ export const useStore = create((set, get) => ({
   async createTask(data) {
     const { currentProjectId } = get();
     const task = await tasksApi.create({ ...data, project_id: currentProjectId });
-    set(s => ({ tasks: [task, ...s.tasks] }));
+    // SSE may have already inserted this task before the API response resolved —
+    // deduplicate by updating in-place rather than always prepending.
+    set(s => ({
+      tasks: s.tasks.some(t => t.id === task.id)
+        ? s.tasks.map(t => t.id === task.id ? task : t)
+        : [task, ...s.tasks],
+    }));
     return task;
   },
 
@@ -195,7 +201,8 @@ export const useStore = create((set, get) => ({
 
   // Agents
   async createAgent(data) {
-    const agent = await agentsApi.create(data);
+    const { currentProjectId } = get();
+    const agent = await agentsApi.create({ ...data, project_id: currentProjectId });
     set(s => ({ agents: [...s.agents, agent] }));
     return agent;
   },
@@ -317,21 +324,24 @@ export const useStore = create((set, get) => ({
     return tpl;
   },
 
-  // Instruction files
+  // Instruction files (all scoped to currentProjectId)
   async loadInstructionFiles() {
-    const files = await instructionsApi.list(true);
+    const { currentProjectId } = get();
+    const files = await instructionsApi.list(true, currentProjectId);
     set({ instructionFiles: files });
     return files;
   },
 
   async createInstructionFile(name, content) {
-    const file = await instructionsApi.create({ name, content });
+    const { currentProjectId } = get();
+    const file = await instructionsApi.create({ name, content }, currentProjectId);
     set(s => ({ instructionFiles: [...s.instructionFiles, file] }));
     return file;
   },
 
   async updateInstructionFile(filename, content) {
-    await instructionsApi.update(filename, content);
+    const { currentProjectId } = get();
+    await instructionsApi.update(filename, content, currentProjectId);
     set(s => ({
       instructionFiles: s.instructionFiles.map(f =>
         f.name + '.md' === filename ? { ...f, _content: content } : f
@@ -340,25 +350,30 @@ export const useStore = create((set, get) => ({
   },
 
   async archiveInstructionFile(filename) {
-    await instructionsApi.archive(filename);
+    const { currentProjectId } = get();
+    await instructionsApi.archive(filename, currentProjectId);
+    const prefix = currentProjectId ? `instructions-${currentProjectId}` : 'instructions';
     set(s => ({
       instructionFiles: s.instructionFiles.map(f =>
-        f.name + '.md' === filename ? { ...f, archived: true, path: `instructions/archived/${filename}` } : f
+        f.name + '.md' === filename ? { ...f, archived: true, path: `${prefix}/archived/${filename}` } : f
       ),
     }));
   },
 
   async unarchiveInstructionFile(filename) {
-    await instructionsApi.unarchive(filename);
+    const { currentProjectId } = get();
+    await instructionsApi.unarchive(filename, currentProjectId);
+    const prefix = currentProjectId ? `instructions-${currentProjectId}` : 'instructions';
     set(s => ({
       instructionFiles: s.instructionFiles.map(f =>
-        f.name + '.md' === filename ? { ...f, archived: false, path: `instructions/${filename}` } : f
+        f.name + '.md' === filename ? { ...f, archived: false, path: `${prefix}/${filename}` } : f
       ),
     }));
   },
 
   async deleteInstructionFile(filename) {
-    await instructionsApi.delete(filename);
+    const { currentProjectId } = get();
+    await instructionsApi.delete(filename, currentProjectId);
     set(s => ({
       instructionFiles: s.instructionFiles.filter(f => f.name + '.md' !== filename),
     }));

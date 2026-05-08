@@ -14,46 +14,59 @@ export default function SettingsPage() {
     setCurrentPage,
     theme,
     setTheme,
+    currentProjectId,
   } = useStore();
 
   const [section, setSection] = useState('files'); // 'files' | 'preferences'
 
-  const [selectedFile, setSelectedFile] = useState(null); // { name, filename, archived }
+  // System files are loaded once (global, board-independent)
+  const [systemFiles, setSystemFiles] = useState([]);
+
+  // selectedFile: { ...file, scope: 'system' | 'custom' }
+  const [selectedFile, setSelectedFile] = useState(null);
   const [content, setContent] = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error'
   const [dirty, setDirty] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // filename
-  const [archiveConfirm, setArchiveConfirm] = useState(null); // filename
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [archiveConfirm, setArchiveConfirm] = useState(null);
   const [addingFile, setAddingFile] = useState(false);
   const [newFileName, setNewFileName] = useState('');
   const [newFileError, setNewFileError] = useState('');
   const [actionError, setActionError] = useState(null);
   const saveTimerRef = useRef(null);
 
+  // Load system files once
   useEffect(() => {
-    loadInstructionFiles();
+    instructionsApi.list(true, null).then(files => setSystemFiles(files)).catch(() => {});
   }, []);
 
-  const activeFiles = instructionFiles.filter(f => !f.archived);
-  const archivedFiles = instructionFiles.filter(f => f.archived);
-  const defaultFiles = activeFiles.filter(f => f.is_default);
-  const customFiles = activeFiles.filter(f => !f.is_default);
+  // Reload custom files and reset selection when board changes
+  useEffect(() => {
+    loadInstructionFiles();
+    setSelectedFile(null);
+  }, [currentProjectId]);
 
-  async function selectFile(file) {
-    if (dirty && selectedFile) {
-      // save on switch — silently
-      await saveCurrentContent();
-    }
-    setSelectedFile(file);
+  const customActive = instructionFiles.filter(f => !f.archived);
+  const customArchived = instructionFiles.filter(f => f.archived);
+  const activeSystemFiles = systemFiles.filter(f => !f.archived);
+
+  // Returns the project_id to use for API calls based on selected file's scope
+  function scopeProjectId(scope) {
+    return scope === 'system' ? null : currentProjectId;
+  }
+
+  async function selectFile(file, scope) {
+    if (dirty && selectedFile) await saveCurrentContent();
+    setSelectedFile({ ...file, scope });
     setContent('');
     setDirty(false);
     setSaveStatus(null);
     setLoadingContent(true);
     try {
-      const data = await instructionsApi.get(file.name + '.md');
+      const data = await instructionsApi.get(file.name + '.md', scopeProjectId(scope));
       setContent(data.content);
     } catch {
       setContent('');
@@ -74,7 +87,7 @@ export default function SettingsPage() {
     if (!selectedFile) return;
     setSaving(true);
     try {
-      await instructionsApi.update(selectedFile.name + '.md', val);
+      await instructionsApi.update(selectedFile.name + '.md', val, scopeProjectId(selectedFile.scope));
       setDirty(false);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
@@ -90,7 +103,7 @@ export default function SettingsPage() {
     clearTimeout(saveTimerRef.current);
     setSaving(true);
     try {
-      await instructionsApi.update(selectedFile.name + '.md', content);
+      await instructionsApi.update(selectedFile.name + '.md', content, scopeProjectId(selectedFile.scope));
       setDirty(false);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
@@ -143,28 +156,23 @@ export default function SettingsPage() {
       const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`);
       setAddingFile(false);
       setNewFileName('');
-      selectFile(file);
+      selectFile(file, 'custom');
     } catch (err) {
       setNewFileError(err.response?.data?.error || 'Failed to create');
     }
   }
 
-  function FileRow({ file, actions }) {
-    const isSelected = selectedFile?.name === file.name;
+  function FileRow({ file, scope, actions }) {
+    const isSelected = selectedFile?.name === file.name && selectedFile?.scope === scope;
     return (
       <div
         className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
           isSelected ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
-        onClick={() => selectFile(file)}
+        onClick={() => selectFile(file, scope)}
       >
         <FileText size={11} className="shrink-0" />
         <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
-        {file.is_default && (
-          <span className="flex items-center gap-0.5 shrink-0 opacity-50" title="Default file — cannot be removed">
-            <Lock size={9} />
-          </span>
-        )}
         {actions && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
             {actions}
@@ -212,21 +220,36 @@ export default function SettingsPage() {
         {/* File list (only when section === 'files') */}
         {section === 'files' && (
           <div className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
-            {/* Default files */}
+            {/* System files */}
             <div>
-              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 mb-1.5">Default</p>
-              {defaultFiles.map(f => (
-                <FileRow key={f.name} file={f} />
-              ))}
-            </div>
-
-            {/* Custom files */}
-            <div>
-              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 mb-1.5">Custom</p>
-              {customFiles.map(f => (
+              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 mb-1">System</p>
+              <p className="text-[9px] text-gray-700 px-2 mb-2 leading-relaxed">Affects all boards</p>
+              {activeSystemFiles.map(f => (
                 <FileRow
                   key={f.name}
                   file={f}
+                  scope="system"
+                  actions={
+                    <span className="flex items-center gap-0.5 shrink-0 opacity-50" title="System file — affects all boards">
+                      <Lock size={9} />
+                    </span>
+                  }
+                />
+              ))}
+            </div>
+
+            {/* Divider */}
+            <div className="border-t border-border" />
+
+            {/* Custom files (per-board) */}
+            <div>
+              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 mb-1">Custom</p>
+              <p className="text-[9px] text-gray-700 px-2 mb-2 leading-relaxed">This board only</p>
+              {customActive.map(f => (
+                <FileRow
+                  key={f.name}
+                  file={f}
+                  scope="custom"
                   actions={
                     <>
                       <button onClick={() => setArchiveConfirm(f)} title="Archive"
@@ -275,19 +298,20 @@ export default function SettingsPage() {
             </div>
 
             {/* Archived */}
-            {archivedFiles.length > 0 && (
+            {customArchived.length > 0 && (
               <div>
                 <button
                   onClick={() => setShowArchived(v => !v)}
                   className="flex items-center gap-1.5 px-2 py-1 w-full text-[9px] font-semibold text-gray-600 uppercase tracking-widest hover:text-gray-400 transition-colors"
                 >
                   {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-                  Archived ({archivedFiles.length})
+                  Archived ({customArchived.length})
                 </button>
-                {showArchived && archivedFiles.map(f => (
+                {showArchived && customArchived.map(f => (
                   <FileRow
                     key={f.name}
                     file={f}
+                    scope="custom"
                     actions={
                       <>
                         <button onClick={() => handleUnarchive(f)} title="Restore"
@@ -351,9 +375,9 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2.5">
                 <FileText size={13} className="text-accent" />
                 <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
-                {selectedFile.is_default && (
+                {selectedFile.scope === 'system' && (
                   <span className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
-                    <Lock size={8} /> default
+                    <Lock size={8} /> system
                   </span>
                 )}
                 {selectedFile.archived && (
@@ -397,6 +421,11 @@ export default function SettingsPage() {
             {selectedFile.archived && (
               <div className="shrink-0 px-8 py-2 bg-amber-500/5 border-t border-amber-500/10 text-[10px] text-amber-400/70">
                 This file is archived and read-only. Restore it to edit.
+              </div>
+            )}
+            {selectedFile.scope === 'system' && (
+              <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-[10px] text-accent/60">
+                System file — changes affect all boards.
               </div>
             )}
           </>
