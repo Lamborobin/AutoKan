@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor } from 'lucide-react';
 import ArchivedTasksModal from './ArchivedTasksModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
@@ -255,10 +255,50 @@ function ProjectSwitcher() {
   );
 }
 
+const THEMES = [
+  { id: 'dark',   label: 'Dark',   Icon: Moon,    color: 'text-indigo-400',  bg: 'bg-indigo-500/15' },
+  { id: 'light',  label: 'Light',  Icon: Sun,     color: 'text-yellow-400',  bg: 'bg-yellow-500/15' },
+  { id: 'system', label: 'System', Icon: Monitor, color: 'text-gray-400',    bg: 'bg-gray-500/20'   },
+];
+
+function Toggle({ on, onToggle }) {
+  return (
+    <button
+      onClick={onToggle}
+      role="switch"
+      aria-checked={on}
+      style={{ width: 40, height: 22, flexShrink: 0 }}
+      className={`relative rounded-full transition-colors ${on ? 'bg-accent' : 'bg-surface-4 border border-border'}`}
+    >
+      <span
+        style={{ width: 16, height: 16, top: 3, left: on ? 21 : 3 }}
+        className="absolute rounded-full bg-white shadow transition-[left]"
+      />
+    </button>
+  );
+}
+
+function SectionHeader({ onBack, title, onClose }) {
+  return (
+    <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
+      <button onClick={onBack} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300">
+        <ChevronRight size={14} className="rotate-180" />
+      </button>
+      <h2 className="text-sm font-semibold text-gray-200">{title}</h2>
+      <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300 ml-auto">
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
 function UserProfileModal({ onClose }) {
-  const { user, logout, updateProfile } = useStore();
+  const { user, logout, updateProfile, theme, setTheme } = useStore();
+  const [activeSection, setActiveSection] = useState(null);
   const [company, setCompany] = useState(user?.company_name || '');
   const [saving, setSaving] = useState(false);
+  const [notifications, setNotifications] = useState(true);
+  const [language, setLanguage] = useState('English');
 
   const displayName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : '';
 
@@ -266,7 +306,7 @@ function UserProfileModal({ onClose }) {
     setSaving(true);
     try {
       await updateProfile({ company_name: company });
-      onClose();
+      setActiveSection(null);
     } finally {
       setSaving(false);
     }
@@ -280,66 +320,192 @@ function UserProfileModal({ onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
       <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-gray-200">Your Profile</h2>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300">
-            <X size={14} />
-          </button>
-        </div>
 
-        <div className="p-5 space-y-5">
-          {/* Avatar + name */}
-          <div className="flex items-center gap-3">
-            {user?.picture ? (
-              <img src={user.picture} alt="" className="w-12 h-12 rounded-full ring-2 ring-border" />
-            ) : (
-              <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-lg font-bold text-accent shrink-0">
-                {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-200 truncate">{displayName}</p>
-              <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+        {/* ── Main menu ── */}
+        {!activeSection && (
+          <>
+            <div className="px-5 pt-5 pb-4 border-b border-border flex items-center justify-between">
+              <button
+                onClick={() => setActiveSection('profile')}
+                className="flex items-center gap-3 flex-1 min-w-0 group text-left"
+              >
+                {user?.picture ? (
+                  <img src={user.picture} alt="" className="w-12 h-12 rounded-full ring-2 ring-border shrink-0" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-lg font-bold text-accent shrink-0">
+                    {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-200 truncate group-hover:text-white transition-colors">{displayName}</p>
+                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  {user?.company_name && <p className="text-xs text-gray-600 truncate">{user.company_name}</p>}
+                </div>
+              </button>
+              <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300 ml-2 shrink-0">
+                <X size={14} />
+              </button>
             </div>
-          </div>
 
-          {/* Company name */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1.5 flex items-center gap-1.5">
-              <Briefcase size={11} />
-              Company
-            </label>
-            <input
-              value={company}
-              onChange={e => setCompany(e.target.value)}
-              placeholder="Enter company name…"
-              className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 transition-colors"
-              onKeyDown={e => e.key === 'Enter' && handleSave()}
-            />
-          </div>
-        </div>
+            <div className="py-2">
+              {/* Account */}
+              <div className="px-3 pb-1">
+                <p className="px-2 pb-1 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Account</p>
+                <button
+                  onClick={() => setActiveSection('profile')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-accent/15 flex items-center justify-center shrink-0">
+                    <User size={15} className="text-accent" />
+                  </div>
+                  <span className="flex-1 text-sm text-gray-300 text-left group-hover:text-gray-200">Your Profile</span>
+                  <ChevronRight size={14} className="text-gray-600" />
+                </button>
+              </div>
 
-        {/* Footer actions */}
-        <div className="px-5 pb-5 flex flex-col gap-2">
-          <div className="flex gap-2">
-            <button onClick={onClose}
-              className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-300 transition-colors rounded-lg border border-border hover:bg-surface-3">
-              Cancel
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              className="flex-1 py-2 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 py-2 text-sm text-gray-600 hover:text-red-400 hover:bg-surface-3 rounded-lg transition-colors"
-          >
-            <LogOut size={13} />
-            Sign out
-          </button>
-        </div>
+              {/* Preferences */}
+              <div className="px-3 pb-1 pt-3">
+                <p className="px-2 pb-1 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Preferences</p>
+
+                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors">
+                  <div className="w-8 h-8 rounded-lg bg-yellow-500/15 flex items-center justify-center shrink-0">
+                    <Bell size={15} className="text-yellow-400" />
+                  </div>
+                  <span className="flex-1 text-sm text-gray-300">Notifications</span>
+                  <Toggle on={notifications} onToggle={() => setNotifications(n => !n)} />
+                </div>
+
+                <button
+                  onClick={() => setActiveSection('language')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+                    <Globe size={15} className="text-blue-400" />
+                  </div>
+                  <span className="flex-1 text-sm text-gray-300 text-left group-hover:text-gray-200">Language</span>
+                  <span className="text-xs text-gray-500 mr-1">{language}</span>
+                  <ChevronRight size={14} className="text-gray-600" />
+                </button>
+
+                <button
+                  onClick={() => setActiveSection('settings')}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-gray-500/20 flex items-center justify-center shrink-0">
+                    <Settings size={15} className="text-gray-400" />
+                  </div>
+                  <span className="flex-1 text-sm text-gray-300 text-left group-hover:text-gray-200">Settings</span>
+                  <span className="text-xs text-gray-500 mr-1 capitalize">{theme}</span>
+                  <ChevronRight size={14} className="text-gray-600" />
+                </button>
+              </div>
+
+              {/* Sign out */}
+              <div className="px-3 pt-2 pb-3 border-t border-border mt-1">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-500/10 transition-colors"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center shrink-0">
+                    <LogOut size={15} className="text-red-400" />
+                  </div>
+                  <span className="flex-1 text-sm text-red-400 text-left">Sign out</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Your Profile ── */}
+        {activeSection === 'profile' && (
+          <>
+            <SectionHeader onBack={() => setActiveSection(null)} title="Your Profile" onClose={onClose} />
+            <div className="p-5 space-y-5">
+              <div className="flex justify-center">
+                {user?.picture ? (
+                  <img src={user.picture} alt="" className="w-16 h-16 rounded-full ring-2 ring-border" />
+                ) : (
+                  <div className="w-16 h-16 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-2xl font-bold text-accent">
+                    {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-center text-sm font-semibold text-gray-200">{displayName}</p>
+                <p className="text-center text-xs text-gray-500">{user?.email}</p>
+              </div>
+              <div>
+                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                  <Briefcase size={11} /> Company
+                </label>
+                <input
+                  value={company}
+                  onChange={e => setCompany(e.target.value)}
+                  placeholder="Enter company name…"
+                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 transition-colors"
+                  onKeyDown={e => e.key === 'Enter' && handleSave()}
+                />
+              </div>
+            </div>
+            <div className="px-5 pb-5 flex gap-2">
+              <button onClick={() => setActiveSection(null)}
+                className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-300 transition-colors rounded-lg border border-border hover:bg-surface-3">
+                Cancel
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex-1 py-2 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Language ── */}
+        {activeSection === 'language' && (
+          <>
+            <SectionHeader onBack={() => setActiveSection(null)} title="Language" onClose={onClose} />
+            <div className="px-3 py-2">
+              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Display language</p>
+              {['English', 'Swedish', 'German', 'French', 'Spanish'].map(lang => (
+                <button
+                  key={lang}
+                  onClick={() => { setLanguage(lang); setActiveSection(null); }}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors"
+                >
+                  <span className="flex-1 text-sm text-gray-300 text-left">{lang}</span>
+                  {language === lang && <Check size={14} className="text-accent" />}
+                </button>
+              ))}
+              <p className="px-3 pt-3 pb-1 text-xs text-gray-600">Full translation support coming soon.</p>
+            </div>
+          </>
+        )}
+
+        {/* ── Settings ── */}
+        {activeSection === 'settings' && (
+          <>
+            <SectionHeader onBack={() => setActiveSection(null)} title="Settings" onClose={onClose} />
+            <div className="px-3 py-2">
+              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Appearance</p>
+              {THEMES.map(({ id, label, Icon, color, bg }) => (
+                <button
+                  key={id}
+                  onClick={() => setTheme(id)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors"
+                >
+                  <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
+                    <Icon size={15} className={color} />
+                  </div>
+                  <span className="flex-1 text-sm text-gray-300 text-left">{label}</span>
+                  {(theme === id || (id === 'system' && !['dark','light'].includes(theme))) && (
+                    <Check size={14} className="text-accent" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
@@ -536,15 +702,6 @@ export default function Sidebar() {
 
         {/* Footer — user menu */}
         <div className="p-3 border-t border-border space-y-1">
-          <button
-            onClick={() => setCurrentPage(currentPage === 'settings' ? 'board' : 'settings')}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors text-sm ${
-              currentPage === 'settings' ? 'bg-accent/15 text-accent' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'
-            }`}
-          >
-            <Settings size={14} />
-            Settings
-          </button>
           <UserMenu />
         </div>
       </aside>

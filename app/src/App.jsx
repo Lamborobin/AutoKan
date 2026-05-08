@@ -71,7 +71,8 @@ export default function App() {
 
   // Apply persisted theme on mount
   useEffect(() => {
-    document.documentElement.classList.toggle('light', theme === 'light');
+    const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+    document.documentElement.classList.toggle('light', isLight);
   }, [theme]);
 
   // SSE — real-time push updates from server (replaces polling)

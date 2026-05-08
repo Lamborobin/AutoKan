@@ -428,7 +428,8 @@ export const useStore = create((set, get) => ({
 
   setTheme(theme) {
     localStorage.setItem('theme', theme);
-    document.documentElement.classList.toggle('light', theme === 'light');
+    const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
+    document.documentElement.classList.toggle('light', isLight);
     set({ theme });
   },
 }));

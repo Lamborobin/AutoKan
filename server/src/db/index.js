@@ -549,12 +549,15 @@ function initDb() {
     console.log('✅ Migrated: added project_id to tasks');
   }
 
+  // Migration: rename legacy project name 'AutoKan' → 'Public Website'
+  db.prepare("UPDATE projects SET name = 'Public Website' WHERE id = 'proj_velour' AND name = 'AutoKan'").run();
+
   // Seed default "Velour" project (idempotent)
   const velourExists = db.prepare("SELECT id FROM projects WHERE id = 'proj_velour'").get();
   if (!velourExists) {
     db.prepare(`
       INSERT INTO projects (id, name, description, client_name, color, emoji)
-      VALUES ('proj_velour', 'AutoKan', 'Internal development of the AutoKan platform', 'Velour', '#6366f1', '⚡')
+      VALUES ('proj_velour', 'Public Website', 'Internal development of the AutoKan platform', 'Velour', '#6366f1', '⚡')
     `).run();
     // Assign all existing tasks to the Velour project
     db.prepare("UPDATE tasks SET project_id = 'proj_velour' WHERE project_id IS NULL").run();
