@@ -6,7 +6,7 @@ const GLOBAL_INSTRUCTIONS_DIR = path.join(PROJECT_ROOT, 'instructions');
 
 /**
  * Scaffold an instructions-{projectId}/ folder with per-board context files only.
- * System files (pm.md, developer.md, tester.md) live in global instructions/ and are NOT copied.
+ * System files (project-manager.md, developer.md, tester.md) live in global instructions/ and are NOT copied.
  * Safe to call multiple times — existing files are never overwritten.
  * @param {string} projectId
  * @param {string|null} clientMdContent  Initial content for client.md (null = generic placeholder)

@@ -120,9 +120,9 @@ router.post('/', requirePermission('task:create'), (req, res) => {
 
   const id = 'task_' + uuidv4().replace(/-/g, '').slice(0, 12);
 
-  // If a PM-capable agent is assigned at creation time in Backlog, auto-request PM review
+  // If a planning-capable agent is assigned at creation time in Backlog, auto-request planning review
   let pmReviewStatus = null;
-  if (column_id === 'col_backlog' && assigned_agent_id && agentHasCapability(assigned_agent_id, 'perm_pm_planning', db)) {
+  if (column_id === 'col_backlog' && assigned_agent_id && agentHasCapability(assigned_agent_id, 'perm_planning', db)) {
     pmReviewStatus = 'pending';
   }
 
@@ -227,7 +227,7 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
   // Trigger agent only when BOTH the right role is assigned AND the task is in the matching column
   if (req.body.assigned_agent_id !== undefined) {
     const newAgentId = req.body.assigned_agent_id;
-    if (task.column_id === 'col_backlog' && agentHasCapability(newAgentId, 'perm_pm_planning', db) && !task.pm_approval_status) {
+    if (task.column_id === 'col_backlog' && agentHasCapability(newAgentId, 'perm_planning', db) && !task.pm_approval_status) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'pending' WHERE id = ?`).run(task.id);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review automatically requested on assignment');
@@ -296,7 +296,7 @@ router.post('/:id/move', requirePermission('task:move'), (req, res) => {
 
   // Trigger agent if task moved into a column where the assigned agent has the matching capability
   if (updated.assigned_agent_id) {
-    if (column_id === 'col_backlog' && agentHasCapability(updated.assigned_agent_id, 'perm_pm_planning', db) && !task.pm_approval_status) {
+    if (column_id === 'col_backlog' && agentHasCapability(updated.assigned_agent_id, 'perm_planning', db) && !task.pm_approval_status) {
       triggerPmAgent(task.id);
     } else if (column_id === 'col_inprogress' && agentHasCapability(updated.assigned_agent_id, 'perm_coding', db)) {
       triggerDevAgent(task.id);

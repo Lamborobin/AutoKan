@@ -543,7 +543,7 @@ export default function TaskDetail() {
               </div>
             )}
 
-            {/* ── PM Planning Session (active — not yet fully approved) ──────── */}
+            {/* ── Planning Session (active — not yet fully approved) ──────── */}
             {isPmPlanning && !fullyReady && (
               <div className="rounded-xl border border-surface-3 overflow-hidden">
 
@@ -555,13 +555,13 @@ export default function TaskDetail() {
                       hasPendingQuestion ? 'bg-yellow-400 animate-pulse' :
                       'bg-blue-400 animate-pulse'
                     }`} />
-                    <span className="text-xs font-medium text-gray-300">PM Planning</span>
+                    <span className="text-xs font-medium text-gray-300">Planning</span>
                   </div>
                   <span className="text-[10px] text-gray-500">
                     {pmDone ? 'Awaiting your sign-off' :
                      agentThinking ? 'Agent thinking…' :
                      hasPendingQuestion ? 'Awaiting your reply' :
-                     'PM reviewing…'}
+                     'Agent reviewing…'}
                   </span>
                 </div>
 

@@ -272,14 +272,14 @@ async function runPmAgent(taskId) {
   // Don't re-run while waiting for human to answer
   if (task.pm_pending_question) return;
 
-  // Use the task's assigned agent; fall back to first active agent with perm_pm_planning capability
+  // Use the task's assigned agent; fall back to first active agent with perm_planning capability
   let pmAgent = task.assigned_agent_id
     ? db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id)
     : null;
   if (!pmAgent) {
     const candidates = db.prepare('SELECT * FROM agents WHERE active = 1').all();
     pmAgent = candidates.find(a => {
-      try { return JSON.parse(a.role_ids || '[]').includes('perm_pm_planning'); }
+      try { return JSON.parse(a.role_ids || '[]').includes('perm_planning'); }
       catch { return false; }
     }) || null;
   }

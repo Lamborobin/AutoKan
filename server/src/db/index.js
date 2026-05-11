@@ -331,6 +331,31 @@ function initDb() {
     db.prepare("UPDATE agents SET prompt_file = ? WHERE id = ? AND prompt_file = ?").run(newPath, id, oldPath);
   }
 
+  // Migration: rename pm.md → project-manager.md in prompt_file (any agent referencing it)
+  db.prepare("UPDATE agents SET prompt_file = 'instructions/project-manager.md' WHERE prompt_file = 'instructions/pm.md'").run();
+
+  // Migration: rename perm_pm_planning → perm_planning in roles table + all agents' role_ids
+  const oldPlanningRole = db.prepare("SELECT id FROM roles WHERE id = 'perm_pm_planning'").get();
+  if (oldPlanningRole) {
+    const newAlreadyExists = db.prepare("SELECT id FROM roles WHERE id = 'perm_planning'").get();
+    if (newAlreadyExists) {
+      // New role was already seeded — just remove the stale old row
+      db.prepare("DELETE FROM roles WHERE id = 'perm_pm_planning'").run();
+    } else {
+      db.prepare("UPDATE roles SET id = 'perm_planning', name = 'Planning' WHERE id = 'perm_pm_planning'").run();
+    }
+    // Either way, update all agents' role_ids arrays
+    const allAgents = db.prepare('SELECT id, role_ids FROM agents').all();
+    for (const a of allAgents) {
+      const ids = JSON.parse(a.role_ids || '[]');
+      if (ids.includes('perm_pm_planning')) {
+        const updated = ids.map(r => r === 'perm_pm_planning' ? 'perm_planning' : r);
+        db.prepare('UPDATE agents SET role_ids = ? WHERE id = ?').run(JSON.stringify(updated), a.id);
+      }
+    }
+    console.log('✅ Migrated: perm_pm_planning → perm_planning');
+  }
+
   // Migration: enforce correct instruction_files per role (always apply — roles are fixed)
   // PM: client context only. No codebase files — PM knows the client, not the code.
   // Developer/Tester: project + client context. Codebase files (CLAUDE.md etc.) are
@@ -391,16 +416,16 @@ function initDb() {
     ['perm_security_control','Security Control', 'Security analysis, vulnerability scanning, .env usage review, no modifications',      '#ef4444', 'permission'],
     ['perm_log_reader',      'Log Reader',       'Reads logs in the file system and cloud (when cloud is enabled)',                     '#f97316', 'permission'],
     ['perm_data_analytic',   'Data Analytics',   'Extracts and analyses data from appropriate areas of the app',                       '#84cc16', 'permission'],
-    ['perm_pm_planning',     'PM Planning',      'Triggers the PM planning phase when assigned to a Backlog task',                      '#a855f7', 'permission'],
+    ['perm_planning',        'Planning',         'Triggers the planning phase when assigned to a Backlog task',                         '#a855f7', 'permission'],
   ].forEach(([id, name, description, color, type]) =>
     insertRoleIfMissing.run(id, name, description, '[]', color, type)
   );
 
-  // Always ensure agent_pm has the PM Planning capability
+  // Always ensure agent_pm has the Planning capability
   const pmRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_pm'").get()?.role_ids || '[]');
-  if (!pmRoleIds.includes('perm_pm_planning')) {
+  if (!pmRoleIds.includes('perm_planning')) {
     db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_pm'")
-      .run(JSON.stringify([...pmRoleIds, 'perm_pm_planning']));
+      .run(JSON.stringify([...pmRoleIds, 'perm_planning']));
   }
 
   // Always ensure agent_dev has the Coding capability
@@ -492,8 +517,8 @@ function initDb() {
         'claude-opus-4-5',
         'Plans and manages tasks. Has a real planning conversation to ensure every task is clear before development starts.',
         JSON.stringify(['task:create','task:read','task:update','task:delete','task:move','task:assign']),
-        'instructions/pm.md',
-        JSON.stringify(['instructions/client.md']),   // PM: client context only, no codebase
+        'instructions/project-manager.md',
+        JSON.stringify(['instructions/client.md']),   // Planner: client context only, no codebase
         1, PM_TEMPLATE_SYSTEM_PROMPT,
         '#6366f1', 'tpl_pm', VELOUR_ID
       ],
@@ -536,7 +561,7 @@ function initDb() {
       'tpl_pm', 'Project Manager',
       'Plans and manages tasks. Has a real planning conversation to ensure every task is clear before development starts.',
       'claude-opus-4-5', '#6366f1', 'pm',
-      readInstructionFile('pm.md'),
+      readInstructionFile('project-manager.md'),
       PM_TEMPLATE_SYSTEM_PROMPT,
       JSON.stringify(['instructions/client.md', 'instructions/project.md']),
       JSON.stringify(['task:create','task:read','task:update','task:delete','task:move','task:assign']),
@@ -737,8 +762,8 @@ A feature is "done" when:
   try { scaffoldProjectInstructions(VELOUR_ID); } catch (e) { console.warn('Could not scaffold Velour instructions:', e.message); }
   try { scaffoldProjectInstructions(TGH_ID, tghClientMd, '# TGH Iron & Steel — Project Context\n\nAdd project-specific context here.\n'); } catch (e) { console.warn('Could not scaffold TGH instructions:', e.message); }
 
-  // Migration: remove system files (pm.md, developer.md, tester.md) from per-project folders
-  const SYSTEM_ONLY_FILES = ['pm.md', 'developer.md', 'tester.md'];
+  // Migration: remove system files from per-project folders (both old and new filenames)
+  const SYSTEM_ONLY_FILES = ['pm.md', 'project-manager.md', 'developer.md', 'tester.md'];
   try {
     for (const { id } of db.prepare('SELECT id FROM projects').all()) {
       const projectDir = path.join(__dirname, `../../../instructions-${id}`);
