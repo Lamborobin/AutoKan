@@ -8,7 +8,11 @@ const tasksRouter = require('./routes/tasks');
 const authRouter = require('./routes/auth');
 const projectsRouter = require('./routes/projects');
 const invitesRouter = require('./routes/invites');
+const membersRouter = require('./routes/members');
+const teamsRouter = require('./routes/teams');
 const { agentsRouter, columnsRouter, secretsRouter, instructionsRouter, agentTemplatesRouter, rolesRouter } = require('./routes/other');
+const subscriptionsRouter = require('./routes/subscriptions');
+const clientsRouter = require('./routes/clients');
 const { addClient } = require('./sse');
 
 const app = express();
@@ -33,6 +37,10 @@ app.use('/api/instructions', instructionsRouter);
 app.use('/api/agent-templates', agentTemplatesRouter);
 app.use('/api/roles', rolesRouter);
 app.use('/api/invites', invitesRouter);
+app.use('/api/projects/:projectId/members', membersRouter);
+app.use('/api/teams', teamsRouter);
+app.use('/api/subscriptions', subscriptionsRouter);
+app.use('/api/clients', clientsRouter);
 
 // SSE — real-time push to connected browsers
 app.get('/api/events', (req, res) => addClient(res));

@@ -55,7 +55,7 @@ export const tasksApi = {
 };
 
 export const columnsApi = {
-  list: (includeArchived = false) => api.get('/columns', { params: { include_archived: includeArchived } }).then(r => r.data),
+  list: (includeArchived = false, projectId = null) => api.get('/columns', { params: { include_archived: includeArchived, ...(projectId ? { project_id: projectId } : {}) } }).then(r => r.data),
   create: (data) => api.post('/columns', data).then(r => r.data),
   update: (id, data) => api.patch(`/columns/${id}`, data).then(r => r.data),
   archive: (id) => api.post(`/columns/${id}/archive`).then(r => r.data),
@@ -116,6 +116,39 @@ export const invitesApi = {
   list: () => api.get('/invites').then(r => r.data),
   remove: (id) => api.delete(`/invites/${id}`).then(r => r.data),
   verify: (token) => api.get('/invites/verify', { params: { token } }).then(r => r.data),
+};
+
+export const membersApi = {
+  list: (projectId) => api.get(`/projects/${projectId}/members`).then(r => r.data),
+  add: (projectId, email) => api.post(`/projects/${projectId}/members`, { email }).then(r => r.data),
+  addTeam: (projectId, teamId) => api.post(`/projects/${projectId}/members/add-team`, { teamId }).then(r => r.data),
+  remove: (projectId, memberId) => api.delete(`/projects/${projectId}/members/${memberId}`).then(r => r.data),
+};
+
+export const teamsApi = {
+  list: () => api.get('/teams').then(r => r.data),
+  create: (data) => api.post('/teams', data).then(r => r.data),
+  update: (id, data) => api.patch(`/teams/${id}`, data).then(r => r.data),
+  delete: (id) => api.delete(`/teams/${id}`).then(r => r.data),
+  listMembers: (id) => api.get(`/teams/${id}/members`).then(r => r.data),
+  addMember: (id, email) => api.post(`/teams/${id}/members`, { email }).then(r => r.data),
+  removeMember: (id, email) => api.delete(`/teams/${id}/members/${encodeURIComponent(email)}`).then(r => r.data),
+};
+
+export const subscriptionApi = {
+  get: () => api.get('/subscriptions/me').then(r => r.data),
+  updateName: (name) => api.patch('/subscriptions/me', { name }).then(r => r.data),
+  addAdmin: (email) => api.post('/subscriptions/admins', { email }).then(r => r.data),
+  removeAdmin: (userId) => api.delete(`/subscriptions/admins/${userId}`).then(r => r.data),
+};
+
+export const clientsApi = {
+  list: (includeArchived = false) => api.get('/clients', { params: { include_archived: includeArchived } }).then(r => r.data),
+  create: (data) => api.post('/clients', data).then(r => r.data),
+  update: (id, data) => api.patch(`/clients/${id}`, data).then(r => r.data),
+  archive: (id) => api.post(`/clients/${id}/archive`).then(r => r.data),
+  unarchive: (id) => api.post(`/clients/${id}/unarchive`).then(r => r.data),
+  delete: (id) => api.delete(`/clients/${id}`).then(r => r.data),
 };
 
 export const commentsApi = {

@@ -204,7 +204,7 @@ function initDb() {
     console.log('✅ Migrated: added pm_checklist to tasks');
   }
 
-  // Migration: add archived_at and is_protected to columns table
+  // Migration: add archived_at, is_protected, project_id to columns table
   const colTableCols = db.prepare('PRAGMA table_info(columns)').all().map(c => c.name);
   if (!colTableCols.includes('archived_at')) {
     db.exec('ALTER TABLE columns ADD COLUMN archived_at DATETIME');
@@ -213,6 +213,12 @@ function initDb() {
   if (!colTableCols.includes('is_protected')) {
     db.exec('ALTER TABLE columns ADD COLUMN is_protected INTEGER DEFAULT 0');
     console.log('✅ Migrated: added is_protected to columns');
+  }
+  if (!colTableCols.includes('project_id')) {
+    db.exec('ALTER TABLE columns ADD COLUMN project_id TEXT REFERENCES projects(id)');
+    // Existing non-protected custom columns belong to the first/default project
+    db.prepare(`UPDATE columns SET project_id = '${VELOUR_ID}' WHERE is_protected = 0 AND project_id IS NULL`).run();
+    console.log('✅ Migrated: added project_id to columns, assigned existing custom columns to Velour');
   }
 
   // Mark the 5 core columns as protected
@@ -774,6 +780,62 @@ A feature is "done" when:
     }
   } catch (e) { console.warn('Could not clean system files from project folders:', e.message); }
 
+  // ── Clients table ────────────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS clients (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      website TEXT,
+      color TEXT DEFAULT '#6366f1',
+      subscription_id TEXT REFERENCES subscriptions(id),
+      created_by TEXT REFERENCES users(id),
+      archived_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // ── Subscriptions table ───────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_by TEXT REFERENCES users(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // ── Subscription admins (superadmins) ─────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS subscription_admins (
+      id TEXT PRIMARY KEY,
+      subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      added_by TEXT REFERENCES users(id),
+      added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(subscription_id, user_id)
+    );
+  `);
+
+  // Migration: add subscription_id, client_id, and created_by to projects
+  {
+    const projCols = db.prepare('PRAGMA table_info(projects)').all().map(c => c.name);
+    if (!projCols.includes('subscription_id')) {
+      db.exec('ALTER TABLE projects ADD COLUMN subscription_id TEXT REFERENCES subscriptions(id)');
+      console.log('✅ Migrated: added subscription_id to projects');
+    }
+    if (!projCols.includes('client_id')) {
+      db.exec('ALTER TABLE projects ADD COLUMN client_id TEXT REFERENCES clients(id)');
+      console.log('✅ Migrated: added client_id to projects');
+    }
+    if (!projCols.includes('created_by')) {
+      db.exec('ALTER TABLE projects ADD COLUMN created_by TEXT REFERENCES users(id)');
+      console.log('✅ Migrated: added created_by to projects');
+    }
+  }
+
   // ── Invites table ──────────────────────────────────────────
   db.exec(`
     CREATE TABLE IF NOT EXISTS invites (
@@ -799,6 +861,127 @@ A feature is "done" when:
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // ── Teams table ──────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      color TEXT DEFAULT '#6366f1',
+      created_by TEXT REFERENCES users(id),
+      archived_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // ── Team members table ───────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      user_id TEXT REFERENCES users(id),
+      role TEXT DEFAULT 'member',
+      invited_by TEXT REFERENCES users(id),
+      added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(team_id, email)
+    );
+  `);
+
+  // ── Project members table ────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS project_members (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      user_id TEXT REFERENCES users(id),
+      role TEXT DEFAULT 'member',
+      invited_by TEXT REFERENCES users(id),
+      accepted_at DATETIME,
+      added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(project_id, email)
+    );
+  `);
+  // Migration: add accepted_at if missing
+  {
+    const pmCols = db.prepare('PRAGMA table_info(project_members)').all().map(c => c.name);
+    if (!pmCols.includes('accepted_at')) {
+      db.exec('ALTER TABLE project_members ADD COLUMN accepted_at DATETIME');
+      // Auto-seeded (no invited_by) rows are implicitly accepted
+      db.exec('UPDATE project_members SET accepted_at = added_at WHERE invited_by IS NULL');
+      console.log('✅ Migrated: added accepted_at to project_members');
+    }
+  }
+
+  // ── Seed default team ────────────────────────────────────────
+  db.prepare(`INSERT OR IGNORE INTO teams (id, name, color) VALUES ('team_mycompany', 'My Company Team', '#6366f1')`).run();
+  db.prepare(`INSERT OR IGNORE INTO team_members (id, team_id, email) VALUES ('tm_robin1', 'team_mycompany', 'lamborobin97@gmail.com')`).run();
+  db.prepare(`INSERT OR IGNORE INTO team_members (id, team_id, email) VALUES ('tm_robin2', 'team_mycompany', 'robin.larsson@softronic.se')`).run();
+  // Link existing users to team_members by email
+  db.prepare(`UPDATE team_members SET user_id = (SELECT id FROM users WHERE email = team_members.email) WHERE user_id IS NULL`).run();
+
+  // ── Seed default subscription ──────────────────────────────────────────────
+  const DEFAULT_SUB_ID = 'sub_default';
+  db.prepare(`INSERT OR IGNORE INTO subscriptions (id, name) VALUES (?, 'My Workspace')`).run(DEFAULT_SUB_ID);
+
+  // Assign all existing boards to this subscription
+  db.prepare(`UPDATE projects SET subscription_id = ? WHERE subscription_id IS NULL`).run(DEFAULT_SUB_ID);
+
+  // Seed clients from existing client_name values on projects (idempotent)
+  {
+    const superAdmin = db.prepare("SELECT id FROM users WHERE email = 'lamborobin97@gmail.com'").get();
+    const superAdminId = superAdmin?.id || null;
+
+    // Set created_by on all projects that don't have it yet
+    if (superAdminId) {
+      db.prepare('UPDATE projects SET created_by = ? WHERE created_by IS NULL').run(superAdminId);
+    }
+
+    // Create client entities from unique client_name values and link back (idempotent)
+    const projectsWithClient = db.prepare("SELECT DISTINCT client_name FROM projects WHERE client_name IS NOT NULL AND client_id IS NULL").all();
+    for (const row of projectsWithClient) {
+      let client = db.prepare('SELECT id FROM clients WHERE name = ? AND subscription_id = ?').get(row.client_name, DEFAULT_SUB_ID);
+      if (!client) {
+        const clientId = 'client_' + crypto.randomBytes(6).toString('hex');
+        db.prepare('INSERT INTO clients (id, name, subscription_id, created_by) VALUES (?, ?, ?, ?)').run(clientId, row.client_name, DEFAULT_SUB_ID, superAdminId);
+        client = { id: clientId };
+        console.log('✅ Seeded client:', row.client_name);
+      }
+      db.prepare('UPDATE projects SET client_id = ? WHERE client_name = ? AND client_id IS NULL').run(client.id, row.client_name);
+    }
+  }
+
+  // Seed lamborobin97@gmail.com as superadmin (idempotent)
+  {
+    const superAdminUser = db.prepare("SELECT id FROM users WHERE email = 'lamborobin97@gmail.com'").get();
+    if (superAdminUser) {
+      const saId = 'sa_' + require('crypto').randomBytes(6).toString('hex');
+      db.prepare(`INSERT OR IGNORE INTO subscription_admins (id, subscription_id, user_id) VALUES (?, ?, ?)`)
+        .run(saId, DEFAULT_SUB_ID, superAdminUser.id);
+      console.log('✅ Seeded lamborobin97@gmail.com as superadmin');
+    }
+  }
+
+  // Remove lamborobin97@gmail.com from My Company Team (superadmins don't need team membership)
+  db.prepare(`DELETE FROM team_members WHERE team_id = 'team_mycompany' AND email = 'lamborobin97@gmail.com'`).run();
+
+  // ── Seed project_members: only board owners (idempotent) ──
+  // Access is explicit: owner on creation, then invite-only.
+  // Note: bulk-cleanup was done as a one-time operation (fix-members.js, 2026-05-20).
+  // This block only seeds owner rows for boards missing them — safe to run every restart.
+  {
+    const crypto = require('crypto');
+    const projectsWithOwners = db.prepare("SELECT id, owner_id FROM projects WHERE owner_id IS NOT NULL AND archived_at IS NULL").all();
+    for (const p of projectsWithOwners) {
+      const ownerRow = db.prepare("SELECT email FROM users WHERE id = ?").get(p.owner_id);
+      if (ownerRow) {
+        const pmId = 'pm_' + crypto.randomBytes(6).toString('hex');
+        db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at) VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`).run(pmId, p.id, ownerRow.email, p.owner_id);
+      }
+    }
+  }
 
   console.log('✅ Database initialized at', DB_PATH);
   return db;

@@ -80,6 +80,10 @@ router.post('/google', async (req, res) => {
           .run(id, inviteToken);
       }
 
+      // Link new user to any existing project_members/team_members by email
+      db.prepare('UPDATE project_members SET user_id = ? WHERE email = ? AND user_id IS NULL').run(id, email);
+      db.prepare('UPDATE team_members SET user_id = ? WHERE email = ? AND user_id IS NULL').run(id, email);
+
       // Assign all unowned Velour project tasks to this user if they're the first user
       const projectOwner = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(VELOUR_ID);
       if (!projectOwner?.owner_id) {
@@ -132,7 +136,9 @@ router.get('/me', (req, res) => {
     const db = getDb();
     const user = db.prepare('SELECT id, email, first_name, last_name, picture, company_name FROM users WHERE id = ?').get(decoded.sub);
     if (!user) return res.status(401).json({ error: 'User not found' });
-    res.json({ user });
+    // Check superadmin status
+    const isAdmin = db.prepare('SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1').get(user.id);
+    res.json({ user: { ...user, isSuperAdmin: !!isAdmin } });
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
   }

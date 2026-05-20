@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { tasksApi, columnsApi, agentsApi, secretsApi, agentTemplatesApi, instructionsApi, rolesApi, authApi, projectsApi } from '../api';
+import { tasksApi, columnsApi, agentsApi, secretsApi, agentTemplatesApi, instructionsApi, rolesApi, authApi, projectsApi, membersApi, teamsApi, subscriptionApi, clientsApi } from '../api';
 
 export const useStore = create((set, get) => ({
   // ── Auth ─────────────────────────────────────────────────────
@@ -8,6 +8,56 @@ export const useStore = create((set, get) => ({
   authError: null,
   inviteToken: null,
   setInviteToken: (t) => set({ inviteToken: t }),
+
+  // ── Subscription / Workspace ──────────────────────────────────
+  isSuperAdmin: false,
+  subscription: null,
+  subscriptionAdmins: [],
+
+  async loadSubscription() {
+    try {
+      const data = await subscriptionApi.get();
+      set({ subscription: data, subscriptionAdmins: data.admins || [], isSuperAdmin: data.isSuperAdmin || false });
+    } catch {}
+  },
+
+  // ── Clients ──────────────────────────────────────────────────
+  clients: [],
+  async loadClients() {
+    try {
+      const clients = await clientsApi.list();
+      set({ clients });
+    } catch {}
+  },
+  async createClient(data) {
+    const client = await clientsApi.create(data);
+    set(s => ({ clients: [...s.clients, client] }));
+    return client;
+  },
+  async updateClient(id, data) {
+    const client = await clientsApi.update(id, data);
+    set(s => ({ clients: s.clients.map(c => c.id === id ? client : c) }));
+    return client;
+  },
+  async archiveClient(id) {
+    await clientsApi.archive(id);
+    set(s => ({ clients: s.clients.map(c => c.id === id ? { ...c, archived_at: new Date().toISOString() } : c) }));
+  },
+  async deleteClient(id) {
+    await clientsApi.delete(id);
+    set(s => ({ clients: s.clients.filter(c => c.id !== id) }));
+  },
+
+  async addSuperAdmin(email) {
+    const admin = await subscriptionApi.addAdmin(email);
+    set(s => ({ subscriptionAdmins: [...s.subscriptionAdmins, admin] }));
+    return admin;
+  },
+
+  async removeSuperAdmin(userId) {
+    await subscriptionApi.removeAdmin(userId);
+    set(s => ({ subscriptionAdmins: s.subscriptionAdmins.filter(a => a.user_id !== userId) }));
+  },
 
   // ── Users (for @mention autocomplete) ────────────────────────
   users: [],
@@ -26,9 +76,11 @@ export const useStore = create((set, get) => ({
     }
     try {
       const { user } = await authApi.me();
-      set({ user, authLoading: false });
+      set({ user, authLoading: false, isSuperAdmin: user.isSuperAdmin || false });
       // Load projects and users immediately after auth
       await Promise.all([get().loadProjects(), get().fetchUsers()]);
+      await get().loadSubscription();
+      await get().loadClients();
     } catch {
       localStorage.removeItem('fa_token');
       set({ user: null, authLoading: false });
@@ -41,8 +93,10 @@ export const useStore = create((set, get) => ({
       const { inviteToken } = get();
       const { token, user } = await authApi.google(credential, inviteToken || undefined);
       localStorage.setItem('fa_token', token);
-      set({ user, inviteToken: null });
+      set({ user, inviteToken: null, isSuperAdmin: user.isSuperAdmin || false });
       await Promise.all([get().loadProjects(), get().fetchUsers()]);
+      await get().loadSubscription();
+      await get().loadClients();
     } catch (e) {
       set({ authError: e.response?.data?.error || 'Sign-in failed. Please try again.' });
     }
@@ -82,6 +136,7 @@ export const useStore = create((set, get) => ({
     set({ currentProjectId: id });
     // Re-load board data for the new project
     get().load();
+    get().loadBoardMembers();
   },
 
   async createProject(data) {
@@ -143,7 +198,7 @@ export const useStore = create((set, get) => ({
     try {
       const params = currentProjectId ? { project_id: currentProjectId } : {};
       const [columns, tasks, archivedTasks, agents, agentTemplates, roles] = await Promise.all([
-        columnsApi.list(true),
+        columnsApi.list(true, currentProjectId),
         tasksApi.list(params),
         tasksApi.list({ ...params, include_archived: true }).then(all => all.filter(t => t.archived_at)),
         agentsApi.list(currentProjectId),
@@ -151,6 +206,9 @@ export const useStore = create((set, get) => ({
         rolesApi.list(),
       ]);
       set({ columns, tasks, archivedTasks, agents, agentTemplates, roles, loading: false });
+      // Load members and teams in the background (non-blocking)
+      get().loadBoardMembers().catch(() => {});
+      get().loadTeams().catch(() => {});
       // Open task from email deep-link (?task=<id>)
       const { _pendingTaskId } = get();
       if (_pendingTaskId) {
@@ -255,7 +313,8 @@ export const useStore = create((set, get) => ({
 
   // Columns
   async createColumn(data) {
-    const col = await columnsApi.create(data);
+    const { currentProjectId } = get();
+    const col = await columnsApi.create({ ...data, project_id: currentProjectId });
     const roles = await rolesApi.list();
     set(s => ({ columns: [...s.columns, col], roles }));
   },
@@ -451,6 +510,52 @@ export const useStore = create((set, get) => ({
         break;
       }
     }
+  },
+
+  // ── Board Members ────────────────────────────────────────────
+  boardMembers: [],
+  async loadBoardMembers() {
+    const { currentProjectId } = get();
+    if (!currentProjectId) return;
+    try {
+      const members = await membersApi.list(currentProjectId);
+      set({ boardMembers: members });
+    } catch {}
+  },
+  async addBoardMember(email) {
+    const { currentProjectId } = get();
+    const result = await membersApi.add(currentProjectId, email);
+    set(s => ({ boardMembers: [...s.boardMembers, result.member] }));
+    return result;
+  },
+  async addTeamToBoard(teamId) {
+    const { currentProjectId } = get();
+    const result = await membersApi.addTeam(currentProjectId, teamId);
+    await get().loadBoardMembers();
+    return result;
+  },
+  async removeBoardMember(memberId) {
+    const { currentProjectId } = get();
+    await membersApi.remove(currentProjectId, memberId);
+    set(s => ({ boardMembers: s.boardMembers.filter(m => m.id !== memberId) }));
+  },
+
+  // ── Teams ────────────────────────────────────────────────────
+  teams: [],
+  async loadTeams() {
+    try {
+      const teams = await teamsApi.list();
+      set({ teams });
+    } catch {}
+  },
+  async createTeam(data) {
+    const team = await teamsApi.create(data);
+    set(s => ({ teams: [...s.teams, team] }));
+    return team;
+  },
+  async deleteTeam(id) {
+    await teamsApi.delete(id);
+    set(s => ({ teams: s.teams.filter(t => t.id !== id) }));
   },
 
   // UI state

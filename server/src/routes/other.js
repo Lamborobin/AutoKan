@@ -250,11 +250,29 @@ const columnsRouter = express.Router();
 columnsRouter.get('/', attachAgent, (req, res) => {
   const db = getDb();
   const includeArchived = req.query.include_archived === 'true';
-  const where = includeArchived ? '' : 'WHERE archived_at IS NULL';
-  const columns = db.prepare(`SELECT * FROM columns ${where} ORDER BY position ASC`).all();
+  const projectId = req.query.project_id || null;
 
-  // Attach task counts
-  const counts = db.prepare('SELECT column_id, COUNT(*) as count FROM tasks GROUP BY column_id').all();
+  // Always return global pipeline columns (project_id IS NULL) +
+  // any custom columns scoped to the requested project
+  const archivedFilter = includeArchived ? '' : 'AND archived_at IS NULL';
+  const columns = projectId
+    ? db.prepare(`
+        SELECT * FROM columns
+        WHERE (project_id IS NULL OR project_id = ?)
+        ${archivedFilter}
+        ORDER BY position ASC
+      `).all(projectId)
+    : db.prepare(`
+        SELECT * FROM columns
+        WHERE project_id IS NULL
+        ${archivedFilter}
+        ORDER BY position ASC
+      `).all();
+
+  // Attach task counts (scoped to project if provided)
+  const counts = projectId
+    ? db.prepare('SELECT column_id, COUNT(*) as count FROM tasks WHERE project_id = ? GROUP BY column_id').all(projectId)
+    : db.prepare('SELECT column_id, COUNT(*) as count FROM tasks GROUP BY column_id').all();
   const countMap = Object.fromEntries(counts.map(c => [c.column_id, c.count]));
 
   res.json(columns.map(c => ({ ...c, task_count: countMap[c.id] || 0 })));
@@ -265,14 +283,18 @@ columnsRouter.post('/', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create columns' });
 
   const db = getDb();
-  const { name, color = '#6366f1' } = req.body;
+  const { name, color = '#6366f1', project_id } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
+  if (!project_id) return res.status(400).json({ error: 'project_id is required' });
 
-  const maxPos = db.prepare('SELECT MAX(position) as m FROM columns').get();
+  // Position is scoped to the project: after the last custom column for this project
+  const maxPos = db.prepare(
+    'SELECT MAX(position) as m FROM columns WHERE project_id = ? OR project_id IS NULL'
+  ).get(project_id);
   const position = (maxPos.m || 0) + 1;
   const id = 'col_' + name.toLowerCase().replace(/[^a-z0-9]/g, '') + '_' + Date.now();
 
-  db.prepare('INSERT INTO columns (id, name, position, color) VALUES (?, ?, ?, ?)').run(id, name, position, color);
+  db.prepare('INSERT INTO columns (id, name, position, color, project_id) VALUES (?, ?, ?, ?, ?)').run(id, name, position, color, project_id);
 
   // Create a non-system column_access role for this column
   const roleId = 'role_' + id.replace(/^col_/, '');

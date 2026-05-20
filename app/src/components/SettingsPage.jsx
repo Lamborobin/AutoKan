@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight, X, Check, ArrowLeft, SlidersHorizontal, Sun, Moon } from 'lucide-react';
+import { FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight, X, Check, ArrowLeft, SlidersHorizontal, Sun, Moon, Crown, Shield, UserMinus, Building2, Pencil } from 'lucide-react';
 import { useStore } from '../store';
 import { instructionsApi } from '../api';
 
@@ -15,9 +15,60 @@ export default function SettingsPage() {
     theme,
     setTheme,
     currentProjectId,
+    isSuperAdmin,
+    subscription,
+    subscriptionAdmins,
+    addSuperAdmin,
+    removeSuperAdmin,
+    user,
+    clients,
+    loadClients,
+    createClient,
+    updateClient,
+    archiveClient,
+    deleteClient,
   } = useStore();
 
-  const [section, setSection] = useState('files'); // 'files' | 'preferences'
+  const [section, setSection] = useState('files'); // 'files' | 'preferences' | 'workspace' | 'clients'
+
+  // Workspace / superadmin state
+  const [adminEmail, setAdminEmail] = useState('');
+  const [addingAdmin, setAddingAdmin] = useState(false);
+  const [adminError, setAdminError] = useState('');
+  const [adminSuccess, setAdminSuccess] = useState('');
+
+  async function handleAddSuperAdmin(e) {
+    e.preventDefault();
+    setAddingAdmin(true);
+    setAdminError('');
+    setAdminSuccess('');
+    try {
+      await addSuperAdmin(adminEmail.trim().toLowerCase());
+      setAdminEmail('');
+      setAdminSuccess('Superadmin added');
+    } catch (err) {
+      setAdminError(err.response?.data?.error || 'Failed to add superadmin');
+    } finally {
+      setAddingAdmin(false);
+    }
+  }
+
+  async function handleRemoveSuperAdmin(userId) {
+    try {
+      await removeSuperAdmin(userId);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to remove superadmin');
+    }
+  }
+
+  // Clients section state
+  const [clientName, setClientName] = useState('');
+  const [clientWebsite, setClientWebsite] = useState('');
+  const [addingClient, setAddingClient] = useState(false);
+  const [creatingClient, setCreatingClient] = useState(false);
+  const [editingClientId, setEditingClientId] = useState(null);
+  const [editClientName, setEditClientName] = useState('');
+  const [clientError, setClientError] = useState('');
 
   // System files are loaded once (global, board-independent)
   const [systemFiles, setSystemFiles] = useState([]);
@@ -203,6 +254,7 @@ export default function SettingsPage() {
           {[
             { id: 'files', label: 'Instruction Files', icon: FileText },
             { id: 'preferences', label: 'Preferences', icon: SlidersHorizontal },
+            { id: 'clients', label: 'Clients', icon: Building2 },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -215,6 +267,17 @@ export default function SettingsPage() {
               {label}
             </button>
           ))}
+          {isSuperAdmin && (
+            <button
+              onClick={() => setSection('workspace')}
+              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors ${
+                section === 'workspace' ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
+              }`}
+            >
+              <Crown size={12} />
+              Workspace
+            </button>
+          )}
         </nav>
 
         {/* File list (only when section === 'files') */}
@@ -361,6 +424,180 @@ export default function SettingsPage() {
                     {theme === value && <div className="w-1.5 h-1.5 rounded-full bg-accent" />}
                   </button>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Workspace panel */}
+        {section === 'workspace' && isSuperAdmin && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <h2 className="text-sm font-semibold text-gray-200 mb-6">Workspace</h2>
+
+            {/* Subscription name */}
+            <div className="mb-8">
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3">Workspace Name</p>
+              <p className="text-sm text-gray-300">{subscription?.name || 'My Workspace'}</p>
+            </div>
+
+            {/* Superadmins management */}
+            <div>
+              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Superadmins</p>
+              <p className="text-xs text-gray-600 mb-4">
+                Superadmins have access to all boards, teams, and members in the workspace without needing to be explicitly invited.
+              </p>
+
+              <div className="space-y-1 mb-4">
+                {subscriptionAdmins.map(admin => {
+                  const name = `${admin.first_name || ''} ${admin.last_name || ''}`.trim() || admin.email;
+                  const isSelf = admin.user_id === user?.id;
+                  return (
+                    <div key={admin.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 group">
+                      {admin.picture ? (
+                        <img src={admin.picture} className="w-7 h-7 rounded-full ring-1 ring-border shrink-0" alt="" />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+                          {(admin.first_name?.[0] || admin.email[0]).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-medium text-gray-200 truncate">{name}</p>
+                          {isSelf && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
+                          )}
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0 flex items-center gap-0.5">
+                            <Crown size={8} /> Super
+                          </span>
+                        </div>
+                        {name !== admin.email && <p className="text-xs text-gray-500 truncate">{admin.email}</p>}
+                      </div>
+                      {!isSelf && subscriptionAdmins.length > 1 && (
+                        <button
+                          onClick={() => handleRemoveSuperAdmin(admin.user_id)}
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                          title="Remove superadmin"
+                        >
+                          <UserMinus size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add superadmin form */}
+              <form onSubmit={handleAddSuperAdmin} className="flex gap-2">
+                <input
+                  value={adminEmail}
+                  onChange={e => setAdminEmail(e.target.value)}
+                  placeholder="Email of existing user..."
+                  type="email"
+                  className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                />
+                <button
+                  type="submit"
+                  disabled={addingAdmin || !adminEmail.trim()}
+                  className="px-3 py-2 bg-accent hover:bg-accent/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
+                >
+                  {addingAdmin ? '...' : 'Add'}
+                </button>
+              </form>
+              {adminError && <p className="text-xs text-red-400 mt-1.5">{adminError}</p>}
+              {adminSuccess && <p className="text-xs text-green-400 mt-1.5">{adminSuccess}</p>}
+            </div>
+          </div>
+        )}
+
+        {/* Clients panel */}
+        {section === 'clients' && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-sm font-semibold text-gray-200">Clients</h2>
+                <button onClick={() => setAddingClient(true)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors">
+                  <Plus size={12} /> Add client
+                </button>
+              </div>
+
+              {addingClient && (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!clientName.trim()) return;
+                  setCreatingClient(true);
+                  try {
+                    await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null });
+                    setClientName('');
+                    setClientWebsite('');
+                    setAddingClient(false);
+                    setClientError('');
+                  } catch(err) {
+                    setClientError(err.response?.data?.error || 'Failed to create client');
+                  } finally {
+                    setCreatingClient(false);
+                  }
+                }} className="border border-border rounded-xl p-3 space-y-2 bg-surface-2 mb-4">
+                  <input value={clientName} onChange={e => setClientName(e.target.value)}
+                    placeholder="Client name" autoFocus
+                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                  <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
+                    placeholder="Website (optional)"
+                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                  {clientError && <p className="text-xs text-red-400">{clientError}</p>}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientError(''); }}
+                      className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
+                    <button type="submit" disabled={creatingClient || !clientName.trim()}
+                      className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
+                      {creatingClient ? 'Creating…' : 'Create'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <div className="space-y-1">
+                {clients.filter(c => !c.archived_at).map(client => (
+                  <div key={client.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 group">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
+                      style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}30` }}>
+                      {client.name[0].toUpperCase()}
+                    </div>
+                    {editingClientId === client.id ? (
+                      <input value={editClientName} onChange={e => setEditClientName(e.target.value)}
+                        onBlur={async () => {
+                          if (editClientName.trim() && editClientName !== client.name) {
+                            await updateClient(client.id, { name: editClientName.trim() });
+                          }
+                          setEditingClientId(null);
+                        }}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter') { e.currentTarget.blur(); }
+                          if (e.key === 'Escape') { setEditingClientId(null); }
+                        }}
+                        autoFocus
+                        className="flex-1 bg-surface-3 border border-accent/40 rounded-lg px-2 py-1 text-sm text-gray-200 outline-none" />
+                    ) : (
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-200 truncate">{client.name}</p>
+                        {client.website && <p className="text-xs text-gray-500 truncate">{client.website}</p>}
+                        <p className="text-xs text-gray-600">{client.board_count} board{client.board_count !== 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
+                      <button onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
+                        className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors" title="Rename">
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => archiveClient(client.id)}
+                        className="p-1.5 rounded text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Archive">
+                        <Archive size={12} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {clients.filter(c => !c.archived_at).length === 0 && !addingClient && (
+                  <p className="text-sm text-gray-600 text-center py-4">No clients yet</p>
+                )}
               </div>
             </div>
           </div>

@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
 import ArchivedTasksModal from './ArchivedTasksModal';
 import InviteModal from './InviteModal';
+import MembersModal from './MembersModal';
+import BoardsModal from './BoardsModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
 
@@ -141,21 +143,34 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
 }
 
 function ProjectSwitcher() {
-  const { projects, currentProjectId, setCurrentProject, createProject, user } = useStore();
+  const { projects, clients, currentProjectId, setCurrentProject, createProject, user } = useStore();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newClient, setNewClient] = useState('');
+  const [newClientId, setNewClientId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showBoardsModal, setShowBoardsModal] = useState(false);
   const ref = useRef(null);
   const inputRef = useRef(null);
 
   const current = projects.find(p => p.id === currentProjectId) || projects[0];
   const active = projects.filter(p => !p.archived_at);
+  const activeClients = clients.filter(c => !c.archived_at);
 
-  // Separate personal boards (no client_name) from client boards (has client_name)
-  const personalBoards = active.filter(p => !p.client_name);
-  const clientBoards = active.filter(p => !!p.client_name);
+  // Group boards by client_id
+  const personalBoards = active.filter(p => !p.client_id);
+  // Build per-client groups: { clientId -> { client, boards[] } }
+  const clientGroups = {};
+  for (const p of active.filter(p => !!p.client_id)) {
+    if (!clientGroups[p.client_id]) {
+      clientGroups[p.client_id] = {
+        client: activeClients.find(c => c.id === p.client_id),
+        boards: [],
+      };
+    }
+    clientGroups[p.client_id].boards.push(p);
+  }
+  const clientGroupList = Object.values(clientGroups);
 
   useEffect(() => {
     function handleOutside(e) {
@@ -174,12 +189,12 @@ function ProjectSwitcher() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const proj = await createProject({ name: newName.trim(), client_name: newClient.trim() || null });
+      const proj = await createProject({ name: newName.trim(), client_id: newClientId || null });
       setCurrentProject(proj.id);
       setAdding(false);
       setOpen(false);
       setNewName('');
-      setNewClient('');
+      setNewClientId('');
     } finally {
       setCreating(false);
     }
@@ -194,8 +209,8 @@ function ProjectSwitcher() {
       >
         <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color || '#6366f1' }} />
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-medium text-gray-200 truncate">{p.client_name || p.name}</p>
-          {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.name}</p>}
+          <p className="text-sm font-medium text-gray-200 truncate">{p.name}</p>
+          {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.client_name}</p>}
         </div>
         {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
       </button>
@@ -203,81 +218,100 @@ function ProjectSwitcher() {
   }
 
   // Label for current board shown in trigger button
-  const currentLabel = current?.client_name || current?.name || 'No board';
+  const currentLabel = current?.client_name
+    ? `${current.client_name} · ${current.name}`
+    : current?.name || 'No board';
 
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => { setOpen(o => !o); setAdding(false); }}
-        className="w-full flex items-center gap-2 px-1 py-1.5 rounded-lg hover:bg-surface-3/50 transition-colors"
-      >
-        <Layers size={13} className="text-gray-500 shrink-0" />
-        <span className="flex-1 text-sm font-bold text-gray-100 truncate text-left">{currentLabel}</span>
-        <ChevronDown size={11} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
+    <>
+      <div className="relative" ref={ref}>
+        <button
+          onClick={() => { setOpen(o => !o); setAdding(false); }}
+          className="w-full flex items-center gap-2 px-1 py-1.5 rounded-lg hover:bg-surface-3/50 transition-colors"
+        >
+          <Layers size={13} className="text-gray-500 shrink-0" />
+          <span className="flex-1 text-sm font-bold text-gray-100 truncate text-left">{currentLabel}</span>
+          <ChevronDown size={11} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </button>
 
-      {open && (
-        <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="max-h-64 overflow-y-auto">
-            {personalBoards.length > 0 && (
-              <>
-                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">Personal</p>
-                {personalBoards.map(p => <BoardRow key={p.id} p={p} />)}
-              </>
-            )}
-            {clientBoards.length > 0 && (
-              <>
-                <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600 ${personalBoards.length > 0 ? 'pt-2 border-t border-border/50 mt-1' : 'pt-2.5'}`}>
-                  Clients
-                </p>
-                {clientBoards.map(p => <BoardRow key={p.id} p={p} />)}
-              </>
-            )}
-            {active.length === 0 && (
-              <p className="px-3 py-4 text-sm text-gray-600 text-center">No boards yet</p>
-            )}
-          </div>
-
-          <div className="border-t border-border">
-            {adding ? (
-              <form onSubmit={handleCreate} className="p-2.5 space-y-2">
-                <input
-                  ref={inputRef}
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder="Board name"
-                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-                />
-                <input
-                  value={newClient}
-                  onChange={e => setNewClient(e.target.value)}
-                  placeholder="Client name (optional)"
-                  className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-                />
-                <div className="flex gap-1.5">
-                  <button type="button" onClick={() => setAdding(false)}
-                    className="flex-1 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition-colors">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={creating || !newName.trim()}
-                    className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
-                    {creating ? '...' : 'Create'}
-                  </button>
+        {open && (
+          <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+            <div className="max-h-64 overflow-y-auto">
+              {personalBoards.length > 0 && (
+                <>
+                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">Personal</p>
+                  {personalBoards.map(p => <BoardRow key={p.id} p={p} />)}
+                </>
+              )}
+              {clientGroupList.map(({ client, boards }, idx) => (
+                <div key={client?.id || idx}>
+                  <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600 ${
+                    (personalBoards.length > 0 || idx > 0) ? 'pt-2 border-t border-border/50 mt-1' : 'pt-2.5'
+                  }`}>
+                    {client?.name || 'Client'}
+                  </p>
+                  {boards.map(p => <BoardRow key={p.id} p={p} />)}
                 </div>
-              </form>
-            ) : (
+              ))}
+              {active.length === 0 && (
+                <p className="px-3 py-4 text-sm text-gray-600 text-center">No boards yet</p>
+              )}
+            </div>
+
+            <div className="border-t border-border">
+              {/* Browse all boards */}
               <button
-                onClick={() => setAdding(true)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+                onClick={() => { setOpen(false); setShowBoardsModal(true); }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors border-b border-border/50"
               >
-                <Plus size={13} />
-                New board
+                <LayoutGrid size={12} />
+                Browse all boards
               </button>
-            )}
+
+              {adding ? (
+                <form onSubmit={handleCreate} className="p-2.5 space-y-2">
+                  <input
+                    ref={inputRef}
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
+                    placeholder="Board name"
+                    className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                  />
+                  <select
+                    value={newClientId}
+                    onChange={e => setNewClientId(e.target.value)}
+                    className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 outline-none focus:border-accent/50"
+                  >
+                    <option value="">No client</option>
+                    {activeClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => setAdding(false)}
+                      className="flex-1 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition-colors">
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={creating || !newName.trim()}
+                      className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors disabled:opacity-40">
+                      {creating ? '...' : 'Create'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  onClick={() => setAdding(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+                >
+                  <Plus size={13} />
+                  New board
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+
+      {showBoardsModal && <BoardsModal onClose={() => setShowBoardsModal(false)} />}
+    </>
   );
 }
 
@@ -596,12 +630,14 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar() {
-  const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage } = useStore();
+  const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage, boardMembers, user } = useStore();
   const [agentsOpen, setAgentsOpen] = useState(true);
+  const [membersOpen, setMembersOpen] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showMembersModal, setShowMembersModal] = useState(false);
   const navRef = useRef(null);
 
   const humanActionCount = tasks.filter(t => t.column_id === 'col_humanaction').length;
@@ -745,17 +781,71 @@ export default function Sidebar() {
               </button>
             </div>
           )}
+
+          {/* Members */}
+          <div className="mt-3 pt-3 border-t border-border/50">
+            <button
+              onClick={() => setMembersOpen(o => !o)}
+              className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-xs font-semibold text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest"
+            >
+              <span className="flex items-center gap-1.5">
+                <Users size={12} />
+                Members
+              </span>
+              {membersOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            </button>
+
+            {membersOpen && (
+              <div className="space-y-0.5">
+                {boardMembers.slice(0, 5).map(member => {
+                  const name = (member.first_name || member.last_name)
+                    ? `${member.first_name || ''} ${member.last_name || ''}`.trim()
+                    : null;
+                  const isSelf = member.email === user?.email;
+                  // Generate color from email hash
+                  let hash = 0;
+                  for (let i = 0; i < member.email.length; i++) hash = member.email.charCodeAt(i) + ((hash << 5) - hash);
+                  const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6'];
+                  const avatarColor = colors[Math.abs(hash) % colors.length];
+                  return (
+                    <div key={member.id} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg">
+                      {member.picture ? (
+                        <img src={member.picture} alt="" className="w-6 h-6 rounded-full ring-1 ring-border shrink-0" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-1 ring-border"
+                          style={{ background: avatarColor }}>
+                          {(name?.[0] || member.email[0]).toUpperCase()}
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-400 truncate flex-1">{name || member.email}</p>
+                      {isSelf && <span className="text-[8px] text-accent shrink-0">you</span>}
+                    </div>
+                  );
+                })}
+                {boardMembers.length > 5 && (
+                  <p className="text-xs text-gray-600 px-2.5 py-1">+{boardMembers.length - 5} more</p>
+                )}
+                <button
+                  onClick={() => setShowMembersModal(true)}
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 transition-colors text-sm"
+                >
+                  <UserPlus size={13} />
+                  Manage members
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Footer — invite + user menu */}
+        {/* Footer — members + user menu */}
         <div className="p-3 border-t border-border space-y-1">
           <button
-            onClick={() => setShowInviteModal(true)}
+            onClick={() => setShowMembersModal(true)}
             className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-3 transition-colors text-gray-500 hover:text-gray-300"
-            title="Invite team member"
+            title="Manage board members"
           >
-            <UserPlus size={15} />
-            <span className="text-xs font-medium">Invite member</span>
+            <Users size={15} />
+            <span className="text-xs font-medium">Members & Teams</span>
           </button>
           <UserMenu />
         </div>
@@ -763,6 +853,7 @@ export default function Sidebar() {
 
       {showArchivedModal && <ArchivedTasksModal onClose={() => setShowArchivedModal(false)} />}
       {showInviteModal && <InviteModal onClose={() => setShowInviteModal(false)} />}
+      {showMembersModal && <MembersModal onClose={() => setShowMembersModal(false)} />}
     </>
   );
 }

@@ -16,6 +16,14 @@ function attachUser(req, res, next) {
       const decoded = jwt.verify(raw, JWT_SECRET);
       req.user = decoded;
       req.agent = { id: 'human', role: 'human', permissions: ['*'] };
+      // Check if user is a superadmin for any subscription
+      try {
+        const db = getDb();
+        const isAdmin = db.prepare(
+          'SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1'
+        ).get(decoded.sub);
+        req.isSuperAdmin = !!isAdmin;
+      } catch { req.isSuperAdmin = false; }
     } catch { /* invalid token — ignore, let next layer decide */ }
   }
   next();
@@ -35,6 +43,14 @@ function requireAuth(req, res, next) {
       const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
       req.user = decoded;
       req.agent = { id: 'human', role: 'human', permissions: ['*'] };
+      // Check if user is a superadmin for any subscription
+      try {
+        const db = getDb();
+        const isAdmin = db.prepare(
+          'SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1'
+        ).get(decoded.sub);
+        req.isSuperAdmin = !!isAdmin;
+      } catch { req.isSuperAdmin = false; }
       return next();
     } catch {
       return res.status(401).json({ error: 'Invalid or expired token' });
