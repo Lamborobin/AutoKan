@@ -61,8 +61,16 @@ export default function App() {
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
 
-  // Bootstrap auth on mount
-  useEffect(() => { initAuth(); }, []);
+  // Bootstrap auth on mount; detect invite token and task deep-link in URL first
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('invite');
+    const taskId = params.get('task');
+    if (token) useStore.getState().setInviteToken(token);
+    if (taskId) useStore.getState()._setPendingTaskId(taskId);
+    if (token || taskId) window.history.replaceState({}, '', window.location.pathname);
+    initAuth();
+  }, []);
 
   // Load board data once authenticated
   useEffect(() => {
@@ -241,7 +249,10 @@ export default function App() {
 
   // ── Auth gate ────────────────────────────────────────────────
   if (authLoading) return <LoadingScreen />;
-  if (!user) return <LoginPage />;
+  if (!user) {
+    const inviteToken = useStore.getState().inviteToken;
+    return <LoginPage inviteToken={inviteToken} />;
+  }
 
   if (currentPage === 'settings') {
     return <SettingsPage />;

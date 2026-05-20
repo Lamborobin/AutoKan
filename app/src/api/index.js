@@ -15,9 +15,11 @@ api.interceptors.request.use(config => {
 });
 
 export const authApi = {
-  google: (credential) => api.post('/auth/google', { credential }).then(r => r.data),
+  google: (credential, inviteToken) =>
+    api.post('/auth/google', { credential, ...(inviteToken ? { inviteToken } : {}) }).then(r => r.data),
   me: () => api.get('/auth/me').then(r => r.data),
   updateProfile: (data) => api.patch('/auth/profile', data).then(r => r.data),
+  users: () => api.get('/auth/users').then(r => r.data),
 };
 
 export const projectsApi = {
@@ -107,6 +109,20 @@ export const agentTemplatesApi = {
   unarchive: (id) => api.post(`/agent-templates/${id}/unarchive`).then(r => r.data),
   delete: (id) => api.delete(`/agent-templates/${id}`).then(r => r.data),
   saveAgentAs: (agentId, data) => api.post(`/agents/${agentId}/save-as-template`, data).then(r => r.data),
+};
+
+export const invitesApi = {
+  send: (email) => api.post('/invites', { email }).then(r => r.data),
+  list: () => api.get('/invites').then(r => r.data),
+  remove: (id) => api.delete(`/invites/${id}`).then(r => r.data),
+  verify: (token) => api.get('/invites/verify', { params: { token } }).then(r => r.data),
+};
+
+export const commentsApi = {
+  list: (taskId) => api.get(`/tasks/${taskId}/comments`).then(r => r.data),
+  create: (taskId, content) => api.post(`/tasks/${taskId}/comments`, { content }).then(r => r.data),
+  update: (taskId, commentId, content) => api.patch(`/tasks/${taskId}/comments/${commentId}`, { content }).then(r => r.data),
+  remove: (taskId, commentId) => api.delete(`/tasks/${taskId}/comments/${commentId}`).then(r => r.data),
 };
 
 export default api;

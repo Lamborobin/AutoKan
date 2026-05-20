@@ -7,6 +7,7 @@ const { attachUser } = require('./middleware/auth');
 const tasksRouter = require('./routes/tasks');
 const authRouter = require('./routes/auth');
 const projectsRouter = require('./routes/projects');
+const invitesRouter = require('./routes/invites');
 const { agentsRouter, columnsRouter, secretsRouter, instructionsRouter, agentTemplatesRouter, rolesRouter } = require('./routes/other');
 const { addClient } = require('./sse');
 
@@ -31,6 +32,7 @@ app.use('/api/secrets', secretsRouter);
 app.use('/api/instructions', instructionsRouter);
 app.use('/api/agent-templates', agentTemplatesRouter);
 app.use('/api/roles', rolesRouter);
+app.use('/api/invites', invitesRouter);
 
 // SSE — real-time push to connected browsers
 app.get('/api/events', (req, res) => addClient(res));

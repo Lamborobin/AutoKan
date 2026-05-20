@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { getDb, generateProjectId, VELOUR_ID } = require('../db');
 const { scaffoldProjectInstructions } = require('../utils/instructions');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -26,9 +27,9 @@ function signToken(user) {
 }
 
 // POST /api/auth/google
-// Body: { credential } — the Google ID token from the frontend
+// Body: { credential, inviteToken? } — the Google ID token from the frontend
 router.post('/google', async (req, res) => {
-  const { credential } = req.body;
+  const { credential, inviteToken } = req.body;
   if (!credential) return res.status(400).json({ error: 'Missing credential' });
   if (!GOOGLE_CLIENT_ID) return res.status(500).json({ error: 'GOOGLE_CLIENT_ID not configured' });
 
@@ -44,6 +45,27 @@ router.post('/google', async (req, res) => {
     let user = db.prepare('SELECT * FROM users WHERE google_id = ?').get(googleId);
 
     if (!user) {
+      // ── Invite gate ─────────────────────────────────────────────────────────
+      // Only enforced once at least one invite has ever been created (bootstrap
+      // exemption: the very first user has no one to invite them).
+      const inviteCount = db.prepare('SELECT COUNT(*) AS c FROM invites').get().c;
+      if (inviteCount > 0) {
+        const validInvite = inviteToken
+          ? db.prepare(`
+              SELECT * FROM invites WHERE token = ? AND email = ? AND used_at IS NULL
+                AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+            `).get(inviteToken, email)
+          : null;
+
+        if (!validInvite) {
+          return res.status(403).json({
+            error: 'Access requires an invitation. Ask an existing member to invite your email address.',
+            code: 'invite_required',
+          });
+        }
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       const id = 'user_' + uuidv4().replace(/-/g, '').slice(0, 12);
       db.prepare(`
         INSERT INTO users (id, google_id, email, first_name, last_name, picture)
@@ -51,6 +73,12 @@ router.post('/google', async (req, res) => {
       `).run(id, googleId, email, firstName || '', lastName || '', picture || '');
 
       user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+
+      // Mark the invite as used
+      if (inviteToken) {
+        db.prepare('UPDATE invites SET used_at = CURRENT_TIMESTAMP, used_by = ? WHERE token = ?')
+          .run(id, inviteToken);
+      }
 
       // Assign all unowned Velour project tasks to this user if they're the first user
       const projectOwner = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(VELOUR_ID);
@@ -132,6 +160,15 @@ router.patch('/profile', (req, res) => {
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
   }
+});
+
+// GET /api/auth/users — list all users (for @mention autocomplete)
+router.get('/users', requireAuth, (req, res) => {
+  const db = getDb();
+  const users = db.prepare(
+    'SELECT id, first_name, last_name, email, picture FROM users ORDER BY first_name, last_name'
+  ).all();
+  res.json(users);
 });
 
 module.exports = router;

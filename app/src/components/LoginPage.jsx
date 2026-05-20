@@ -1,8 +1,36 @@
+import { useEffect, useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useStore } from '../store';
+import { invitesApi } from '../api';
 
-export default function LoginPage() {
+export default function LoginPage({ inviteToken }) {
   const { googleLogin, authError } = useStore();
+
+  const [inviteState, setInviteState] = useState(null); // null | { loading } | { valid, email } | { error }
+
+  useEffect(() => {
+    if (!inviteToken) return;
+    setInviteState({ loading: true });
+    invitesApi.verify(inviteToken).then(result => {
+      if (result.valid) {
+        setInviteState({ valid: true, email: result.email });
+      } else {
+        const reasons = {
+          not_found: 'This invite link is invalid.',
+          expired: 'This invite link has expired. Ask for a new one.',
+          already_used: 'This invite link has already been used.',
+        };
+        setInviteState({ error: reasons[result.reason] || 'This invite link is not valid.' });
+      }
+    }).catch(() => {
+      setInviteState({ error: 'Could not verify invite link. Please try again.' });
+    });
+  }, [inviteToken]);
+
+  const isInviteFlow = !!inviteToken;
+  const inviteValid = inviteState?.valid;
+  const inviteError = inviteState?.error;
+  const inviteLoading = inviteState?.loading;
 
   return (
     <div className="min-h-screen bg-surface-0 flex flex-col items-center justify-center relative overflow-hidden">
@@ -32,10 +60,32 @@ export default function LoginPage() {
 
         {/* Login card */}
         <div className="w-full bg-surface-1 border border-border rounded-2xl p-8 flex flex-col items-center gap-6 shadow-2xl">
-          <div className="text-center">
-            <h2 className="text-base font-semibold text-gray-200">Sign in to continue</h2>
-            <p className="text-xs text-gray-500 mt-1">Connect your Google account to access your boards</p>
-          </div>
+
+          {inviteLoading ? (
+            <div className="text-xs text-gray-500 py-2">Verifying invite…</div>
+          ) : inviteValid ? (
+            <div className="text-center">
+              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 mb-3">
+                <span className="text-lg">🎉</span>
+              </div>
+              <h2 className="text-base font-semibold text-gray-200">You've been invited!</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Sign in with the Google account for <span className="text-gray-300 font-medium">{inviteState.email}</span>
+              </p>
+            </div>
+          ) : inviteError ? (
+            <div className="text-center">
+              <h2 className="text-base font-semibold text-gray-200">Sign in to continue</h2>
+              <div className="mt-3 w-full px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 text-center">
+                {inviteError}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center">
+              <h2 className="text-base font-semibold text-gray-200">Sign in to continue</h2>
+              <p className="text-xs text-gray-500 mt-1">Connect your Google account to access your boards</p>
+            </div>
+          )}
 
           {authError && (
             <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 text-center">
@@ -43,17 +93,19 @@ export default function LoginPage() {
             </div>
           )}
 
-          <div className="w-full flex justify-center">
-            <GoogleLogin
-              onSuccess={({ credential }) => googleLogin(credential)}
-              onError={() => useStore.getState().setAuthError('Google sign-in failed. Please try again.')}
-              theme="filled_black"
-              shape="rectangular"
-              size="large"
-              text="continue_with"
-              width="280"
-            />
-          </div>
+          {!inviteLoading && (
+            <div className="w-full flex justify-center">
+              <GoogleLogin
+                onSuccess={({ credential }) => googleLogin(credential)}
+                onError={() => useStore.getState().setAuthError('Google sign-in failed. Please try again.')}
+                theme="filled_black"
+                shape="rectangular"
+                size="large"
+                text={isInviteFlow ? 'signin_with' : 'continue_with'}
+                width="280"
+              />
+            </div>
+          )}
 
           <p className="text-[10px] text-gray-600 text-center leading-relaxed">
             By signing in you agree to use this tool responsibly.<br />

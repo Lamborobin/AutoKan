@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus } from 'lucide-react';
 import ArchivedTasksModal from './ArchivedTasksModal';
+import InviteModal from './InviteModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
 
@@ -600,6 +601,7 @@ export default function Sidebar() {
   const [selectedAgentId, setSelectedAgentId] = useState(null);
   const [navOpen, setNavOpen] = useState(false);
   const [showArchivedModal, setShowArchivedModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const navRef = useRef(null);
 
   const humanActionCount = tasks.filter(t => t.column_id === 'col_humanaction').length;
@@ -745,13 +747,22 @@ export default function Sidebar() {
           )}
         </div>
 
-        {/* Footer — user menu */}
+        {/* Footer — invite + user menu */}
         <div className="p-3 border-t border-border space-y-1">
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-3 transition-colors text-gray-500 hover:text-gray-300"
+            title="Invite team member"
+          >
+            <UserPlus size={15} />
+            <span className="text-xs font-medium">Invite member</span>
+          </button>
           <UserMenu />
         </div>
       </aside>
 
       {showArchivedModal && <ArchivedTasksModal onClose={() => setShowArchivedModal(false)} />}
+      {showInviteModal && <InviteModal onClose={() => setShowInviteModal(false)} />}
     </>
   );
 }

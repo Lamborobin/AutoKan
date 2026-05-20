@@ -4,6 +4,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useStore } from '../store';
 import { tasksApi } from '../api';
 import MarkdownText from './MarkdownText';
+import TaskComments from './TaskComments';
 
 const PRIORITY_COLORS = {
   critical: '#ef4444', high: '#f97316', medium: '#3b82f6', low: '#6b7280'
@@ -1004,6 +1005,11 @@ export default function TaskDetail() {
                 </span>
               )}
             </div>
+          </div>
+
+          {/* Comments */}
+          <div className="border-t border-border px-5 pb-2">
+            <TaskComments taskId={task.id} />
           </div>
 
           {/* Activity log */}

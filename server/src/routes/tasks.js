@@ -1,9 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
-const { requirePermission, attachAgent } = require('../middleware/auth');
+const { requirePermission, attachAgent, requireAuth } = require('../middleware/auth');
 const { triggerPmAgent, triggerDevAgent, triggerTesterAgent } = require('../services/agentRunner');
 const { broadcast } = require('../sse');
+const { sendMentionEmail } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -680,6 +681,121 @@ router.delete('/:id', requirePermission('task:delete'), (req, res) => {
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   res.json({ ok: true, deleted: true });
   broadcast('task_deleted', { id: req.params.id });
+});
+
+// ── Task Comments ────────────────────────────────────────────────────────────
+
+// GET /api/tasks/:id/comments
+router.get('/:id/comments', attachAgent, (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT id FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const comments = db.prepare(`
+    SELECT tc.id, tc.task_id, tc.user_id, tc.content, tc.created_at, tc.updated_at,
+           u.first_name, u.last_name, u.picture, u.email
+    FROM task_comments tc
+    JOIN users u ON tc.user_id = u.id
+    WHERE tc.task_id = ?
+    ORDER BY tc.created_at ASC
+  `).all(req.params.id);
+
+  res.json(comments);
+});
+
+// POST /api/tasks/:id/comments
+router.post('/:id/comments', requireAuth, (req, res) => {
+  const { content } = req.body;
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Comment content is required' });
+  }
+
+  const db = getDb();
+  const task = db.prepare('SELECT id, title FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const id = 'cmt_' + uuidv4().replace(/-/g, '').slice(0, 12);
+  db.prepare(`
+    INSERT INTO task_comments (id, task_id, user_id, content) VALUES (?, ?, ?, ?)
+  `).run(id, req.params.id, req.user.sub, content.trim());
+
+  const comment = db.prepare(`
+    SELECT tc.id, tc.task_id, tc.user_id, tc.content, tc.created_at, tc.updated_at,
+           u.first_name, u.last_name, u.picture, u.email
+    FROM task_comments tc
+    JOIN users u ON tc.user_id = u.id
+    WHERE tc.id = ?
+  `).get(id);
+
+  // Parse @[Name](user_id) mentions and send email notifications (fire-and-forget)
+  const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+  const mentionedUserIds = new Set();
+  let match;
+  while ((match = mentionRegex.exec(content)) !== null) {
+    const userId = match[2];
+    mentionedUserIds.add(userId);
+  }
+
+  if (mentionedUserIds.size > 0) {
+    const commenterName = `${comment.first_name || ''} ${comment.last_name || ''}`.trim() || comment.email;
+    const excerpt = content.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1').slice(0, 200);
+    for (const userId of mentionedUserIds) {
+      const mentionedUser = db.prepare('SELECT email FROM users WHERE id = ?').get(userId);
+      if (mentionedUser?.email) {
+        console.log(`[mention] Sending email to ${mentionedUser.email} for mention in "${task.title}"`);
+        sendMentionEmail(mentionedUser.email, commenterName, task.title, excerpt, task.id)
+          .then(() => console.log(`[mention] Email sent OK to ${mentionedUser.email}`))
+          .catch(err => console.error(`[mention] Email FAILED to ${mentionedUser.email}:`, err.message));
+      }
+    }
+  }
+
+  res.status(201).json(comment);
+});
+
+// PATCH /api/tasks/:id/comments/:commentId
+router.patch('/:id/comments/:commentId', requireAuth, (req, res) => {
+  const { content } = req.body;
+  if (!content || !content.trim()) {
+    return res.status(400).json({ error: 'Comment content is required' });
+  }
+
+  const db = getDb();
+  const comment = db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?')
+    .get(req.params.commentId, req.params.id);
+
+  if (!comment) return res.status(404).json({ error: 'Comment not found' });
+  if (comment.user_id !== req.user.sub) {
+    return res.status(403).json({ error: 'You can only edit your own comments' });
+  }
+
+  db.prepare('UPDATE task_comments SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(content.trim(), req.params.commentId);
+
+  const updated = db.prepare(`
+    SELECT tc.id, tc.task_id, tc.user_id, tc.content, tc.created_at, tc.updated_at,
+           u.first_name, u.last_name, u.picture, u.email
+    FROM task_comments tc
+    JOIN users u ON tc.user_id = u.id
+    WHERE tc.id = ?
+  `).get(req.params.commentId);
+
+  res.json(updated);
+});
+
+// DELETE /api/tasks/:id/comments/:commentId
+router.delete('/:id/comments/:commentId', requireAuth, (req, res) => {
+  const db = getDb();
+  const comment = db.prepare('SELECT * FROM task_comments WHERE id = ? AND task_id = ?')
+    .get(req.params.commentId, req.params.id);
+
+  if (!comment) return res.status(404).json({ error: 'Comment not found' });
+  if (comment.user_id !== req.user.sub) {
+    return res.status(403).json({ error: 'You can only delete your own comments' });
+  }
+
+  db.prepare('DELETE FROM task_comments WHERE id = ?').run(req.params.commentId);
+  res.json({ ok: true });
 });
 
 module.exports = router;

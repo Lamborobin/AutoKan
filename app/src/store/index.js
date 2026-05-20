@@ -6,6 +6,17 @@ export const useStore = create((set, get) => ({
   user: null,
   authLoading: true,
   authError: null,
+  inviteToken: null,
+  setInviteToken: (t) => set({ inviteToken: t }),
+
+  // ── Users (for @mention autocomplete) ────────────────────────
+  users: [],
+  async fetchUsers() {
+    try {
+      const users = await authApi.users();
+      set({ users });
+    } catch {}
+  },
 
   async initAuth() {
     const token = localStorage.getItem('fa_token');
@@ -16,8 +27,8 @@ export const useStore = create((set, get) => ({
     try {
       const { user } = await authApi.me();
       set({ user, authLoading: false });
-      // Load projects immediately after auth
-      await get().loadProjects();
+      // Load projects and users immediately after auth
+      await Promise.all([get().loadProjects(), get().fetchUsers()]);
     } catch {
       localStorage.removeItem('fa_token');
       set({ user: null, authLoading: false });
@@ -27,10 +38,11 @@ export const useStore = create((set, get) => ({
   async googleLogin(credential) {
     set({ authError: null });
     try {
-      const { token, user } = await authApi.google(credential);
+      const { inviteToken } = get();
+      const { token, user } = await authApi.google(credential, inviteToken || undefined);
       localStorage.setItem('fa_token', token);
-      set({ user });
-      await get().loadProjects();
+      set({ user, inviteToken: null });
+      await Promise.all([get().loadProjects(), get().fetchUsers()]);
     } catch (e) {
       set({ authError: e.response?.data?.error || 'Sign-in failed. Please try again.' });
     }
@@ -114,6 +126,7 @@ export const useStore = create((set, get) => ({
   instructionFiles: [],
   loading: false,
   selectedTask: null,
+  _pendingTaskId: null,
   showNewTask: false,
   showNewAgent: false,
   showTemplates: false,
@@ -138,6 +151,13 @@ export const useStore = create((set, get) => ({
         rolesApi.list(),
       ]);
       set({ columns, tasks, archivedTasks, agents, agentTemplates, roles, loading: false });
+      // Open task from email deep-link (?task=<id>)
+      const { _pendingTaskId } = get();
+      if (_pendingTaskId) {
+        const target = tasks.find(t => t.id === _pendingTaskId);
+        if (target) set({ selectedTask: target, _pendingTaskId: null });
+        else set({ _pendingTaskId: null });
+      }
     } catch (e) {
       console.error('Load failed:', e);
       set({ loading: false });
@@ -435,6 +455,7 @@ export const useStore = create((set, get) => ({
 
   // UI state
   setSelectedTask: (task) => set({ selectedTask: task }),
+  _setPendingTaskId: (id) => set({ _pendingTaskId: id }),
   setShowNewTask: (v) => set({ showNewTask: v }),
   setShowNewAgent: (v) => set({ showNewAgent: v }),
   setShowTemplates: (v) => set({ showTemplates: v }),

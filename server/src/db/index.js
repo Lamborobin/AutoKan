@@ -774,6 +774,32 @@ A feature is "done" when:
     }
   } catch (e) { console.warn('Could not clean system files from project folders:', e.message); }
 
+  // ── Invites table ──────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS invites (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      token TEXT UNIQUE NOT NULL,
+      invited_by TEXT REFERENCES users(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME,
+      used_at DATETIME,
+      used_by TEXT REFERENCES users(id)
+    );
+  `);
+
+  // ── Task comments table ─────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS task_comments (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      content TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   console.log('✅ Database initialized at', DB_PATH);
   return db;
 }
