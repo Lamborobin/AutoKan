@@ -1,0 +1,52 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="80" y1="80" x2="432" y2="432" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7C4DFF"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+
+    <linearGradient id="purple" x1="120" y1="220" x2="220" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C084FC"/>
+      <stop offset="1" stop-color="#5B21FF"/>
+    </linearGradient>
+
+    <linearGradient id="cyan" x1="300" y1="220" x2="400" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background tile -->
+  <rect x="40" y="40" width="432" height="432" rx="72" fill="#050816"/>
+  <rect x="42" y="42" width="428" height="428" rx="70" stroke="#111827" stroke-width="4"/>
+
+  <!-- Board -->
+  <rect x="170" y="140" width="172" height="172" rx="28" fill="#0B1020" stroke="url(#bg)" stroke-opacity="0.35" stroke-width="4"/>
+
+  <!-- Kanban blocks -->
+  <rect x="205" y="175" width="48" height="48" rx="12" fill="url(#purple)" filter="url(#glow)"/>
+  <rect x="275" y="175" width="48" height="48" rx="12" fill="url(#cyan)" filter="url(#glow)"/>
+  <rect x="205" y="245" width="48" height="48" rx="12" fill="url(#purple)" opacity="0.9" filter="url(#glow)"/>
+  <rect x="275" y="245" width="48" height="48" rx="12" fill="url(#cyan)" opacity="0.9" filter="url(#glow)"/>
+
+  <!-- Human -->
+  <circle cx="165" cy="285" r="42" fill="url(#purple)"/>
+  <path d="M105 385C105 349.654 133.654 321 169 321H171C206.346 321 235 349.654 235 385V392H105V385Z" fill="url(#purple)"/>
+
+  <!-- Robot -->
+  <rect x="312" y="245" width="96" height="72" rx="28" fill="url(#cyan)"/>
+  <rect x="332" y="262" width="56" height="38" rx="16" fill="#050816"/>
+  <circle cx="350" cy="281" r="7" fill="#67E8F9"/>
+  <circle cx="370" cy="281" r="7" fill="#67E8F9"/>
+  <rect x="356" y="220" width="8" height="26" rx="4" fill="url(#cyan)"/>
+  <circle cx="360" cy="212" r="10" fill="url(#cyan)"/>
+  <path d="M308 385C308 353.52 333.52 328 365 328C396.48 328 422 353.52 422 385V392H308V385Z" fill="url(#cyan)"/>
+</svg>

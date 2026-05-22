@@ -23,12 +23,41 @@ export default {
         }
       },
       animation: {
-        'slide-in': 'slideIn 0.2s ease-out',
-        'fade-in': 'fadeIn 0.15s ease-out',
+        'slide-in':       'slideIn 0.2s ease-out',
+        'fade-in':        'fadeIn 0.15s ease-out',
+        'spin-slow':      'spinSlow 16s linear infinite',
+        'spin-reverse':   'spinReverse 22s linear infinite',
+        'pulse-glow':     'pulseGlow 3.5s ease-in-out infinite',
+        'float':          'float 5s ease-in-out infinite',
+        'shimmer':        'shimmer 4s linear infinite',
+        'orbit-dot':      'orbitDot 8s linear infinite',
+        'orbit-dot-rev':  'orbitDotRev 12s linear infinite',
       },
       keyframes: {
-        slideIn: { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
-        fadeIn: { from: { opacity: 0 }, to: { opacity: 1 } },
+        slideIn:      { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
+        fadeIn:       { from: { opacity: 0 }, to: { opacity: 1 } },
+        spinSlow:     { from: { transform: 'rotate(0deg)' },   to: { transform: 'rotate(360deg)' } },
+        spinReverse:  { from: { transform: 'rotate(0deg)' },   to: { transform: 'rotate(-360deg)' } },
+        pulseGlow: {
+          '0%, 100%': { opacity: '0.35', transform: 'scale(0.92)' },
+          '50%':      { opacity: '0.65', transform: 'scale(1.08)' },
+        },
+        float: {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%':      { transform: 'translateY(-10px)' },
+        },
+        shimmer: {
+          '0%':   { backgroundPosition: '-300% center' },
+          '100%': { backgroundPosition: '300% center' },
+        },
+        orbitDot: {
+          from: { transform: 'rotate(0deg) translateX(52px) rotate(0deg)' },
+          to:   { transform: 'rotate(360deg) translateX(52px) rotate(-360deg)' },
+        },
+        orbitDotRev: {
+          from: { transform: 'rotate(0deg) translateX(70px) rotate(0deg)' },
+          to:   { transform: 'rotate(-360deg) translateX(70px) rotate(360deg)' },
+        },
       }
     },
   },

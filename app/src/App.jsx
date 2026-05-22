@@ -21,7 +21,7 @@ function LoadingScreen() {
     <div className="min-h-screen bg-surface-0 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <span className="text-xl">⚡</span>
+          <img src="/favicon.svg" alt="AutoKan" width={16} height={16} className="animate-spin-slow" />
         </div>
         <div className="flex items-center gap-2 text-gray-600 text-xs">
           <RefreshCw size={11} className="animate-spin" />

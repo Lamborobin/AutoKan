@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
+import brandImg from '../assets/images/brand.png';
 import ArchivedTasksModal from './ArchivedTasksModal';
 import InviteModal from './InviteModal';
 import MembersModal from './MembersModal';
@@ -660,7 +661,7 @@ export default function Sidebar() {
         {/* Header — brand + nav */}
         <div className="px-4 pt-4 pb-3 border-b border-border space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-lg font-bold text-gray-100 tracking-tight">AutoKan</span>
+            <img src={brandImg} alt="AutoKan" className="h-6 w-auto object-contain" />
             {/* Hamburger nav menu */}
             <div className="relative" ref={navRef}>
               <button
