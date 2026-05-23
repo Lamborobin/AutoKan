@@ -65,6 +65,7 @@ function initDb() {
       model TEXT DEFAULT 'claude-opus-4-5',
       description TEXT,
       permissions TEXT NOT NULL DEFAULT '[]',
+      role_ids TEXT DEFAULT '[]',
       prompt_file TEXT,
       instruction_files TEXT DEFAULT '[]',
       is_template INTEGER DEFAULT 0,
@@ -180,6 +181,32 @@ function initDb() {
         UPDATE agent_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
       END;
   `);
+
+  // ── Projects table — must exist before any migration that references it ──
+  // Note: owner_id FK to users omitted here; users table created later.
+  // The full schema (with FK) is in the later CREATE TABLE IF NOT EXISTS (no-op for new DBs).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      client_name TEXT,
+      color TEXT DEFAULT '#6366f1',
+      emoji TEXT DEFAULT '📋',
+      owner_id TEXT,
+      archived_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  // Seed default projects early — agents and columns reference them via FK
+  db.prepare(`INSERT OR IGNORE INTO projects (id, name, description, client_name, color, emoji)
+    VALUES (?, 'Public Website', 'Internal development of the AutoKan platform', 'Velour', '#6366f1', '⚡')`
+  ).run(VELOUR_ID);
+  db.prepare(`INSERT OR IGNORE INTO projects (id, name, description, client_name, color, emoji)
+    VALUES (?, 'Steel Platform', 'Industrial quoting and order management platform', 'TGH Iron & Steel', '#dc2626', '🏗️')`
+  ).run(TGH_ID);
 
   // Migration: tasks table new columns
   const taskCols = db.prepare('PRAGMA table_info(tasks)').all().map(c => c.name);
@@ -340,6 +367,18 @@ function initDb() {
   // Migration: rename pm.md → project-manager.md in prompt_file (any agent referencing it)
   db.prepare("UPDATE agents SET prompt_file = 'instructions/project-manager.md' WHERE prompt_file = 'instructions/pm.md'").run();
 
+  // Ensure roles table exists before any migration that queries it
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      allowed_column_ids TEXT DEFAULT '[]',
+      color TEXT DEFAULT '#6b7280',
+      is_system INTEGER DEFAULT 1
+    );
+  `);
+
   // Migration: rename perm_pm_planning → perm_planning in roles table + all agents' role_ids
   const oldPlanningRole = db.prepare("SELECT id FROM roles WHERE id = 'perm_pm_planning'").get();
   if (oldPlanningRole) {
@@ -427,31 +466,29 @@ function initDb() {
     insertRoleIfMissing.run(id, name, description, '[]', color, type)
   );
 
-  // Always ensure agent_pm has the Planning capability
+  // Migration: add role_ids to agents (safe no-op for new DBs that already have the column)
+  if (!agentColNames.includes('role_ids')) {
+    db.exec("ALTER TABLE agents ADD COLUMN role_ids TEXT DEFAULT '[]'");
+    console.log('✅ Migrated: added role_ids to agents');
+  }
+
+  // Always ensure default agents have the correct capabilities (runs after role_ids exists)
   const pmRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_pm'").get()?.role_ids || '[]');
   if (!pmRoleIds.includes('perm_planning')) {
     db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_pm'")
       .run(JSON.stringify([...pmRoleIds, 'perm_planning']));
   }
 
-  // Always ensure agent_dev has the Coding capability
   const devRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_dev'").get()?.role_ids || '[]');
   if (!devRoleIds.includes('perm_coding')) {
     db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_dev'")
       .run(JSON.stringify([...devRoleIds, 'perm_coding']));
   }
 
-  // Always ensure agent_test has the Coding Tester capability
   const testRoleIds = JSON.parse(db.prepare("SELECT role_ids FROM agents WHERE id = 'agent_test'").get()?.role_ids || '[]');
   if (!testRoleIds.includes('perm_coding_tester')) {
     db.prepare("UPDATE agents SET role_ids = ? WHERE id = 'agent_test'")
       .run(JSON.stringify([...testRoleIds, 'perm_coding_tester']));
-  }
-
-  // Migration: add role_ids to agents
-  if (!agentColNames.includes('role_ids')) {
-    db.exec("ALTER TABLE agents ADD COLUMN role_ids TEXT DEFAULT '[]'");
-    console.log('✅ Migrated: added role_ids to agents');
   }
 
   // Migration: map old role IDs to new column access role IDs (idempotent)
