@@ -255,6 +255,8 @@ export default function SettingsPage() {
 
   const connectionDot = !currentProject?.client_path
     ? <span className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400" />
+    : !currentProject?.path_exists
+    ? <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400" />
     : null;
 
   return (
