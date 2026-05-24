@@ -52,7 +52,8 @@ export default function SettingsPage() {
 
   const currentProject = projects.find(p => p.id === currentProjectId);
 
-  const [section, setSection] = useState('files');
+  const [section, setSection]         = useState('files');
+  const [connRefreshKey, setConnRefreshKey] = useState(0);
 
   // ── Superadmin state ────────────────────────────────────────────────────
   const [adminEmail, setAdminEmail]   = useState('');
@@ -405,9 +406,18 @@ export default function SettingsPage() {
         {section === 'connections' && currentProject && (
           <div className="flex-1 overflow-y-auto px-8 py-8">
             <div className="max-w-lg">
-              <div className="flex items-center gap-2.5 mb-1">
-                <GitBranch size={15} className="text-accent" />
-                <h2 className="text-sm font-semibold text-gray-200">Connections</h2>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-2.5">
+                  <GitBranch size={15} className="text-accent" />
+                  <h2 className="text-sm font-semibold text-gray-200">Connections</h2>
+                </div>
+                <button
+                  onClick={() => { loadProjects(); setConnRefreshKey(k => k + 1); }}
+                  title="Refresh connection status"
+                  className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-surface-2 transition-colors"
+                >
+                  <RotateCcw size={13} />
+                </button>
               </div>
               <p className="text-xs text-gray-500 mb-6">
                 Link this board to a client folder. The folder can contain anything — a codebase, documents, or any other files relevant to this board's work.
@@ -416,6 +426,7 @@ export default function SettingsPage() {
                 project={currentProject}
                 onUpdated={() => loadProjects()}
                 updateProject={updateProject}
+                refreshKey={connRefreshKey}
               />
             </div>
           </div>
@@ -795,7 +806,7 @@ function BoardsPanel({ projects }) {
 }
 
 // ─── Connections panel ───────────────────────────────────────────────────────
-function ConnectionsPanel({ project, onUpdated, updateProject }) {
+function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 }) {
   const [mode, setMode]           = useState(project.repo_url ? 'github' : 'local');
   const [repoUrl, setRepoUrl]     = useState(project.repo_url || '');
   const [localPath, setLocalPath] = useState(project.client_path || null);
@@ -820,7 +831,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject }) {
       .then(r => { setBasePath(r.basePath || ''); setFolders(r.folders || []); })
       .catch(() => { setBasePath(''); setFolders([]); })
       .finally(() => setLoadingFolders(false));
-  }, [mode]);
+  }, [mode, refreshKey]);
 
   async function handleSelectFolder(path) {
     setLocalPath(path);
