@@ -106,6 +106,8 @@ export default function SettingsPage() {
   // Load system files once
   useEffect(() => {
     instructionsApi.list(true, null).then(files => setSystemFiles(files)).catch(() => {});
+    // Refresh project data on mount so path_exists is current
+    loadProjects().catch(() => {});
   }, []);
 
   // Reload custom files when board changes
@@ -115,10 +117,14 @@ export default function SettingsPage() {
   }, [currentProjectId]);
 
   // Load teams when subscription section is opened
+  // Refresh projects when connections section is opened so path_exists is current
   useEffect(() => {
     if (section.startsWith('sub_')) {
       loadTeams().catch(() => {});
       loadClients().catch(() => {});
+    }
+    if (section === 'connections') {
+      loadProjects().catch(() => {});
     }
   }, [section]);
 
