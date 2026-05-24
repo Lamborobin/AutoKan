@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, X, Plus, Trash2, UserPlus, ChevronDown, ChevronRight, Check, Copy, AlertCircle } from 'lucide-react';
-import { useStore } from '../store';
-import { teamsApi } from '../api';
+import { useStore } from '../../store';
+import { teamsApi } from '../../api';
 
 function Avatar({ email, name, picture, size = 'md' }) {
   const sizeClass = size === 'sm' ? 'w-6 h-6 text-[9px]' : 'w-8 h-8 text-xs';

@@ -4,24 +4,23 @@ import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-
 import { RefreshCw, ChevronDown, ChevronRight, Archive, RotateCcw, Trash2, Plus, X, GripVertical } from 'lucide-react';
 import { useStore } from './store';
 import Sidebar from './components/Sidebar';
-import Column, { taskZoneId } from './components/Column';
-import TaskCard from './components/TaskCard';
-import TaskDetail from './components/TaskDetail';
-import NewTaskModal from './components/NewTaskModal';
-import NewAgentModal from './components/NewAgentModal';
-import EditAgentModal from './components/EditAgentModal';
-import TemplatesModal from './components/TemplatesModal';
-import SettingsPage from './components/SettingsPage';
+import Column, { taskZoneId } from './components/board/Column';
+import TaskCard from './components/board/TaskCard';
+import TaskDetail from './components/task/TaskDetail';
+import NewTaskModal from './components/task/NewTaskModal';
+import NewAgentModal from './components/agent/NewAgentModal';
+import EditAgentModal from './components/agent/EditAgentModal';
+import TemplatesModal from './components/agent/TemplatesModal';
+import SettingsPage from './components/settings/SettingsPage';
 import LoginPage from './components/LoginPage';
-
-const PRESET_COLORS = ['#6366f1','#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#ec4899','#14b8a6','#f97316','#64748b'];
+import { COLUMN, PRESET_COLUMN_COLORS } from './constants/columns';
 
 function LoadingScreen() {
   return (
     <div className="min-h-screen bg-surface-0 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-          <img src="/favicon.svg" alt="AutoKan" width={16} height={16} className="animate-spin-slow" />
+          <img src="/favicon.png" alt="AutoKan" width={16} height={16} className="animate-spin-slow" />
         </div>
         <div className="flex items-center gap-2 text-gray-600 text-xs">
           <RefreshCw size={11} className="animate-spin" />
@@ -47,15 +46,15 @@ export default function App() {
   const [showArchivedCols, setShowArchivedCols] = useState(false);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColName, setNewColName] = useState('');
-  const [newColColor, setNewColColor] = useState('#6366f1');
+  const [newColColor, setNewColColor] = useState(PRESET_COLUMN_COLORS[0]);
   const [addColError, setAddColError] = useState('');
   const newColInputRef = useRef(null);
 
   const allActiveColumns = columns.filter(c => !c.archived_at);
   const activeColumns = allActiveColumns.filter(c =>
-    c.id !== 'col_unassigned' || tasks.some(t => t.column_id === 'col_unassigned')
+    c.id !== COLUMN.UNASSIGNED || tasks.some(t => t.column_id === COLUMN.UNASSIGNED)
   );
-  const archivedColumns = columns.filter(c => !!c.archived_at && c.id !== 'col_unassigned');
+  const archivedColumns = columns.filter(c => !!c.archived_at && c.id !== COLUMN.UNASSIGNED);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
@@ -117,7 +116,7 @@ export default function App() {
 
   function canAssignAgent(agent, columnId) {
     if (!agent || agent.id === 'human') return true;
-    if (columnId === 'col_unassigned') return true;
+    if (columnId === COLUMN.UNASSIGNED) return true;
     const coveringRoles = roles.filter(r =>
       r.type === 'column_access' && (r.allowed_column_ids || []).includes(columnId)
     );
@@ -144,7 +143,7 @@ export default function App() {
 
   function openAddColumn() {
     setNewColName('');
-    setNewColColor('#6366f1');
+    setNewColColor(PRESET_COLUMN_COLORS[0]);
     setAddColError('');
     setAddingColumn(true);
     setTimeout(() => newColInputRef.current?.focus(), 50);
@@ -304,7 +303,7 @@ export default function App() {
                         className="w-full bg-surface-3 border border-border rounded-lg px-2.5 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 transition-colors"
                       />
                       <div className="flex flex-wrap gap-1.5">
-                        {PRESET_COLORS.map(c => (
+                        {PRESET_COLUMN_COLORS.map(c => (
                           <button
                             key={c}
                             type="button"

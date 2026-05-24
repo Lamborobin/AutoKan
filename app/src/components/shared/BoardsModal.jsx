@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { X, Search, Plus, LayoutGrid, ChevronDown, GitBranch, Settings2, AlertTriangle } from 'lucide-react';
-import { useStore } from '../store';
-import BoardRepoSettings from './BoardRepoSettings';
+import { useStore } from '../../store';
+import BoardRepoSettings from '../settings/BoardRepoSettings';
 
 export default function BoardsModal({ onClose }) {
   const { projects, clients, user, isSuperAdmin, setCurrentProject, createProject, createClient } = useStore();

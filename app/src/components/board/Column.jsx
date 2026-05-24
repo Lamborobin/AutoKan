@@ -5,7 +5,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Plus, Archive, Trash2, MoreHorizontal, X, Pencil, GripVertical } from 'lucide-react';
 import TaskCard from './TaskCard';
-import { useStore } from '../store';
+import { useStore } from '../../store';
+import { COLUMN } from '../../constants/columns';
 
 // Prefix used for the inner task-drop zone so it doesn't conflict with the
 // column sortable id (both would otherwise register the same id in dnd-kit).
@@ -15,7 +16,7 @@ export default function Column({ column, tasks }) {
   const { setShowNewTask, archiveColumn, deleteColumn, updateColumn } = useStore();
 
   const isProtected = !!column.is_protected;
-  const isUnassigned = column.id === 'col_unassigned';
+  const isUnassigned = column.id === COLUMN.UNASSIGNED;
 
   // Outer div: sortable for column reordering (disabled for protected columns)
   const {
@@ -159,7 +160,7 @@ export default function Column({ column, tasks }) {
         </div>
 
         <div className="flex items-center gap-0.5 shrink-0">
-          {column.id === 'col_backlog' && !isUnassigned && (
+          {column.id === COLUMN.BACKLOG && !isUnassigned && (
             <button
               onClick={() => setShowNewTask(true)}
               className="p-1 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors"

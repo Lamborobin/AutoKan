@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Menu, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
 import brandImg from '../assets/images/brand.png';
-import ArchivedTasksModal from './ArchivedTasksModal';
-import InviteModal from './InviteModal';
-import MembersModal from './MembersModal';
-import BoardsModal from './BoardsModal';
+import ArchivedTasksModal from './shared/ArchivedTasksModal';
+import InviteModal from './shared/InviteModal';
+import MembersModal from './shared/MembersModal';
+import BoardsModal from './shared/BoardsModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
+import { COLUMN } from '../constants/columns';
 
 function AgentPanel({ agent, onClose, onEdit }) {
   const { roles } = useStore();
@@ -625,31 +626,20 @@ function UserMenu() {
   );
 }
 
-const NAV_ITEMS = [
+const NAV_ITEMS = [ // kept for reference; no longer rendered as dropdown
   { label: 'Board', icon: Home, page: 'board' },
   { label: 'Settings', icon: Settings, page: 'settings' },
 ];
 
 export default function Sidebar() {
   const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage, boardMembers, user } = useStore();
-  const [agentsOpen, setAgentsOpen] = useState(true);
+  const [agentsOpen, setAgentsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
-  const [navOpen, setNavOpen] = useState(false);
   const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
-  const navRef = useRef(null);
-
-  const humanActionCount = tasks.filter(t => t.column_id === 'col_humanaction').length;
-
-  useEffect(() => {
-    function handleOutsideClick(e) {
-      if (navRef.current && !navRef.current.contains(e.target)) setNavOpen(false);
-    }
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
+  const humanActionCount = tasks.filter(t => t.column_id === COLUMN.HUMAN_ACTION).length;
 
   function toggleAgent(agentId) {
     setSelectedAgentId(prev => prev === agentId ? null : agentId);
@@ -662,30 +652,13 @@ export default function Sidebar() {
         <div className="px-4 pt-4 pb-3 border-b border-border space-y-2">
           <div className="flex items-center justify-between">
             <img src={brandImg} alt="AutoKan" className="h-6 w-auto object-contain" />
-            {/* Hamburger nav menu */}
-            <div className="relative" ref={navRef}>
-              <button
-                onClick={() => setNavOpen(o => !o)}
-                className={`p-2 rounded-lg transition-colors ${navOpen ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
-                title="Menu"
-              >
-                <Menu size={18} />
-              </button>
-              {navOpen && (
-                <div className="absolute left-0 top-full mt-1.5 w-40 bg-surface-2 border border-border rounded-xl shadow-xl z-50 py-1 overflow-hidden">
-                  {NAV_ITEMS.map(({ label, icon: Icon, page }) => (
-                    <button
-                      key={page}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm hover:bg-surface-3 transition-colors ${currentPage === page ? 'text-accent' : 'text-gray-400 hover:text-gray-100'}`}
-                      onClick={() => { setCurrentPage(page); setNavOpen(false); }}
-                    >
-                      <Icon size={14} />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <button
+              onClick={() => setCurrentPage('settings')}
+              className={`p-2 rounded-lg transition-colors ${currentPage === 'settings' ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
+              title="Settings"
+            >
+              <Settings size={18} />
+            </button>
           </div>
           <ProjectSwitcher />
         </div>

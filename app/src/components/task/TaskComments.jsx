@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Trash2, Send, Pencil, Check, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { commentsApi } from '../api';
-import { useStore } from '../store';
+import { commentsApi } from '../../api';
+import { useStore } from '../../store';
 
 const MENTION_REGEX = /@\[([^\]]+)\]\(([^)]+)\)/g;
 

@@ -2,11 +2,12 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { scaffoldProjectInstructions } = require('../utils/instructions');
+const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
 
-// Stable IDs for seeded projects — never change these after first migration
-const VELOUR_ID = 'prj_a1b2c3d4';
-const TGH_ID    = 'prj_e5f6a7b8';
+// Stable IDs — never change these after first migration
+const VELOUR_ID     = 'prj_a1b2c3d4';
+const TGH_ID        = 'prj_e5f6a7b8';
+const DEFAULT_SUB_ID = 'sub_default';
 
 // Generates a new project ID: prj_ + 8 random hex chars
 function generateProjectId() {
@@ -367,6 +368,54 @@ function initDb() {
   // Migration: rename pm.md → project-manager.md in prompt_file (any agent referencing it)
   db.prepare("UPDATE agents SET prompt_file = 'instructions/project-manager.md' WHERE prompt_file = 'instructions/pm.md'").run();
 
+  // Migration: rewrite per-project instruction paths from "instructions-{id}/..." to "instructions/{id}/..."
+  // (legacy folder rename from before subscription-scoped structure)
+  {
+    const agents = db.prepare('SELECT id, prompt_file, instruction_files FROM agents').all();
+    const rewritePath = p => p ? p.replace(/^instructions-([^/]+)\//, 'instructions/$1/') : p;
+    for (const agent of agents) {
+      const newPromptFile = rewritePath(agent.prompt_file);
+      let newInstructionFiles = agent.instruction_files;
+      try {
+        const arr = JSON.parse(agent.instruction_files || '[]');
+        const rewritten = arr.map(rewritePath);
+        if (JSON.stringify(arr) !== JSON.stringify(rewritten)) {
+          newInstructionFiles = JSON.stringify(rewritten);
+        }
+      } catch { /* leave as-is if malformed */ }
+      if (newPromptFile !== agent.prompt_file || newInstructionFiles !== agent.instruction_files) {
+        db.prepare('UPDATE agents SET prompt_file = ?, instruction_files = ? WHERE id = ?')
+          .run(newPromptFile, newInstructionFiles, agent.id);
+      }
+    }
+  }
+
+  // Migration: rewrite direct project-scoped paths to include subscription prefix
+  // instructions/{projId}/X.md → instructions/{subId}/{projId}/X.md
+  {
+    const agents = db.prepare('SELECT id, prompt_file, instruction_files FROM agents').all();
+    const rewritePath = p => {
+      if (!p) return p;
+      // Only rewrite paths that have a project ID directly after "instructions/" (no sub prefix yet)
+      return p.replace(/^instructions\/(prj_[^/]+)\//, `instructions/${DEFAULT_SUB_ID}/$1/`);
+    };
+    for (const agent of agents) {
+      const newPromptFile = rewritePath(agent.prompt_file);
+      let newInstructionFiles = agent.instruction_files;
+      try {
+        const arr = JSON.parse(agent.instruction_files || '[]');
+        const rewritten = arr.map(rewritePath);
+        if (JSON.stringify(arr) !== JSON.stringify(rewritten)) {
+          newInstructionFiles = JSON.stringify(rewritten);
+        }
+      } catch { /* leave as-is if malformed */ }
+      if (newPromptFile !== agent.prompt_file || newInstructionFiles !== agent.instruction_files) {
+        db.prepare('UPDATE agents SET prompt_file = ?, instruction_files = ? WHERE id = ?')
+          .run(newPromptFile, newInstructionFiles, agent.id);
+      }
+    }
+  }
+
   // Ensure roles table exists before any migration that queries it
   db.exec(`
     CREATE TABLE IF NOT EXISTS roles (
@@ -592,8 +641,11 @@ function initDb() {
 
   // Seed default agent templates by ID (idempotent — skips if already exists)
   function readInstructionFile(filename) {
-    try { return fs.readFileSync(path.join(__dirname, '../../../instructions', filename), 'utf8'); }
-    catch { return ''; }
+    // Try subscription-scoped path first, then legacy global path
+    const subPath  = path.join(__dirname, '../../../instructions', DEFAULT_SUB_ID, filename);
+    const rootPath = path.join(__dirname, '../../../instructions', filename);
+    try { return fs.readFileSync(subPath, 'utf8'); } catch { /* fall through */ }
+    try { return fs.readFileSync(rootPath, 'utf8'); } catch { return ''; }
   }
   const insertTplIfMissing = db.prepare(`
     INSERT OR IGNORE INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, instruction_files, permissions, tags)
@@ -699,9 +751,10 @@ function initDb() {
            project.emoji, project.owner_id, project.archived_at, project.created_at, project.updated_at);
     db.prepare('UPDATE tasks SET project_id = ? WHERE project_id = ?').run(newId, project.id);
     db.prepare('DELETE FROM projects WHERE id = ?').run(project.id);
-    // Rename instruction folder
-    const oldDir = path.join(PROJECT_ROOT_PATH, `instructions-${project.id}`);
-    const newDir = path.join(PROJECT_ROOT_PATH, `instructions-${newId}`);
+    // Rename instruction folder (subscription-scoped path)
+    const projSubId = project.subscription_id || DEFAULT_SUB_ID;
+    const oldDir = path.join(PROJECT_ROOT_PATH, 'instructions', projSubId, project.id);
+    const newDir = path.join(PROJECT_ROOT_PATH, 'instructions', projSubId, newId);
     if (fs.existsSync(oldDir) && !fs.existsSync(newDir)) {
       try { fs.renameSync(oldDir, newDir); } catch (e) { console.warn(`Could not rename folder for ${project.id}:`, e.message); }
     }
@@ -801,15 +854,19 @@ A feature is "done" when:
 - Over-building before validation — ship small, iterate based on ops team feedback
 `;
 
-  // Scaffold per-project instruction folders — only client.md + project.md per board (idempotent)
-  try { scaffoldProjectInstructions(VELOUR_ID); } catch (e) { console.warn('Could not scaffold Velour instructions:', e.message); }
-  try { scaffoldProjectInstructions(TGH_ID, tghClientMd, '# TGH Iron & Steel — Project Context\n\nAdd project-specific context here.\n'); } catch (e) { console.warn('Could not scaffold TGH instructions:', e.message); }
+  // Scaffold subscription-level folder (idempotent — only creates dir, not files)
+  try { scaffoldSubscriptionInstructions(DEFAULT_SUB_ID); } catch (e) { console.warn('Could not scaffold subscription instructions:', e.message); }
 
-  // Migration: remove system files from per-project folders (both old and new filenames)
+  // Scaffold per-project instruction folders — only client.md + project.md per board (idempotent)
+  try { scaffoldProjectInstructions(VELOUR_ID, DEFAULT_SUB_ID); } catch (e) { console.warn('Could not scaffold Velour instructions:', e.message); }
+  try { scaffoldProjectInstructions(TGH_ID, DEFAULT_SUB_ID, tghClientMd, '# TGH Iron & Steel — Project Context\n\nAdd project-specific context here.\n'); } catch (e) { console.warn('Could not scaffold TGH instructions:', e.message); }
+
+  // Migration: remove system files from per-project folders (both old and new paths)
   const SYSTEM_ONLY_FILES = ['pm.md', 'project-manager.md', 'developer.md', 'tester.md'];
   try {
-    for (const { id } of db.prepare('SELECT id FROM projects').all()) {
-      const projectDir = path.join(__dirname, `../../../instructions-${id}`);
+    for (const { id, subscription_id } of db.prepare('SELECT id, subscription_id FROM projects').all()) {
+      const subId = subscription_id || DEFAULT_SUB_ID;
+      const projectDir = path.join(__dirname, '../../../instructions', subId, id);
       for (const file of SYSTEM_ONLY_FILES) {
         const fp = path.join(projectDir, file);
         if (fs.existsSync(fp)) fs.unlinkSync(fp);
@@ -960,7 +1017,6 @@ A feature is "done" when:
   db.prepare(`UPDATE team_members SET user_id = (SELECT id FROM users WHERE email = team_members.email) WHERE user_id IS NULL`).run();
 
   // ── Seed default subscription ──────────────────────────────────────────────
-  const DEFAULT_SUB_ID = 'sub_default';
   db.prepare(`INSERT OR IGNORE INTO subscriptions (id, name) VALUES (?, 'My Workspace')`).run(DEFAULT_SUB_ID);
 
   // Assign all existing boards to this subscription

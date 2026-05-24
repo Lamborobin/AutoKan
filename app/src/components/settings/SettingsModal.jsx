@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Settings, Layers, Bot, GitBranch, Github, FolderOpen, Check, Loader2, AlertTriangle } from 'lucide-react';
-import { useStore } from '../store';
-import { projectsApi } from '../api';
+import { useStore } from '../../store';
+import { projectsApi } from '../../api';
 
 export default function SettingsModal({ onClose }) {
   const { columns, agents, currentProjectId, projects, updateProject, loadProjects } = useStore();

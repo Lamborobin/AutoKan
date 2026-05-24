@@ -1,14 +1,8 @@
 import { useState, useMemo } from 'react';
 import { X, Search, RotateCcw, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useStore } from '../store';
-
-const PRIORITY_STYLES = {
-  critical: 'bg-red-500/15 text-red-400 border border-red-500/20',
-  high:     'bg-orange-500/15 text-orange-400 border border-orange-500/20',
-  medium:   'bg-blue-500/15 text-blue-400 border border-blue-500/20',
-  low:      'bg-gray-500/15 text-gray-400 border border-gray-500/20',
-};
+import { useStore } from '../../store';
+import { PRIORITY_STYLES } from '../../constants/tasks';
 
 export default function ArchivedTasksModal({ onClose }) {
   const { archivedTasks, columns, agents, unarchiveTask, setSelectedTask } = useStore();

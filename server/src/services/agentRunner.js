@@ -223,16 +223,16 @@ const PM_TOOLS = [
   }
 ];
 
-function readFile(filePath, projectId) {
+function readFile(filePath, subscriptionId, projectId) {
   try {
-    const resolved = projectId ? resolveInstructionPath(filePath, projectId) : path.join(PROJECT_ROOT, filePath);
+    const resolved = resolveInstructionPath(filePath, subscriptionId, projectId);
     return fs.readFileSync(resolved, 'utf8');
   } catch {
     return '';
   }
 }
 
-function buildContextBlock(agent, projectId) {
+function buildContextBlock(agent, subscriptionId, projectId) {
   const instructionFiles = JSON.parse(agent.instruction_files || '[]');
   // PM role: client context only — no codebase files.
   // Technical roles (developer, tester): get codebase files too.
@@ -241,7 +241,7 @@ function buildContextBlock(agent, projectId) {
   const sections = [];
 
   for (const filePath of allContextFiles) {
-    const content = readFile(filePath, projectId);
+    const content = readFile(filePath, subscriptionId, projectId);
     if (content) {
       const label = path.basename(filePath, '.md').toUpperCase();
       sections.push(`## [${label}]\n${content}`);
@@ -251,8 +251,8 @@ function buildContextBlock(agent, projectId) {
   return sections.join('\n\n---\n\n');
 }
 
-function buildSystemPrompt(agent, projectId) {
-  const promptFileContent = readFile(agent.prompt_file || '', projectId);
+function buildSystemPrompt(agent, subscriptionId, projectId) {
+  const promptFileContent = readFile(agent.prompt_file || '', subscriptionId, projectId);
 
   if (agent.is_template) {
     // Template agents: internal behavioural prompt + role-specific prompt file
@@ -292,8 +292,10 @@ async function runPmAgent(taskId) {
     ORDER BY created_at ASC
   `).all(taskId);
 
-  const systemPrompt = buildSystemPrompt(pmAgent, task.project_id);
-  const contextBlock = buildContextBlock(pmAgent, task.project_id);
+  const pmProject = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  const pmSubId = pmProject?.subscription_id || null;
+  const systemPrompt = buildSystemPrompt(pmAgent, pmSubId, task.project_id);
+  const contextBlock = buildContextBlock(pmAgent, pmSubId, task.project_id);
 
   // Build a clear picture of the task + conversation so far
   const conversationText = conversationLogs.length === 0
@@ -571,8 +573,10 @@ async function runDevAgent(taskId) {
     return;
   }
 
-  const systemPrompt = buildSystemPrompt(devAgent, task.project_id);
-  const contextBlock = buildContextBlock(devAgent, task.project_id);
+  const devProject = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  const devSubId = devProject?.subscription_id || null;
+  const systemPrompt = buildSystemPrompt(devAgent, devSubId, task.project_id);
+  const contextBlock = buildContextBlock(devAgent, devSubId, task.project_id);
 
   const initialPrompt = [
     contextBlock ? `## Context Files\n${contextBlock}` : '',
@@ -825,8 +829,10 @@ async function runTesterAgent(taskId) {
     if (!JSON.parse(testerAgent.role_ids || '[]').includes('perm_coding_tester')) return;
   } catch { return; }
 
-  const systemPrompt = buildSystemPrompt(testerAgent, task.project_id);
-  const contextBlock = buildContextBlock(testerAgent, task.project_id);
+  const testProject = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  const testSubId = testProject?.subscription_id || null;
+  const systemPrompt = buildSystemPrompt(testerAgent, testSubId, task.project_id);
+  const contextBlock = buildContextBlock(testerAgent, testSubId, task.project_id);
 
   const metadata = JSON.parse(task.metadata || '{}');
   const retryCount = metadata.test_retry_count || 0;

@@ -1,16 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { useStore } from '../store';
-import { tasksApi } from '../api';
-import MarkdownText from './MarkdownText';
+import { useStore } from '../../store';
+import { tasksApi } from '../../api';
+import MarkdownText from '../shared/MarkdownText';
 import TaskComments from './TaskComments';
-
-const PRIORITY_COLORS = {
-  critical: '#ef4444', high: '#f97316', medium: '#3b82f6', low: '#6b7280'
-};
-const PRIORITIES = ['low', 'medium', 'high', 'critical'];
-const COMPLEXITIES = ['low', 'medium', 'high'];
+import { PRIORITIES, COMPLEXITIES, PRIORITY_COLORS, PM_STATUS, HUMAN_STATUS, LOG_ACTION } from '../../constants/tasks';
+import { COLUMN } from '../../constants/columns';
 
 export default function TaskDetail() {
   const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent } = useStore();
@@ -62,8 +58,8 @@ export default function TaskDetail() {
       const t = await tasksApi.get(selectedTask.id);
       if (cancelled) return;
 
-      const alreadyApproved = (t.logs || []).some(l => l.action === 'pr_approved');
-      const needsPrCheck = t.column_id === 'col_humanaction' && !!t.pr_url && !alreadyApproved;
+      const alreadyApproved = (t.logs || []).some(l => l.action === LOG_ACTION.PR_APPROVED);
+      const needsPrCheck = t.column_id === COLUMN.HUMAN_ACTION && !!t.pr_url && !alreadyApproved;
 
       // Set task + checkingPr together so PR panel always first renders with spinner
       setTask(t);
@@ -74,8 +70,8 @@ export default function TaskDetail() {
       setCheckingPr(needsPrCheck);
 
       const pmIsProcessing =
-        (t.pm_approval_status === 'pending' && !t.pm_pending_question) ||
-        (t.pm_approval_status === 'questioning' && !t.pm_pending_question);
+        (t.pm_approval_status === PM_STATUS.PENDING && !t.pm_pending_question) ||
+        (t.pm_approval_status === PM_STATUS.QUESTIONING && !t.pm_pending_question);
       if (pmIsProcessing) setAgentThinking(true);
 
       if (needsPrCheck) {
@@ -113,7 +109,7 @@ export default function TaskDetail() {
         const fresh = await tasksApi.get(selectedTask.id);
         if (cancelled) return;
         // PM is done processing when it has asked a question or approved the task
-        const pmFinished = !!fresh.pm_pending_question || fresh.pm_approval_status === 'approved';
+        const pmFinished = !!fresh.pm_pending_question || fresh.pm_approval_status === PM_STATUS.APPROVED;
         if (pmFinished) {
           setTask(fresh);
           setLogs(fresh.logs || []);
@@ -144,12 +140,12 @@ export default function TaskDetail() {
 
   // Build conversation thread — exclude the latest pm_question when it's pending
   // (it's already shown as the active prompt in the answer input section below)
-  const rawConversationLogs = logs.filter(l => ['pm_question', 'human_answer', 'pm_reviewed'].includes(l.action));
+  const rawConversationLogs = logs.filter(l => [LOG_ACTION.PM_QUESTION, LOG_ACTION.HUMAN_ANSWER, LOG_ACTION.PM_REVIEWED].includes(l.action));
   const conversationLogs = hasPendingQuestion
     ? rawConversationLogs.slice(0, -1)
     : rawConversationLogs;
-  const pmDone = task.pm_approval_status === 'approved';
-  const fullyReady = pmDone && task.human_approval_status === 'approved';
+  const pmDone = task.pm_approval_status === PM_STATUS.APPROVED;
+  const fullyReady = pmDone && task.human_approval_status === HUMAN_STATUS.APPROVED;
 
   const resolvedCount = checklist.filter(i => i.resolved).length;
   const allItemsChecked = checklist.length > 0 && resolvedCount === checklist.length;
@@ -205,7 +201,7 @@ export default function TaskDetail() {
     setTask(t => ({ ...t, pm_checklist: updated.pm_checklist || nextChecklist }));
 
     // PM will re-evaluate — start polling
-    if (task.pm_approval_status && task.pm_approval_status !== 'approved' && !hasPendingQuestion) {
+    if (task.pm_approval_status && task.pm_approval_status !== PM_STATUS.APPROVED && !hasPendingQuestion) {
       setAgentThinking(true);
     }
   }
@@ -253,11 +249,11 @@ export default function TaskDetail() {
     setAnswerText('');
     await tasksApi.answer(task.id, { answer: text });
     const tempLog = {
-      id: `temp-${Date.now()}`, action: 'human_answer', message: text,
+      id: `temp-${Date.now()}`, action: LOG_ACTION.HUMAN_ANSWER, message: text,
       created_at: new Date().toISOString().replace('T', ' ').replace('Z', ''), agent_name: 'You'
     };
     setLogs(prev => [...prev, tempLog]);
-    setTask(t => ({ ...t, pm_pending_question: null, pm_approval_status: 'questioning' }));
+    setTask(t => ({ ...t, pm_pending_question: null, pm_approval_status: PM_STATUS.QUESTIONING }));
     setAgentThinking(true);
   }
 
@@ -415,7 +411,7 @@ export default function TaskDetail() {
             )}
 
             {/* PR Review panel — only when PR hasn't been approved yet */}
-            {task.pr_url && task.column_id === 'col_humanaction' && !logs.some(l => l.action === 'pr_approved') && (
+            {task.pr_url && task.column_id === COLUMN.HUMAN_ACTION && !logs.some(l => l.action === LOG_ACTION.PR_APPROVED) && (
               <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-blue-500/15">
                   <div className={`w-1.5 h-1.5 rounded-full ${checkingPr ? 'bg-blue-400/50 animate-pulse' : 'bg-blue-400'}`} />
@@ -455,7 +451,7 @@ export default function TaskDetail() {
             )}
 
             {/* Merged PR notice — shown when PR was already approved and task is back in Human Action */}
-            {task.pr_url && task.column_id === 'col_humanaction' && logs.some(l => l.action === 'pr_approved') && (
+            {task.pr_url && task.column_id === COLUMN.HUMAN_ACTION && logs.some(l => l.action === LOG_ACTION.PR_APPROVED) && (
               <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-500/5 border border-gray-500/15">
                 <svg className="w-3.5 h-3.5 text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
@@ -516,8 +512,8 @@ export default function TaskDetail() {
                         <p className="text-[10px] text-gray-600 font-medium uppercase tracking-wide mb-2">Planning conversation</p>
                         <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                         {rawConversationLogs.map(log => {
-                          const isPM = log.action === 'pm_question';
-                          const isDone = log.action === 'pm_reviewed';
+                          const isPM = log.action === LOG_ACTION.PM_QUESTION;
+                          const isDone = log.action === LOG_ACTION.PM_REVIEWED;
                           return (
                             <div key={log.id} className={`flex gap-2 ${isPM || isDone ? '' : 'flex-row-reverse'}`}>
                               <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5 ${isPM || isDone ? 'bg-purple-600/60 text-white' : 'bg-blue-600/60 text-white'}`}>
@@ -625,8 +621,8 @@ export default function TaskDetail() {
                 {(conversationLogs.length > 0 || agentThinking) && (
                   <div className="px-4 py-3 space-y-2.5 max-h-52 overflow-y-auto">
                     {conversationLogs.map(log => {
-                      const isPM = log.action === 'pm_question';
-                      const isDone = log.action === 'pm_reviewed';
+                      const isPM = log.action === LOG_ACTION.PM_QUESTION;
+                      const isDone = log.action === LOG_ACTION.PM_REVIEWED;
                       return (
                         <div key={log.id} className={`flex gap-2 ${isPM || isDone ? '' : 'flex-row-reverse'}`}>
                           <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 ${isPM || isDone ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
@@ -689,7 +685,7 @@ export default function TaskDetail() {
                 )}
 
                 {/* PM satisfied — human sign-off */}
-                {pmDone && task.human_approval_status !== 'approved' && (
+                {pmDone && task.human_approval_status !== HUMAN_STATUS.APPROVED && (
                   <div className="border-t border-surface-3 p-4 space-y-2.5">
                     <p className="text-xs text-green-400 font-medium">PM satisfied — review the requirements and approve</p>
                     {task.pm_review_comment && (
@@ -1020,20 +1016,20 @@ export default function TaskDetail() {
                 {logs.map(log => {
                   const label = (() => {
                     switch (log.action) {
-                      case 'created': return 'Task created';
-                      case 'pm_question': return 'PM asked a clarifying question';
-                      case 'human_answer': return 'You replied';
-                      case 'pm_reviewed': return 'PM approved the task';
-                      case 'pm_review_requested': return 'PM review requested';
-                      case 'human_approved': return `Human approved${log.message && log.message.replace(/^Human approved\s*[-–]?\s*/, '') ? ' — ' + log.message.replace(/^Human approved\s*[-–]?\s*/, '') : ''}`;
-                      case 'human_rejected': return 'Human rejected';
-                      case 'moved': return log.message || 'Moved';
-                      case 'updated': return 'Task updated';
-                      case 'developer_assigned': return 'Developer assigned';
-                      case 'branch_created': return log.message || 'Branch created';
-                      case 'pr_created': return 'PR created — awaiting review';
-                      case 'pr_approved': return 'PR approved, moved to Testing';
-                      case 'human_action_requested': return 'Human action required';
+                      case LOG_ACTION.CREATED:                return 'Task created';
+                      case LOG_ACTION.PM_QUESTION:            return 'PM asked a clarifying question';
+                      case LOG_ACTION.HUMAN_ANSWER:           return 'You replied';
+                      case LOG_ACTION.PM_REVIEWED:            return 'PM approved the task';
+                      case LOG_ACTION.PM_REVIEW_REQUESTED:    return 'PM review requested';
+                      case LOG_ACTION.HUMAN_APPROVED:         return `Human approved${log.message && log.message.replace(/^Human approved\s*[-–]?\s*/, '') ? ' — ' + log.message.replace(/^Human approved\s*[-–]?\s*/, '') : ''}`;
+                      case LOG_ACTION.HUMAN_REJECTED:         return 'Human rejected';
+                      case LOG_ACTION.MOVED:                  return log.message || 'Moved';
+                      case LOG_ACTION.UPDATED:                return 'Task updated';
+                      case LOG_ACTION.DEVELOPER_ASSIGNED:     return 'Developer assigned';
+                      case LOG_ACTION.BRANCH_CREATED:         return log.message || 'Branch created';
+                      case 'pr_created':                      return 'PR created — awaiting review';
+                      case LOG_ACTION.PR_APPROVED:            return 'PR approved, moved to Testing';
+                      case LOG_ACTION.HUMAN_ACTION_REQUESTED: return 'Human action required';
                       default: {
                         const msg = log.message || log.action;
                         return msg.length > 80 ? msg.slice(0, 80) + '…' : msg;

@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight,
+  FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck,
 } from 'lucide-react';
-import { useStore } from '../store';
-import { instructionsApi, projectsApi } from '../api';
+import { useStore } from '../../store';
+import { instructionsApi, projectsApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
 // ─── Section constants ──────────────────────────────────────────────────────
 const BOARD_SECTIONS = [
@@ -14,11 +14,12 @@ const BOARD_SECTIONS = [
 ];
 
 const SUBSCRIPTION_SECTIONS = [
-  { id: 'sub_clients',     label: 'Clients',      icon: Building2 },
-  { id: 'sub_team',        label: 'Team',         icon: Users },
-  { id: 'sub_boards',      label: 'Boards',       icon: LayoutGrid },
-  { id: 'sub_members',     label: 'Members',      icon: UserCheck },
-  { id: 'sub_superadmins', label: 'Superadmins',  icon: Crown },
+  { id: 'sub_files',       label: 'Instruction Files', icon: FileText },
+  { id: 'sub_clients',     label: 'Clients',           icon: Building2 },
+  { id: 'sub_team',        label: 'Team',              icon: Users },
+  { id: 'sub_boards',      label: 'Boards',            icon: LayoutGrid },
+  { id: 'sub_members',     label: 'Members',           icon: UserCheck },
+  { id: 'sub_superadmins', label: 'Superadmins',       icon: Crown },
 ];
 
 // ─── Main component ─────────────────────────────────────────────────────────
@@ -30,6 +31,13 @@ export default function SettingsPage() {
     archiveInstructionFile,
     unarchiveInstructionFile,
     deleteInstructionFile,
+    subscriptionInstructionFiles,
+    loadSubscriptionInstructionFiles,
+    createSubscriptionInstructionFile,
+    updateSubscriptionInstructionFile,
+    archiveSubscriptionInstructionFile,
+    unarchiveSubscriptionInstructionFile,
+    deleteSubscriptionInstructionFile,
     setCurrentPage,
     currentProjectId,
     projects,
@@ -88,7 +96,6 @@ export default function SettingsPage() {
   const [clientError, setClientError]         = useState('');
 
   // ── Instruction files state ─────────────────────────────────────────────
-  const [systemFiles, setSystemFiles]   = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [content, setContent]           = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
@@ -104,22 +111,21 @@ export default function SettingsPage() {
   const [actionError, setActionError]   = useState(null);
   const saveTimerRef = useRef(null);
 
-  // Load system files once
-  useEffect(() => {
-    instructionsApi.list(true, null).then(files => setSystemFiles(files)).catch(() => {});
-    // Refresh project data on mount so path_exists is current
-    loadProjects().catch(() => {});
-  }, []);
+  // Refresh project data on mount so path_exists is current
+  useEffect(() => { loadProjects().catch(() => {}); }, []);
 
-  // Reload custom files when board changes
+  // Reload board files when board changes
   useEffect(() => {
     loadInstructionFiles();
     setSelectedFile(null);
   }, [currentProjectId]);
 
-  // Load teams when subscription section is opened
-  // Refresh projects when connections section is opened so path_exists is current
+  // Load subscription files + other subscription data when entering subscription section
   useEffect(() => {
+    if (section === 'sub_files') {
+      loadSubscriptionInstructionFiles().catch(() => {});
+      setSelectedFile(null);
+    }
     if (section.startsWith('sub_')) {
       loadTeams().catch(() => {});
       loadClients().catch(() => {});
@@ -131,10 +137,14 @@ export default function SettingsPage() {
 
   const customActive   = instructionFiles.filter(f => !f.archived);
   const customArchived = instructionFiles.filter(f => f.archived);
-  const activeSystemFiles = systemFiles.filter(f => !f.archived);
+  const subFilesActive   = subscriptionInstructionFiles.filter(f => !f.archived);
+  const subFilesArchived = subscriptionInstructionFiles.filter(f => f.archived);
 
-  function scopeProjectId(scope) {
-    return scope === 'system' ? null : currentProjectId;
+  // scope = 'board' | 'subscription'
+  function getApiScope(scope) {
+    return scope === 'subscription'
+      ? { projectId: null, subscriptionId: subscription?.id || null }
+      : { projectId: currentProjectId, subscriptionId: subscription?.id || null };
   }
 
   async function selectFile(file, scope) {
@@ -142,7 +152,8 @@ export default function SettingsPage() {
     setSelectedFile({ ...file, scope });
     setContent(''); setDirty(false); setSaveStatus(null); setLoadingContent(true);
     try {
-      const data = await instructionsApi.get(file.name + '.md', scopeProjectId(scope));
+      const { projectId, subscriptionId } = getApiScope(scope);
+      const data = await instructionsApi.get(file.name + '.md', projectId, subscriptionId);
       setContent(data.content);
     } catch { setContent(''); }
     finally { setLoadingContent(false); }
@@ -158,7 +169,8 @@ export default function SettingsPage() {
     if (!selectedFile) return;
     setSaving(true);
     try {
-      await instructionsApi.update(selectedFile.name + '.md', val, scopeProjectId(selectedFile.scope));
+      const { projectId, subscriptionId } = getApiScope(selectedFile.scope);
+      await instructionsApi.update(selectedFile.name + '.md', val, projectId, subscriptionId);
       setDirty(false); setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
     } catch { setSaveStatus('error'); }
@@ -170,25 +182,29 @@ export default function SettingsPage() {
     clearTimeout(saveTimerRef.current);
     setSaving(true);
     try {
-      await instructionsApi.update(selectedFile.name + '.md', content, scopeProjectId(selectedFile.scope));
+      const { projectId, subscriptionId } = getApiScope(selectedFile.scope);
+      await instructionsApi.update(selectedFile.name + '.md', content, projectId, subscriptionId);
       setDirty(false); setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
     } catch { setSaveStatus('error'); }
     finally { setSaving(false); }
   }
 
-  async function handleArchive(file) {
+  // scope = 'board' | 'subscription'
+  async function handleArchive(file, scope = 'board') {
     setArchiveConfirm(null); setActionError(null);
     try {
-      await archiveInstructionFile(file.name + '.md');
+      if (scope === 'subscription') await archiveSubscriptionInstructionFile(file.name + '.md');
+      else await archiveInstructionFile(file.name + '.md');
       if (selectedFile?.name === file.name) setSelectedFile(null);
     } catch (err) { setActionError(err.response?.data?.error || 'Failed to archive'); }
   }
 
-  async function handleDelete(file) {
+  async function handleDelete(file, scope = 'board') {
     setDeleteConfirm(null); setActionError(null);
     try {
-      await deleteInstructionFile(file.name + '.md');
+      if (scope === 'subscription') await deleteSubscriptionInstructionFile(file.name + '.md');
+      else await deleteInstructionFile(file.name + '.md');
       if (selectedFile?.name === file.name) setSelectedFile(null);
     } catch (err) {
       const msg = err.response?.data?.error || 'Failed to delete';
@@ -197,9 +213,12 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleUnarchive(file) {
+  async function handleUnarchive(file, scope = 'board') {
     setActionError(null);
-    try { await unarchiveInstructionFile(file.name + '.md'); }
+    try {
+      if (scope === 'subscription') await unarchiveSubscriptionInstructionFile(file.name + '.md');
+      else await unarchiveInstructionFile(file.name + '.md');
+    }
     catch (err) { setActionError(err.response?.data?.error || 'Failed to restore'); }
   }
 
@@ -209,9 +228,15 @@ export default function SettingsPage() {
     if (!trimmed) { setNewFileError('Name is required'); return; }
     setNewFileError('');
     try {
-      const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`);
-      setAddingFile(false); setNewFileName('');
-      selectFile(file, 'custom');
+      if (section === 'sub_files') {
+        const file = await createSubscriptionInstructionFile(trimmed, `# ${trimmed}\n\n`);
+        setAddingFile(false); setNewFileName('');
+        selectFile(file, 'subscription');
+      } else {
+        const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`);
+        setAddingFile(false); setNewFileName('');
+        selectFile(file, 'board');
+      }
     } catch (err) { setNewFileError(err.response?.data?.error || 'Failed to create'); }
   }
 
@@ -285,41 +310,22 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* File list — only when section === 'files' */}
+        {/* File list — only when section === 'files' (board-scoped) */}
         {section === 'files' && (
           <div className="mx-2 mb-2 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
             <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-240px)]">
-
-              {/* System files */}
-              <div>
-                <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">System</p>
-                <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">Affects all boards</p>
-                {activeSystemFiles.map(f => (
-                  <FileRow key={f.name} file={f} scope="system"
-                    actions={
-                      <span className="flex items-center gap-0.5 shrink-0 opacity-50" title="System file — affects all boards">
-                        <Lock size={9} />
-                      </span>
-                    }
-                  />
-                ))}
-              </div>
-
-              <div className="border-t border-border/60" />
-
-              {/* Custom files */}
               <div>
                 <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">Custom</p>
                 <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">This board only</p>
                 {customActive.map(f => (
-                  <FileRow key={f.name} file={f} scope="custom"
+                  <FileRow key={f.name} file={f} scope="board"
                     actions={
                       <>
-                        <button onClick={() => setArchiveConfirm(f)} title="Archive"
+                        <button onClick={() => setArchiveConfirm({ file: f, scope: 'board' })} title="Archive"
                           className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
                           <Archive size={10} />
                         </button>
-                        <button onClick={() => setDeleteConfirm(f)} title="Delete"
+                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
                           className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
                           <Trash2 size={10} />
                         </button>
@@ -358,7 +364,7 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* Archived */}
+              {/* Archived board files */}
               {customArchived.length > 0 && (
                 <div>
                   <button
@@ -369,14 +375,96 @@ export default function SettingsPage() {
                     Archived ({customArchived.length})
                   </button>
                   {showArchived && customArchived.map(f => (
-                    <FileRow key={f.name} file={f} scope="custom"
+                    <FileRow key={f.name} file={f} scope="board"
                       actions={
                         <>
-                          <button onClick={() => handleUnarchive(f)} title="Restore"
+                          <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
                             className="p-0.5 text-gray-600 hover:text-accent transition-colors">
                             <RotateCcw size={10} />
                           </button>
-                          <button onClick={() => setDeleteConfirm(f)} title="Delete permanently"
+                          <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
+                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
+                            <Trash2 size={10} />
+                          </button>
+                        </>
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Subscription file list — only when section === 'sub_files' */}
+        {section === 'sub_files' && (
+          <div className="mx-2 mb-2 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+            <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-240px)]">
+              <div>
+                <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">Workspace</p>
+                <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">Shared by all boards</p>
+                {subFilesActive.map(f => (
+                  <FileRow key={f.name} file={f} scope="subscription"
+                    actions={
+                      <>
+                        <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
+                          className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                          <Archive size={10} />
+                        </button>
+                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
+                          className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
+                          <Trash2 size={10} />
+                        </button>
+                      </>
+                    }
+                  />
+                ))}
+
+                {addingFile ? (
+                  <form onSubmit={handleCreate} className="mt-1.5 px-1">
+                    <input
+                      autoFocus value={newFileName}
+                      onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
+                      onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''))}
+                      placeholder="filename"
+                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                    />
+                    {newFileError && <p className="text-[9px] text-red-400 mt-0.5">{newFileError}</p>}
+                    <div className="flex gap-1.5 mt-1.5">
+                      <button type="submit" className="flex-1 py-0.5 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-md transition-colors">Create</button>
+                      <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); }}
+                        className="px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-300 rounded-md transition-colors">Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); }}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-[11px] text-gray-600 hover:text-gray-400 transition-colors rounded-lg"
+                  >
+                    <Plus size={11} /> New file
+                  </button>
+                )}
+              </div>
+
+              {/* Archived subscription files */}
+              {subFilesArchived.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowArchived(v => !v)}
+                    className="flex items-center gap-1.5 px-1.5 py-1 w-full text-[9px] font-semibold text-gray-600 uppercase tracking-widest hover:text-gray-400 transition-colors"
+                  >
+                    {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+                    Archived ({subFilesArchived.length})
+                  </button>
+                  {showArchived && subFilesArchived.map(f => (
+                    <FileRow key={f.name} file={f} scope="subscription"
+                      actions={
+                        <>
+                          <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
+                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                            <RotateCcw size={10} />
+                          </button>
+                          <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
                             className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
                             <Trash2 size={10} />
                           </button>
@@ -634,17 +722,17 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Editor panel (section === 'files') */}
-        {section === 'files' && (<>
+        {/* Editor panel — shared by board files ('files') and subscription files ('sub_files') */}
+        {(section === 'files' || section === 'sub_files') && (<>
           {selectedFile ? (
             <>
               <div className="flex items-center justify-between px-6 py-3.5 border-b border-border shrink-0 bg-surface-1">
                 <div className="flex items-center gap-2.5">
                   <FileText size={13} className="text-accent" />
                   <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
-                  {selectedFile.scope === 'system' && (
+                  {selectedFile.scope === 'subscription' && (
                     <span className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
-                      <Lock size={8} /> system
+                      workspace
                     </span>
                   )}
                   {selectedFile.archived && (
@@ -689,9 +777,9 @@ export default function SettingsPage() {
                   This file is archived and read-only. Restore it to edit.
                 </div>
               )}
-              {selectedFile.scope === 'system' && (
+              {selectedFile.scope === 'subscription' && (
                 <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-[10px] text-accent/60">
-                  System file — changes affect all boards.
+                  Workspace file — shared by all boards in this subscription.
                 </div>
               )}
             </>
@@ -721,10 +809,10 @@ export default function SettingsPage() {
       {archiveConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
-            <p className="text-sm font-semibold text-gray-200">Archive "{archiveConfirm.name}.md"?</p>
+            <p className="text-sm font-semibold text-gray-200">Archive "{archiveConfirm.file.name}.md"?</p>
             <p className="text-xs text-gray-500">The file will be moved to the archive. Agents referencing it will still work while it remains on disk.</p>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => handleArchive(archiveConfirm)} className="flex-1 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors">Archive</button>
+              <button onClick={() => handleArchive(archiveConfirm.file, archiveConfirm.scope)} className="flex-1 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors">Archive</button>
               <button onClick={() => setArchiveConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
             </div>
           </div>
@@ -735,10 +823,10 @@ export default function SettingsPage() {
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
-            <p className="text-sm font-semibold text-gray-200">Delete "{deleteConfirm.name}.md"?</p>
+            <p className="text-sm font-semibold text-gray-200">Delete "{deleteConfirm.file.name}.md"?</p>
             <p className="text-xs text-gray-500">This permanently removes the file. If any agents reference it, the delete will fail and you'll be prompted to archive instead.</p>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors">Delete</button>
+              <button onClick={() => handleDelete(deleteConfirm.file, deleteConfirm.scope)} className="flex-1 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors">Delete</button>
               <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
             </div>
           </div>

@@ -15,12 +15,15 @@ All UI text must be in **English** — labels, placeholders, button text, error 
 ## Monorepo Structure
 ```
 AutoKan/
-├── instructions/            # Agent system prompts + context files (selectable in UI)
-│   ├── pm.md                # PM agent system prompt (methodology, not identity)
-│   ├── developer.md         # Developer agent system prompt
-│   ├── tester.md            # Tester agent system prompt
-│   ├── project.md           # Full project context (tech stack, conventions, state)
-│   └── client.md            # Client context (priorities, expectations, style)
+├── instructions/            # All instruction files — scoped by subscription
+│   └── {subscriptionId}/    # One folder per subscription (e.g. sub_default/)
+│       ├── project-manager.md  # System agent prompts — shared by all boards
+│       ├── developer.md
+│       ├── tester.md
+│       ├── archived/           # Archived subscription-level files
+│       └── {projectId}/        # Per-board context (auto-scaffolded)
+│           ├── client.md       # Client context for this board
+│           └── project.md      # Project context for this board
 ├── server/                  # Node.js + Express + SQLite API (port 3001)
 │   └── src/
 │       ├── db/index.js      # Schema, init, seeding, migrations
@@ -192,6 +195,58 @@ npm run dev                # Start frontend + backend
 # Frontend: http://localhost:5173
 # API: http://localhost:3001/api
 ```
+
+## Frontend Architecture (`app/src/`)
+
+### Folder Structure
+Feature subdirectories are created **on demand** — only when 3+ related files exist:
+
+```
+components/
+├── sidebar/      # Sidebar + sub-panels (extract when Sidebar.jsx > 900 lines)
+├── task/         # TaskDetail + sub-panels
+├── settings/     # SettingsPage + sub-panels (ConnectionsPanel already extracted)
+├── agent/        # AgentForm + TemplatesModal
+├── board/        # Column, TaskCard, Board-level UI
+└── shared/       # Used in 3+ feature areas (Modal, Badge, etc.)
+hooks/            # Custom hooks when extracted logic > 40 lines
+constants/        # Column IDs, enums, static config
+```
+
+All components currently live flat in `components/` — move to feature folders as the 900-line threshold is hit.
+
+### File Size Thresholds
+| Lines | Action |
+|---|---|
+| >400 | Look for extraction opportunities |
+| >600 | Extract at least one sub-component or hook |
+| >900 | Must extract before adding more features |
+
+### When to Create a New File
+**Extract to its own file when:**
+- The piece manages its own local state (`useState`, `useEffect`)
+- It is used in 2+ parent components
+- Extracting it reduces the parent by 80+ lines
+- It represents a distinct, named UI panel (e.g. "Connections panel", "PM conversation")
+
+**Keep inline when:**
+- No local state, used once, under 40 lines, name only meaningful in parent context
+
+### Store / API Thresholds
+- `store/index.js`: don't split until >900 lines — then use Zustand slices per domain (`store/tasks.js`, `store/agents.js`, `store/ui.js`)
+- `api/index.js`: don't split until >400 lines — then one file per resource group, re-export from `api/index.js` for backward compat
+
+### Agent Execution Rules
+When an AI agent implements a task, it must follow these rules to preserve architecture:
+
+1. **Read before touching** — read the full file before editing it; never edit by filename alone
+2. **Check for existing utilities** — search `store/`, `api/`, `hooks/`, and shared components before writing a new helper
+3. **Match the local pattern** — naming, error handling, data fetching style (e.g. `api.get(...).then(r => r.data)`)
+4. **Prefer the smallest change** — add to an existing file → create a new file → create a new folder (only when ≥3 files belong in it)
+5. **Respect size thresholds** — if a file is already >600 lines and your change adds 50+ lines, extract first then add
+6. **One unit of change** — feature + its architectural cleanup go in the same commit, not a follow-up
+
+---
 
 ## Agent Instruction File System
 Each agent has three layers:

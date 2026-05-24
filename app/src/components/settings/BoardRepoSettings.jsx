@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { GitBranch, FolderOpen, Github, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
-import { projectsApi } from '../api';
-import { useStore } from '../store';
+import { projectsApi } from '../../api';
+import { useStore } from '../../store';
 
 /**
  * Inline repo settings panel shown inside BoardsModal when a board card is expanded.

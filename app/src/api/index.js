@@ -81,21 +81,29 @@ export const secretsApi = {
   resolve: (id, status) => api.patch(`/secrets/${id}/resolve`, { status }).then(r => r.data),
 };
 
+function instrParams({ subscriptionId = null, projectId = null, includeArchived = false } = {}) {
+  const p = {};
+  if (includeArchived)   p.include_archived = true;
+  if (subscriptionId)    p.subscription_id  = subscriptionId;
+  if (projectId)         p.project_id       = projectId;
+  return p;
+}
+
 export const instructionsApi = {
-  list: (includeArchived = false, projectId = null) =>
-    api.get('/instructions', { params: { include_archived: includeArchived, project_id: projectId || undefined } }).then(r => r.data),
-  get: (filename, projectId = null) =>
-    api.get(`/instructions/${filename}`, { params: { project_id: projectId || undefined } }).then(r => r.data),
-  create: (data, projectId = null) =>
-    api.post('/instructions', data, { params: { project_id: projectId || undefined } }).then(r => r.data),
-  update: (filename, content, projectId = null) =>
-    api.patch(`/instructions/${filename}`, { content }, { params: { project_id: projectId || undefined } }).then(r => r.data),
-  archive: (filename, projectId = null) =>
-    api.post(`/instructions/${filename}/archive`, {}, { params: { project_id: projectId || undefined } }).then(r => r.data),
-  unarchive: (filename, projectId = null) =>
-    api.post(`/instructions/${filename}/unarchive`, {}, { params: { project_id: projectId || undefined } }).then(r => r.data),
-  delete: (filename, projectId = null) =>
-    api.delete(`/instructions/${filename}`, { params: { project_id: projectId || undefined } }).then(r => r.data),
+  list: (includeArchived = false, projectId = null, subscriptionId = null) =>
+    api.get('/instructions', { params: instrParams({ includeArchived, projectId, subscriptionId }) }).then(r => r.data),
+  get: (filename, projectId = null, subscriptionId = null) =>
+    api.get(`/instructions/${filename}`, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  create: (data, projectId = null, subscriptionId = null) =>
+    api.post('/instructions', data, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  update: (filename, content, projectId = null, subscriptionId = null) =>
+    api.patch(`/instructions/${filename}`, { content }, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  archive: (filename, projectId = null, subscriptionId = null) =>
+    api.post(`/instructions/${filename}/archive`, {}, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  unarchive: (filename, projectId = null, subscriptionId = null) =>
+    api.post(`/instructions/${filename}/unarchive`, {}, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  delete: (filename, projectId = null, subscriptionId = null) =>
+    api.delete(`/instructions/${filename}`, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
 };
 
 export const rolesApi = {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, UserPlus, Trash2, Copy, Check, Mail } from 'lucide-react';
-import { invitesApi } from '../api';
+import { invitesApi } from '../../api';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function InviteModal({ onClose }) {
