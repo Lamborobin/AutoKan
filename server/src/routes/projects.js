@@ -1,10 +1,28 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
+const path = require('path');
+const fs = require('fs');
+const { execSync } = require('child_process');
 const { getDb, generateProjectId, VELOUR_ID } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { scaffoldProjectInstructions } = require('../utils/instructions');
 
 const router = express.Router();
+
+const PROJECT_ROOT = path.join(__dirname, '../../..');
+const CLIENT_DIR = path.join(PROJECT_ROOT, 'client');
+
+// Ensure client/ folder exists
+if (!fs.existsSync(CLIENT_DIR)) fs.mkdirSync(CLIENT_DIR, { recursive: true });
+
+// Enrich a project row with path_exists status
+function enrichProject(p) {
+  if (!p) return p;
+  const pathExists = p.client_path
+    ? fs.existsSync(path.join(PROJECT_ROOT, p.client_path))
+    : null;
+  return { ...p, path_exists: pathExists };
+}
 
 const PROJECT_SELECT = `
   SELECT p.*,
@@ -16,6 +34,24 @@ const PROJECT_SELECT = `
   LEFT JOIN clients c ON p.client_id = c.id
   LEFT JOIN users cb ON p.created_by = cb.id
 `;
+
+// GET /api/projects/client-repos — list subfolders in client/
+router.get('/client-repos', requireAuth, (req, res) => {
+  try {
+    if (!fs.existsSync(CLIENT_DIR)) return res.json([]);
+    const entries = fs.readdirSync(CLIENT_DIR, { withFileTypes: true });
+    const folders = entries
+      .filter(e => e.isDirectory())
+      .map(e => ({
+        name: e.name,
+        client_path: `client/${e.name}`,
+        is_git: fs.existsSync(path.join(CLIENT_DIR, e.name, '.git')),
+      }));
+    res.json(folders);
+  } catch (e) {
+    res.json([]);
+  }
+});
 
 // GET /api/projects — only boards the user is a member of
 router.get('/', requireAuth, (req, res) => {
@@ -30,7 +66,7 @@ router.get('/', requireAuth, (req, res) => {
       WHERE ${includeArchived ? '1=1' : 'p.archived_at IS NULL'}
       ORDER BY p.created_at ASC
     `).all();
-    return res.json(projects);
+    return res.json(projects.map(enrichProject));
   }
 
   const archivedFilter = includeArchived ? '1=1' : 'p.archived_at IS NULL';
@@ -42,7 +78,7 @@ router.get('/', requireAuth, (req, res) => {
       WHERE ${archivedFilter}
       ORDER BY p.created_at ASC
     `).all();
-    return res.json(projects);
+    return res.json(projects.map(enrichProject));
   }
 
   const projects = db.prepare(`
@@ -54,7 +90,7 @@ router.get('/', requireAuth, (req, res) => {
       )
     ORDER BY p.created_at ASC
   `).all(userId);
-  res.json(projects);
+  res.json(projects.map(enrichProject));
 });
 
 // GET /api/projects/:id
@@ -65,7 +101,7 @@ router.get('/:id', requireAuth, (req, res) => {
     WHERE p.id = ?
   `).get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  res.json(project);
+  res.json(enrichProject(project));
 });
 
 // POST /api/projects
@@ -111,7 +147,7 @@ router.post('/', requireAuth, (req, res) => {
 // PATCH /api/projects/:id
 router.patch('/:id', requireAuth, (req, res) => {
   const db = getDb();
-  const { name, description, client_name, client_id, color, emoji } = req.body;
+  const { name, description, client_name, client_id, color, emoji, repo_url, client_path } = req.body;
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
@@ -123,6 +159,14 @@ router.patch('/:id', requireAuth, (req, res) => {
     if (clientRow) resolvedClientName = clientRow.name;
   }
 
+  // Validate client_path stays within client/ if provided
+  if (client_path !== undefined && client_path !== null) {
+    const normalized = path.normalize(client_path);
+    if (!normalized.startsWith('client/') && normalized !== 'client') {
+      return res.status(400).json({ error: 'client_path must be under client/' });
+    }
+  }
+
   db.prepare(`
     UPDATE projects SET
       name = COALESCE(?, name),
@@ -131,6 +175,8 @@ router.patch('/:id', requireAuth, (req, res) => {
       client_id = COALESCE(?, client_id),
       color = COALESCE(?, color),
       emoji = COALESCE(?, emoji),
+      repo_url = ?,
+      client_path = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `).run(
@@ -140,10 +186,46 @@ router.patch('/:id', requireAuth, (req, res) => {
     resolvedClientId || null,
     color || null,
     emoji || null,
+    repo_url !== undefined ? (repo_url || null) : project.repo_url,
+    client_path !== undefined ? (client_path || null) : project.client_path,
     req.params.id
   );
 
-  res.json(db.prepare(`${PROJECT_SELECT} WHERE p.id = ?`).get(req.params.id));
+  res.json(enrichProject(db.prepare(`${PROJECT_SELECT} WHERE p.id = ?`).get(req.params.id)));
+});
+
+// POST /api/projects/:id/clone — clone repo_url into client/<folder>
+router.post('/:id/clone', requireAuth, (req, res) => {
+  const db = getDb();
+  const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
+  if (!project) return res.status(404).json({ error: 'Project not found' });
+
+  const repoUrl = req.body.repo_url || project.repo_url;
+  if (!repoUrl) return res.status(400).json({ error: 'repo_url is required' });
+
+  // Derive folder name from URL (last segment, strip .git)
+  const folderName = (req.body.folder_name || repoUrl.split('/').pop().replace(/\.git$/, '')).replace(/[^a-zA-Z0-9_-]/g, '-');
+  const clientPath = `client/${folderName}`;
+  const absPath = path.join(PROJECT_ROOT, clientPath);
+
+  if (fs.existsSync(absPath)) {
+    // Already exists — just connect
+    db.prepare('UPDATE projects SET repo_url = ?, client_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(repoUrl, clientPath, project.id);
+    return res.json({ ok: true, client_path: clientPath, already_existed: true,
+      project: enrichProject(db.prepare(`${PROJECT_SELECT} WHERE p.id = ?`).get(project.id)) });
+  }
+
+  try {
+    execSync(`git clone "${repoUrl}" "${absPath}"`, { stdio: 'pipe', timeout: 60000 });
+    db.prepare('UPDATE projects SET repo_url = ?, client_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(repoUrl, clientPath, project.id);
+    res.json({ ok: true, client_path: clientPath,
+      project: enrichProject(db.prepare(`${PROJECT_SELECT} WHERE p.id = ?`).get(project.id)) });
+  } catch (e) {
+    const msg = e.stderr?.toString() || e.message || 'Clone failed';
+    res.status(500).json({ error: msg });
+  }
 });
 
 // POST /api/projects/:id/archive

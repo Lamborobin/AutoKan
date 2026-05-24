@@ -1020,6 +1020,19 @@ A feature is "done" when:
     }
   }
 
+  // Migration: add repo_url and client_path to projects
+  {
+    const projCols = db.prepare('PRAGMA table_info(projects)').all().map(c => c.name);
+    if (!projCols.includes('repo_url')) {
+      db.exec('ALTER TABLE projects ADD COLUMN repo_url TEXT');
+      console.log('✅ Migrated: added repo_url to projects');
+    }
+    if (!projCols.includes('client_path')) {
+      db.exec('ALTER TABLE projects ADD COLUMN client_path TEXT');
+      console.log('✅ Migrated: added client_path to projects');
+    }
+  }
+
   console.log('✅ Database initialized at', DB_PATH);
   return db;
 }

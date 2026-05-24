@@ -30,6 +30,8 @@ export const projectsApi = {
   archive: (id) => api.post(`/projects/${id}/archive`).then(r => r.data),
   unarchive: (id) => api.post(`/projects/${id}/unarchive`).then(r => r.data),
   delete: (id) => api.delete(`/projects/${id}`).then(r => r.data),
+  clone: (id, data) => api.post(`/projects/${id}/clone`, data).then(r => r.data),
+  clientRepos: () => api.get('/projects/client-repos').then(r => r.data),
 };
 
 export const tasksApi = {

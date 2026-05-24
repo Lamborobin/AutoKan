@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { X, Search, Plus, LayoutGrid, ChevronDown } from 'lucide-react';
+import { X, Search, Plus, LayoutGrid, ChevronDown, GitBranch, Settings2, AlertTriangle } from 'lucide-react';
 import { useStore } from '../store';
+import BoardRepoSettings from './BoardRepoSettings';
 
 export default function BoardsModal({ onClose }) {
   const { projects, clients, user, isSuperAdmin, setCurrentProject, createProject, createClient } = useStore();
@@ -118,27 +119,63 @@ export default function BoardsModal({ onClose }) {
 
   function BoardCard({ p }) {
     const client = activeClients.find(c => c.id === p.client_id);
+    const [showRepo, setShowRepo] = useState(false);
+    const { projects, loadProjects } = useStore();
+
+    // Repo status
+    const repoStatus = !p.client_path ? 'none'
+      : p.path_exists ? 'connected'
+      : 'missing';
+
+    function handleRepoUpdated(updated) {
+      loadProjects();
+    }
+
     return (
-      <button
-        onClick={() => { setCurrentProject(p.id); onClose(); }}
-        className="w-full text-left p-3 bg-surface-2 border border-border rounded-xl hover:border-accent/40 hover:bg-surface-3 transition-all group"
-      >
-        <div className="flex items-start gap-2.5">
-          <span className="text-xl shrink-0">{p.emoji || '📋'}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-200 truncate group-hover:text-white">{p.name}</p>
-            {client && (
-              <span
-                className="inline-flex items-center gap-1 mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
-                style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}40` }}
-              >
-                {client.name}
-              </span>
+      <div className="bg-surface-2 border border-border rounded-xl hover:border-accent/40 transition-all group">
+        <div className="flex items-start gap-2.5 p-3">
+          <button
+            onClick={() => { setCurrentProject(p.id); onClose(); }}
+            className="flex-1 flex items-start gap-2.5 text-left min-w-0"
+          >
+            <span className="text-xl shrink-0">{p.emoji || '📋'}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-200 truncate group-hover:text-white">{p.name}</p>
+              {client && (
+                <span
+                  className="inline-flex items-center gap-1 mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                  style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}40` }}
+                >
+                  {client.name}
+                </span>
+              )}
+            </div>
+          </button>
+
+          {/* Repo status + settings toggle */}
+          <div className="flex items-center gap-1 shrink-0">
+            {repoStatus === 'connected' && (
+              <span title={p.client_path} className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
             )}
+            {repoStatus === 'missing' && (
+              <AlertTriangle size={11} className="text-amber-400" title={`Folder not found: ${p.client_path}`} />
+            )}
+            {repoStatus === 'none' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-gray-700 shrink-0" title="No repository connected" />
+            )}
+            <button
+              onClick={e => { e.stopPropagation(); setShowRepo(v => !v); }}
+              className={`p-1 rounded transition-colors ${showRepo ? 'text-accent' : 'text-gray-600 hover:text-gray-400'}`}
+              title="Repository settings"
+            >
+              <GitBranch size={12} />
+            </button>
           </div>
         </div>
+
+        {/* Creator row */}
         {(p.created_by_name || p.created_by_email) && (
-          <div className="flex items-center gap-1.5 mt-2.5">
+          <div className="flex items-center gap-1.5 px-3 pb-2.5">
             {p.created_by_picture ? (
               <img src={p.created_by_picture} className="w-4 h-4 rounded-full shrink-0" alt="" />
             ) : (
@@ -149,7 +186,18 @@ export default function BoardsModal({ onClose }) {
             <span className="text-[10px] text-gray-500 truncate">{p.created_by_name?.trim() || p.created_by_email}</span>
           </div>
         )}
-      </button>
+
+        {/* Inline repo settings panel */}
+        {showRepo && (
+          <div className="px-3 pb-3">
+            <BoardRepoSettings
+              project={p}
+              onClose={() => setShowRepo(false)}
+              onUpdated={handleRepoUpdated}
+            />
+          </div>
+        )}
+      </div>
     );
   }
 
