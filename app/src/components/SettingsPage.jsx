@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight, X, Check, ArrowLeft, SlidersHorizontal, Sun, Moon, Crown, Shield, UserMinus, Building2, Pencil } from 'lucide-react';
+import { FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight, X, Check, ArrowLeft, SlidersHorizontal, Sun, Moon, Crown, Shield, UserMinus, Building2, Pencil, GitBranch, Github, FolderOpen, Loader2, AlertTriangle } from 'lucide-react';
 import { useStore } from '../store';
-import { instructionsApi } from '../api';
+import { instructionsApi, projectsApi } from '../api';
 
 export default function SettingsPage() {
   const {
@@ -15,6 +15,9 @@ export default function SettingsPage() {
     theme,
     setTheme,
     currentProjectId,
+    projects,
+    updateProject,
+    loadProjects,
     isSuperAdmin,
     subscription,
     subscriptionAdmins,
@@ -29,7 +32,9 @@ export default function SettingsPage() {
     deleteClient,
   } = useStore();
 
-  const [section, setSection] = useState('files'); // 'files' | 'preferences' | 'workspace' | 'clients'
+  const currentProject = projects.find(p => p.id === currentProjectId);
+
+  const [section, setSection] = useState('files'); // 'files' | 'preferences' | 'workspace' | 'clients' | 'connections'
 
   // Workspace / superadmin state
   const [adminEmail, setAdminEmail] = useState('');
@@ -253,6 +258,7 @@ export default function SettingsPage() {
         <nav className="px-2 py-2 border-b border-border shrink-0 space-y-0.5">
           {[
             { id: 'files', label: 'Instruction Files', icon: FileText },
+            { id: 'connections', label: 'Connections', icon: GitBranch },
             { id: 'preferences', label: 'Preferences', icon: SlidersHorizontal },
             { id: 'clients', label: 'Clients', icon: Building2 },
           ].map(({ id, label, icon: Icon }) => (
@@ -265,6 +271,9 @@ export default function SettingsPage() {
             >
               <Icon size={12} />
               {label}
+              {id === 'connections' && currentProject?.client_path && (
+                <span className={`ml-auto w-1.5 h-1.5 rounded-full ${currentProject.path_exists ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+              )}
             </button>
           ))}
           {isSuperAdmin && (
@@ -603,6 +612,26 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* Connections panel */}
+        {section === 'connections' && currentProject && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg">
+              <div className="flex items-center gap-2.5 mb-1">
+                <GitBranch size={15} className="text-accent" />
+                <h2 className="text-sm font-semibold text-gray-200">Connections</h2>
+              </div>
+              <p className="text-xs text-gray-600 mb-6">
+                Koppla detta board till ett kodrepo. Agenter använder mappen för att läsa och skriva kod.
+              </p>
+              <ConnectionsPanel
+                project={currentProject}
+                onUpdated={() => loadProjects()}
+                updateProject={updateProject}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Editor panel (only when section === 'files') */}
         {section === 'files' && (<>
         {selectedFile ? (
@@ -722,6 +751,170 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function ConnectionsPanel({ project, onUpdated, updateProject }) {
+  const [repoUrl, setRepoUrl] = useState(project.repo_url || '');
+  const [clientRepos, setClientRepos] = useState([]);
+  const [loadingFolders, setLoadingFolders] = useState(true);
+  const [cloning, setCloning] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  useEffect(() => {
+    projectsApi.clientRepos()
+      .then(setClientRepos)
+      .catch(() => setClientRepos([]))
+      .finally(() => setLoadingFolders(false));
+  }, []);
+
+  async function handleClone() {
+    if (!repoUrl.trim()) return;
+    setCloning(true); setError(''); setSuccess('');
+    try {
+      const result = await projectsApi.clone(project.id, { repo_url: repoUrl.trim() });
+      onUpdated(result.project);
+      setSuccess(result.already_existed
+        ? `Redan klonad — kopplad till ${result.client_path}`
+        : `Klonad och kopplad till ${result.client_path} ✓`);
+      // Refresh folder list
+      projectsApi.clientRepos().then(setClientRepos).catch(() => {});
+    } catch (e) {
+      setError(e.response?.data?.error || 'Kloning misslyckades');
+    } finally {
+      setCloning(false);
+    }
+  }
+
+  async function handleConnectLocal(client_path) {
+    setSaving(true); setError(''); setSuccess('');
+    try {
+      await updateProject(project.id, { client_path, repo_url: null });
+      onUpdated();
+      setSuccess(`Kopplad till ${client_path} ✓`);
+    } catch {
+      setError('Misslyckades att koppla');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setSaving(true);
+    try {
+      await updateProject(project.id, { client_path: null, repo_url: null });
+      setRepoUrl('');
+      onUpdated();
+      setSuccess('Frånkopplad');
+    } catch {
+      setError('Misslyckades');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const isConnected = !!project.client_path;
+
+  return (
+    <div className="space-y-6">
+      {/* Status */}
+      {isConnected ? (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
+          project.path_exists
+            ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
+            : 'bg-amber-500/10 border-amber-500/25 text-amber-300'
+        }`}>
+          {project.path_exists ? <Check size={15} className="shrink-0" /> : <AlertTriangle size={15} className="shrink-0" />}
+          <span className="font-mono text-xs flex-1 truncate">{project.client_path}</span>
+          <span className="text-xs opacity-70 shrink-0">{project.path_exists ? 'Ansluten' : 'Mappen saknas'}</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-surface-2 text-sm text-gray-500">
+          <GitBranch size={15} className="shrink-0" />
+          Inget repo kopplat ännu
+        </div>
+      )}
+
+      {/* GitHub URL */}
+      <div>
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+          <Github size={11} /> GitHub URL
+        </p>
+        <div className="flex gap-2">
+          <input
+            value={repoUrl}
+            onChange={e => setRepoUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleClone()}
+            placeholder="https://github.com/user/repo"
+            className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+          />
+          <button
+            onClick={handleClone}
+            disabled={cloning || !repoUrl.trim()}
+            className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+          >
+            {cloning ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+            {cloning ? 'Klonar…' : 'Spara & klona'}
+          </button>
+        </div>
+        <p className="text-[11px] text-gray-600 mt-2">
+          Repot klonas automatiskt till <span className="font-mono">client/</span> och kopplas till detta board.
+        </p>
+      </div>
+
+      {/* Local folders */}
+      <div>
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+          <FolderOpen size={11} /> Befintliga mappar i client/
+        </p>
+        {loadingFolders ? (
+          <div className="flex items-center gap-2 text-gray-500 text-sm">
+            <Loader2 size={13} className="animate-spin" /> Söker…
+          </div>
+        ) : clientRepos.length === 0 ? (
+          <p className="text-sm text-gray-600">
+            Inga mappar hittades i <span className="font-mono">client/</span>. Klona ett repo ovan så skapas det automatiskt.
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {clientRepos.map(r => (
+              <button
+                key={r.client_path}
+                onClick={() => handleConnectLocal(r.client_path)}
+                disabled={saving}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm transition-colors text-left ${
+                  project.client_path === r.client_path
+                    ? 'border-accent bg-accent/10 text-accent'
+                    : 'border-border bg-surface-2 text-gray-400 hover:text-gray-200 hover:border-gray-500'
+                }`}
+              >
+                <FolderOpen size={13} className="shrink-0" />
+                <span className="font-mono flex-1 text-xs">{r.client_path}</span>
+                {r.is_git && <span className="text-[10px] text-gray-600 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded">git</span>}
+                {project.client_path === r.client_path && <Check size={13} className="text-accent shrink-0" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Feedback */}
+      {error && <p className="text-red-400 text-sm flex items-center gap-2"><AlertTriangle size={13} />{error}</p>}
+      {success && <p className="text-emerald-400 text-sm flex items-center gap-2"><Check size={13} />{success}</p>}
+
+      {/* Disconnect */}
+      {isConnected && (
+        <button
+          onClick={handleDisconnect}
+          disabled={saving}
+          className="text-xs text-gray-600 hover:text-red-400 transition-colors flex items-center gap-1.5 pt-2 border-t border-border w-full"
+        >
+          <X size={11} /> Koppla ifrån
+        </button>
       )}
     </div>
   );
