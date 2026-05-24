@@ -2,6 +2,9 @@
 
 **What This Is**: Autonomous AI agent task orchestration system — a kanban board where AI agents (PM, Developer, Tester) work through tasks autonomously with human checkpoints. Built for full ownership without third-party dependencies.
 
+## UI Language Rule
+All UI text must be in **English** — labels, placeholders, button text, error messages, headings, tooltips. This applies everywhere in the codebase. Do NOT use Swedish or any other language in the UI, even in comments that end up rendered. User-generated content (task names, file contents, etc.) is exempt — only static UI strings.
+
 ## Tech Stack
 - **Backend**: Node.js + Express + SQLite (better-sqlite3)
 - **Frontend**: React + Tailwind + Vite

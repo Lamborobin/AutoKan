@@ -38,18 +38,19 @@ const PROJECT_SELECT = `
 // GET /api/projects/client-repos — list subfolders in client/
 router.get('/client-repos', requireAuth, (req, res) => {
   try {
-    if (!fs.existsSync(CLIENT_DIR)) return res.json([]);
+    if (!fs.existsSync(CLIENT_DIR)) return res.json({ basePath: CLIENT_DIR, folders: [] });
     const entries = fs.readdirSync(CLIENT_DIR, { withFileTypes: true });
     const folders = entries
       .filter(e => e.isDirectory())
       .map(e => ({
         name: e.name,
         client_path: `client/${e.name}`,
+        abs_path: path.join(CLIENT_DIR, e.name),
         is_git: fs.existsSync(path.join(CLIENT_DIR, e.name, '.git')),
       }));
-    res.json(folders);
+    res.json({ basePath: CLIENT_DIR, folders });
   } catch (e) {
-    res.json([]);
+    res.json({ basePath: CLIENT_DIR, folders: [] });
   }
 });
 
@@ -161,7 +162,8 @@ router.patch('/:id', requireAuth, (req, res) => {
 
   // Validate client_path stays within client/ if provided
   if (client_path !== undefined && client_path !== null) {
-    const normalized = path.normalize(client_path);
+    // Normalize and convert backslashes (Windows) to forward slashes before checking
+    const normalized = path.normalize(client_path).replace(/\\/g, '/');
     if (!normalized.startsWith('client/') && normalized !== 'client') {
       return res.status(400).json({ error: 'client_path must be under client/' });
     }

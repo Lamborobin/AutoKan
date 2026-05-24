@@ -1,8 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight, X, Check, ArrowLeft, SlidersHorizontal, Sun, Moon, Crown, Shield, UserMinus, Building2, Pencil, GitBranch, Github, FolderOpen, Loader2, AlertTriangle } from 'lucide-react';
+import {
+  FileText, Plus, Archive, RotateCcw, Trash2, Save, Lock, ChevronDown, ChevronRight,
+  X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
+  Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck,
+} from 'lucide-react';
 import { useStore } from '../store';
 import { instructionsApi, projectsApi } from '../api';
 
+// ─── Section constants ──────────────────────────────────────────────────────
+const BOARD_SECTIONS = [
+  { id: 'files',       label: 'Instruction Files', icon: FileText },
+  { id: 'connections', label: 'Connections',        icon: GitBranch },
+];
+
+const SUBSCRIPTION_SECTIONS = [
+  { id: 'sub_clients',     label: 'Clients',      icon: Building2 },
+  { id: 'sub_team',        label: 'Team',         icon: Users },
+  { id: 'sub_boards',      label: 'Boards',       icon: LayoutGrid },
+  { id: 'sub_members',     label: 'Members',      icon: UserCheck },
+  { id: 'sub_superadmins', label: 'Superadmins',  icon: Crown },
+];
+
+// ─── Main component ─────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const {
     instructionFiles,
@@ -12,8 +31,6 @@ export default function SettingsPage() {
     unarchiveInstructionFile,
     deleteInstructionFile,
     setCurrentPage,
-    theme,
-    setTheme,
     currentProjectId,
     projects,
     updateProject,
@@ -29,69 +46,61 @@ export default function SettingsPage() {
     createClient,
     updateClient,
     archiveClient,
-    deleteClient,
+    teams,
+    loadTeams,
   } = useStore();
 
   const currentProject = projects.find(p => p.id === currentProjectId);
 
-  const [section, setSection] = useState('files'); // 'files' | 'preferences' | 'workspace' | 'clients' | 'connections'
+  const [section, setSection] = useState('files');
 
-  // Workspace / superadmin state
-  const [adminEmail, setAdminEmail] = useState('');
+  // ── Superadmin state ────────────────────────────────────────────────────
+  const [adminEmail, setAdminEmail]   = useState('');
   const [addingAdmin, setAddingAdmin] = useState(false);
-  const [adminError, setAdminError] = useState('');
+  const [adminError, setAdminError]   = useState('');
   const [adminSuccess, setAdminSuccess] = useState('');
 
   async function handleAddSuperAdmin(e) {
     e.preventDefault();
-    setAddingAdmin(true);
-    setAdminError('');
-    setAdminSuccess('');
+    setAddingAdmin(true); setAdminError(''); setAdminSuccess('');
     try {
       await addSuperAdmin(adminEmail.trim().toLowerCase());
       setAdminEmail('');
       setAdminSuccess('Superadmin added');
     } catch (err) {
       setAdminError(err.response?.data?.error || 'Failed to add superadmin');
-    } finally {
-      setAddingAdmin(false);
-    }
+    } finally { setAddingAdmin(false); }
   }
 
   async function handleRemoveSuperAdmin(userId) {
-    try {
-      await removeSuperAdmin(userId);
-    } catch (err) {
-      alert(err.response?.data?.error || 'Failed to remove superadmin');
-    }
+    try { await removeSuperAdmin(userId); }
+    catch (err) { alert(err.response?.data?.error || 'Failed to remove superadmin'); }
   }
 
-  // Clients section state
-  const [clientName, setClientName] = useState('');
-  const [clientWebsite, setClientWebsite] = useState('');
-  const [addingClient, setAddingClient] = useState(false);
-  const [creatingClient, setCreatingClient] = useState(false);
+  // ── Clients state ───────────────────────────────────────────────────────
+  const [clientName, setClientName]           = useState('');
+  const [clientWebsite, setClientWebsite]     = useState('');
+  const [addingClient, setAddingClient]       = useState(false);
+  const [creatingClient, setCreatingClient]   = useState(false);
   const [editingClientId, setEditingClientId] = useState(null);
-  const [editClientName, setEditClientName] = useState('');
-  const [clientError, setClientError] = useState('');
+  const [editClientName, setEditClientName]   = useState('');
+  const [clientError, setClientError]         = useState('');
 
-  // System files are loaded once (global, board-independent)
-  const [systemFiles, setSystemFiles] = useState([]);
-
-  // selectedFile: { ...file, scope: 'system' | 'custom' }
+  // ── Instruction files state ─────────────────────────────────────────────
+  const [systemFiles, setSystemFiles]   = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [content, setContent] = useState('');
+  const [content, setContent]           = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error'
-  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving]             = useState(false);
+  const [saveStatus, setSaveStatus]     = useState(null);
+  const [dirty, setDirty]               = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
-  const [addingFile, setAddingFile] = useState(false);
-  const [newFileName, setNewFileName] = useState('');
+  const [addingFile, setAddingFile]     = useState(false);
+  const [newFileName, setNewFileName]   = useState('');
   const [newFileError, setNewFileError] = useState('');
-  const [actionError, setActionError] = useState(null);
+  const [actionError, setActionError]   = useState(null);
   const saveTimerRef = useRef(null);
 
   // Load system files once
@@ -99,17 +108,24 @@ export default function SettingsPage() {
     instructionsApi.list(true, null).then(files => setSystemFiles(files)).catch(() => {});
   }, []);
 
-  // Reload custom files and reset selection when board changes
+  // Reload custom files when board changes
   useEffect(() => {
     loadInstructionFiles();
     setSelectedFile(null);
   }, [currentProjectId]);
 
-  const customActive = instructionFiles.filter(f => !f.archived);
+  // Load teams when subscription section is opened
+  useEffect(() => {
+    if (section.startsWith('sub_')) {
+      loadTeams().catch(() => {});
+      loadClients().catch(() => {});
+    }
+  }, [section]);
+
+  const customActive   = instructionFiles.filter(f => !f.archived);
   const customArchived = instructionFiles.filter(f => f.archived);
   const activeSystemFiles = systemFiles.filter(f => !f.archived);
 
-  // Returns the project_id to use for API calls based on selected file's scope
   function scopeProjectId(scope) {
     return scope === 'system' ? null : currentProjectId;
   }
@@ -117,24 +133,16 @@ export default function SettingsPage() {
   async function selectFile(file, scope) {
     if (dirty && selectedFile) await saveCurrentContent();
     setSelectedFile({ ...file, scope });
-    setContent('');
-    setDirty(false);
-    setSaveStatus(null);
-    setLoadingContent(true);
+    setContent(''); setDirty(false); setSaveStatus(null); setLoadingContent(true);
     try {
       const data = await instructionsApi.get(file.name + '.md', scopeProjectId(scope));
       setContent(data.content);
-    } catch {
-      setContent('');
-    } finally {
-      setLoadingContent(false);
-    }
+    } catch { setContent(''); }
+    finally { setLoadingContent(false); }
   }
 
   function handleContentChange(v) {
-    setContent(v);
-    setDirty(true);
-    setSaveStatus(null);
+    setContent(v); setDirty(true); setSaveStatus(null);
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => autoSave(v), 1500);
   }
@@ -144,14 +152,10 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await instructionsApi.update(selectedFile.name + '.md', val, scopeProjectId(selectedFile.scope));
-      setDirty(false);
-      setSaveStatus('saved');
+      setDirty(false); setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
-    } catch {
-      setSaveStatus('error');
-    } finally {
-      setSaving(false);
-    }
+    } catch { setSaveStatus('error'); }
+    finally { setSaving(false); }
   }
 
   async function saveCurrentContent() {
@@ -160,30 +164,22 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await instructionsApi.update(selectedFile.name + '.md', content, scopeProjectId(selectedFile.scope));
-      setDirty(false);
-      setSaveStatus('saved');
+      setDirty(false); setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
-    } catch {
-      setSaveStatus('error');
-    } finally {
-      setSaving(false);
-    }
+    } catch { setSaveStatus('error'); }
+    finally { setSaving(false); }
   }
 
   async function handleArchive(file) {
-    setArchiveConfirm(null);
-    setActionError(null);
+    setArchiveConfirm(null); setActionError(null);
     try {
       await archiveInstructionFile(file.name + '.md');
       if (selectedFile?.name === file.name) setSelectedFile(null);
-    } catch (err) {
-      setActionError(err.response?.data?.error || 'Failed to archive');
-    }
+    } catch (err) { setActionError(err.response?.data?.error || 'Failed to archive'); }
   }
 
   async function handleDelete(file) {
-    setDeleteConfirm(null);
-    setActionError(null);
+    setDeleteConfirm(null); setActionError(null);
     try {
       await deleteInstructionFile(file.name + '.md');
       if (selectedFile?.name === file.name) setSelectedFile(null);
@@ -196,11 +192,8 @@ export default function SettingsPage() {
 
   async function handleUnarchive(file) {
     setActionError(null);
-    try {
-      await unarchiveInstructionFile(file.name + '.md');
-    } catch (err) {
-      setActionError(err.response?.data?.error || 'Failed to restore');
-    }
+    try { await unarchiveInstructionFile(file.name + '.md'); }
+    catch (err) { setActionError(err.response?.data?.error || 'Failed to restore'); }
   }
 
   async function handleCreate(e) {
@@ -210,12 +203,9 @@ export default function SettingsPage() {
     setNewFileError('');
     try {
       const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`);
-      setAddingFile(false);
-      setNewFileName('');
+      setAddingFile(false); setNewFileName('');
       selectFile(file, 'custom');
-    } catch (err) {
-      setNewFileError(err.response?.data?.error || 'Failed to create');
-    }
+    } catch (err) { setNewFileError(err.response?.data?.error || 'Failed to create'); }
   }
 
   function FileRow({ file, scope, actions }) {
@@ -238,159 +228,89 @@ export default function SettingsPage() {
     );
   }
 
+  // ── Nav helpers ─────────────────────────────────────────────────────────
+  function navBtn(id, label, Icon, badge) {
+    const active = section === id;
+    return (
+      <button
+        key={id}
+        onClick={() => setSection(id)}
+        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+          active ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
+        }`}
+      >
+        <Icon size={12} />
+        {label}
+        {badge}
+      </button>
+    );
+  }
+
+  const connectionDot = !currentProject?.client_path
+    ? <span className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400" />
+    : null;
+
   return (
     <div className="flex h-screen overflow-hidden bg-surface-0 font-sans">
-      {/* Left panel */}
+
+      {/* ── Left panel ──────────────────────────────────────────────────── */}
       <div className="w-60 shrink-0 flex flex-col border-r border-border bg-surface-1 overflow-y-auto">
+
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
           <button
             onClick={() => setCurrentPage('board')}
             className="flex items-center gap-1.5 text-[10px] text-gray-600 hover:text-gray-400 transition-colors mb-3"
           >
-            <ArrowLeft size={10} />
-            Back to board
+            <ArrowLeft size={10} /> Back to board
           </button>
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Settings</p>
         </div>
 
-        {/* Section nav */}
-        <nav className="px-2 py-2 border-b border-border shrink-0 space-y-0.5">
-          {[
-            { id: 'files', label: 'Instruction Files', icon: FileText },
-            { id: 'connections', label: 'Connections', icon: GitBranch },
-            { id: 'preferences', label: 'Preferences', icon: SlidersHorizontal },
-            { id: 'clients', label: 'Clients', icon: Building2 },
-          ].map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setSection(id)}
-              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                section === id ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
-              }`}
-            >
-              <Icon size={12} />
-              {label}
-              {id === 'connections' && currentProject?.client_path && (
-                <span className={`ml-auto w-1.5 h-1.5 rounded-full ${currentProject.path_exists ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-              )}
-            </button>
-          ))}
-          {isSuperAdmin && (
-            <button
-              onClick={() => setSection('workspace')}
-              className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs transition-colors ${
-                section === 'workspace' ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
-              }`}
-            >
-              <Crown size={12} />
-              Workspace
-            </button>
-          )}
-        </nav>
+        {/* BOARD section */}
+        <div className="px-2 pt-3 pb-1 shrink-0">
+          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
+          <div className="space-y-0.5">
+            {navBtn('files', 'Instruction Files', FileText)}
+            {navBtn('connections', 'Connections', GitBranch, connectionDot)}
+          </div>
+        </div>
 
-        {/* File list (only when section === 'files') */}
+        {/* File list — only when section === 'files' */}
         {section === 'files' && (
-          <div className="flex-1 px-2 py-3 space-y-4 overflow-y-auto">
-            {/* System files */}
-            <div>
-              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 mb-1">System</p>
-              <p className="text-[9px] text-gray-700 px-2 mb-2 leading-relaxed">Affects all boards</p>
-              {activeSystemFiles.map(f => (
-                <FileRow
-                  key={f.name}
-                  file={f}
-                  scope="system"
-                  actions={
-                    <span className="flex items-center gap-0.5 shrink-0 opacity-50" title="System file — affects all boards">
-                      <Lock size={9} />
-                    </span>
-                  }
-                />
-              ))}
-            </div>
+          <div className="mx-2 mb-2 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+            <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-240px)]">
 
-            {/* Divider */}
-            <div className="border-t border-border" />
-
-            {/* Custom files (per-board) */}
-            <div>
-              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 mb-1">Custom</p>
-              <p className="text-[9px] text-gray-700 px-2 mb-2 leading-relaxed">This board only</p>
-              {customActive.map(f => (
-                <FileRow
-                  key={f.name}
-                  file={f}
-                  scope="custom"
-                  actions={
-                    <>
-                      <button onClick={() => setArchiveConfirm(f)} title="Archive"
-                        className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
-                        <Archive size={10} />
-                      </button>
-                      <button onClick={() => setDeleteConfirm(f)} title="Delete"
-                        className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                        <Trash2 size={10} />
-                      </button>
-                    </>
-                  }
-                />
-              ))}
-
-              {addingFile ? (
-                <form onSubmit={handleCreate} className="mt-1.5 px-1">
-                  <input
-                    autoFocus
-                    value={newFileName}
-                    onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
-                    onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''))}
-                    placeholder="filename"
-                    className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-                  />
-                  {newFileError && <p className="text-[9px] text-red-400 mt-0.5">{newFileError}</p>}
-                  <div className="flex gap-1.5 mt-1.5">
-                    <button type="submit" className="flex-1 py-0.5 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-md transition-colors">
-                      Create
-                    </button>
-                    <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); }}
-                      className="px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-300 rounded-md transition-colors">
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <button
-                  onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); }}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-[11px] text-gray-600 hover:text-gray-400 transition-colors rounded-lg"
-                >
-                  <Plus size={11} />
-                  New file
-                </button>
-              )}
-            </div>
-
-            {/* Archived */}
-            {customArchived.length > 0 && (
+              {/* System files */}
               <div>
-                <button
-                  onClick={() => setShowArchived(v => !v)}
-                  className="flex items-center gap-1.5 px-2 py-1 w-full text-[9px] font-semibold text-gray-600 uppercase tracking-widest hover:text-gray-400 transition-colors"
-                >
-                  {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-                  Archived ({customArchived.length})
-                </button>
-                {showArchived && customArchived.map(f => (
-                  <FileRow
-                    key={f.name}
-                    file={f}
-                    scope="custom"
+                <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">System</p>
+                <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">Affects all boards</p>
+                {activeSystemFiles.map(f => (
+                  <FileRow key={f.name} file={f} scope="system"
+                    actions={
+                      <span className="flex items-center gap-0.5 shrink-0 opacity-50" title="System file — affects all boards">
+                        <Lock size={9} />
+                      </span>
+                    }
+                  />
+                ))}
+              </div>
+
+              <div className="border-t border-border/60" />
+
+              {/* Custom files */}
+              <div>
+                <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">Custom</p>
+                <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">This board only</p>
+                {customActive.map(f => (
+                  <FileRow key={f.name} file={f} scope="custom"
                     actions={
                       <>
-                        <button onClick={() => handleUnarchive(f)} title="Restore"
-                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
-                          <RotateCcw size={10} />
+                        <button onClick={() => setArchiveConfirm(f)} title="Archive"
+                          className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                          <Archive size={10} />
                         </button>
-                        <button onClick={() => setDeleteConfirm(f)} title="Delete permanently"
+                        <button onClick={() => setDeleteConfirm(f)} title="Delete"
                           className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
                           <Trash2 size={10} />
                         </button>
@@ -398,62 +318,240 @@ export default function SettingsPage() {
                     }
                   />
                 ))}
+
+                {addingFile ? (
+                  <form onSubmit={handleCreate} className="mt-1.5 px-1">
+                    <input
+                      autoFocus value={newFileName}
+                      onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
+                      onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''))}
+                      placeholder="filename"
+                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                    />
+                    {newFileError && <p className="text-[9px] text-red-400 mt-0.5">{newFileError}</p>}
+                    <div className="flex gap-1.5 mt-1.5">
+                      <button type="submit" className="flex-1 py-0.5 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-md transition-colors">
+                        Create
+                      </button>
+                      <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); }}
+                        className="px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-300 rounded-md transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); }}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-[11px] text-gray-600 hover:text-gray-400 transition-colors rounded-lg"
+                  >
+                    <Plus size={11} /> New file
+                  </button>
+                )}
               </div>
-            )}
+
+              {/* Archived */}
+              {customArchived.length > 0 && (
+                <div>
+                  <button
+                    onClick={() => setShowArchived(v => !v)}
+                    className="flex items-center gap-1.5 px-1.5 py-1 w-full text-[9px] font-semibold text-gray-600 uppercase tracking-widest hover:text-gray-400 transition-colors"
+                  >
+                    {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+                    Archived ({customArchived.length})
+                  </button>
+                  {showArchived && customArchived.map(f => (
+                    <FileRow key={f.name} file={f} scope="custom"
+                      actions={
+                        <>
+                          <button onClick={() => handleUnarchive(f)} title="Restore"
+                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                            <RotateCcw size={10} />
+                          </button>
+                          <button onClick={() => setDeleteConfirm(f)} title="Delete permanently"
+                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
+                            <Trash2 size={10} />
+                          </button>
+                        </>
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* SUBSCRIPTION section (superadmin only) */}
+        {isSuperAdmin && (
+          <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
+            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
+            <div className="space-y-0.5">
+              {SUBSCRIPTION_SECTIONS.map(({ id, label, icon: Icon }) => navBtn(id, label, Icon))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Right panel */}
+      {/* ── Right panel ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Preferences panel */}
-        {section === 'preferences' && (
-          <div className="flex-1 overflow-y-auto px-8 py-8">
-            <h2 className="text-sm font-semibold text-gray-200 mb-6">Preferences</h2>
 
-            {/* Theme */}
-            <div className="mb-8">
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3">Theme</p>
-              <div className="flex gap-3">
-                {[
-                  { value: 'dark', label: 'Dark', icon: Moon },
-                  { value: 'light', label: 'Light', icon: Sun },
-                ].map(({ value, label, icon: Icon }) => (
-                  <button
-                    key={value}
-                    onClick={() => setTheme(value)}
-                    className={`flex flex-col items-center gap-2.5 px-6 py-4 rounded-xl border transition-all ${
-                      theme === value
-                        ? 'border-accent bg-accent/10 text-accent'
-                        : 'border-border bg-surface-2 text-gray-400 hover:border-gray-500 hover:text-gray-200'
-                    }`}
-                  >
-                    <Icon size={18} />
-                    <span className="text-xs font-medium">{label}</span>
-                    {theme === value && <div className="w-1.5 h-1.5 rounded-full bg-accent" />}
-                  </button>
+        {/* Connections panel */}
+        {section === 'connections' && currentProject && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg">
+              <div className="flex items-center gap-2.5 mb-1">
+                <GitBranch size={15} className="text-accent" />
+                <h2 className="text-sm font-semibold text-gray-200">Connections</h2>
+              </div>
+              <p className="text-xs text-gray-500 mb-6">
+                Link this board to a client folder. The folder can contain anything — a codebase, documents, or any other files relevant to this board's work.
+              </p>
+              <ConnectionsPanel
+                project={currentProject}
+                onUpdated={() => loadProjects()}
+                updateProject={updateProject}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Clients panel */}
+        {section === 'sub_clients' && isSuperAdmin && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-sm font-semibold text-gray-200">Clients</h2>
+                <button onClick={() => setAddingClient(true)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors">
+                  <Plus size={12} /> Add client
+                </button>
+              </div>
+
+              {addingClient && (
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!clientName.trim()) return;
+                  setCreatingClient(true);
+                  try {
+                    await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null });
+                    setClientName(''); setClientWebsite(''); setAddingClient(false); setClientError('');
+                  } catch(err) {
+                    setClientError(err.response?.data?.error || 'Failed to create client');
+                  } finally { setCreatingClient(false); }
+                }} className="border border-border rounded-xl p-3 space-y-2 bg-surface-2 mb-4">
+                  <input value={clientName} onChange={e => setClientName(e.target.value)}
+                    placeholder="Client name" autoFocus
+                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                  <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
+                    placeholder="Website (optional)"
+                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                  {clientError && <p className="text-xs text-red-400">{clientError}</p>}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientError(''); }}
+                      className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
+                    <button type="submit" disabled={creatingClient || !clientName.trim()}
+                      className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
+                      {creatingClient ? 'Creating…' : 'Create'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <div className="space-y-1">
+                {clients.filter(c => !c.archived_at).map(client => (
+                  <div key={client.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 group">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
+                      style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}30` }}>
+                      {client.name[0].toUpperCase()}
+                    </div>
+                    {editingClientId === client.id ? (
+                      <input value={editClientName} onChange={e => setEditClientName(e.target.value)}
+                        onBlur={async () => {
+                          if (editClientName.trim() && editClientName !== client.name) {
+                            await updateClient(client.id, { name: editClientName.trim() });
+                          }
+                          setEditingClientId(null);
+                        }}
+                        onKeyDown={async e => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                          if (e.key === 'Escape') setEditingClientId(null);
+                        }}
+                        autoFocus
+                        className="flex-1 bg-surface-3 border border-accent/40 rounded-lg px-2 py-1 text-sm text-gray-200 outline-none" />
+                    ) : (
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-200 truncate">{client.name}</p>
+                        {client.website && <p className="text-xs text-gray-500 truncate">{client.website}</p>}
+                        <p className="text-xs text-gray-600">{client.board_count} board{client.board_count !== 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
+                      <button onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
+                        className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors" title="Rename">
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => archiveClient(client.id)}
+                        className="p-1.5 rounded text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Archive">
+                        <Archive size={12} />
+                      </button>
+                    </div>
+                  </div>
                 ))}
+                {clients.filter(c => !c.archived_at).length === 0 && !addingClient && (
+                  <p className="text-sm text-gray-600 text-center py-4">No clients yet</p>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Workspace panel */}
-        {section === 'workspace' && isSuperAdmin && (
+        {/* Team panel */}
+        {section === 'sub_team' && isSuperAdmin && (
           <div className="flex-1 overflow-y-auto px-8 py-8">
-            <h2 className="text-sm font-semibold text-gray-200 mb-6">Workspace</h2>
-
-            {/* Subscription name */}
-            <div className="mb-8">
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3">Workspace Name</p>
-              <p className="text-sm text-gray-300">{subscription?.name || 'My Workspace'}</p>
+            <div className="max-w-lg">
+              <h2 className="text-sm font-semibold text-gray-200 mb-6">Team</h2>
+              {teams.length === 0 ? (
+                <p className="text-sm text-gray-600">No teams yet.</p>
+              ) : (
+                <div className="space-y-1">
+                  {teams.map(t => (
+                    <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold bg-accent/15 text-accent border border-accent/20">
+                        {t.name[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-200 truncate">{t.name}</p>
+                        {t.description && <p className="text-xs text-gray-500 truncate">{t.description}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
+          </div>
+        )}
 
-            {/* Superadmins management */}
-            <div>
-              <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Superadmins</p>
-              <p className="text-xs text-gray-600 mb-4">
-                Superadmins have access to all boards, teams, and members in the workspace without needing to be explicitly invited.
+        {/* Boards panel */}
+        {section === 'sub_boards' && isSuperAdmin && (
+          <BoardsPanel projects={projects} />
+        )}
+
+        {/* Members panel */}
+        {section === 'sub_members' && isSuperAdmin && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg">
+              <h2 className="text-sm font-semibold text-gray-200 mb-6">Members</h2>
+              <p className="text-sm text-gray-600">Subscription-level member management coming soon.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Superadmins panel */}
+        {section === 'sub_superadmins' && isSuperAdmin && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg">
+              <h2 className="text-sm font-semibold text-gray-200 mb-1">Superadmins</h2>
+              <p className="text-xs text-gray-500 mb-6">
+                Superadmins have full access to all boards, teams, and members in this subscription.
               </p>
 
               <div className="space-y-1 mb-4">
@@ -495,12 +593,11 @@ export default function SettingsPage() {
                 })}
               </div>
 
-              {/* Add superadmin form */}
               <form onSubmit={handleAddSuperAdmin} className="flex gap-2">
                 <input
                   value={adminEmail}
                   onChange={e => setAdminEmail(e.target.value)}
-                  placeholder="Email of existing user..."
+                  placeholder="Email of existing user…"
                   type="email"
                   className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                 />
@@ -509,205 +606,89 @@ export default function SettingsPage() {
                   disabled={addingAdmin || !adminEmail.trim()}
                   className="px-3 py-2 bg-accent hover:bg-accent/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
                 >
-                  {addingAdmin ? '...' : 'Add'}
+                  {addingAdmin ? '…' : 'Add'}
                 </button>
               </form>
-              {adminError && <p className="text-xs text-red-400 mt-1.5">{adminError}</p>}
+              {adminError   && <p className="text-xs text-red-400 mt-1.5">{adminError}</p>}
               {adminSuccess && <p className="text-xs text-green-400 mt-1.5">{adminSuccess}</p>}
             </div>
           </div>
         )}
 
-        {/* Clients panel */}
-        {section === 'clients' && (
-          <div className="flex-1 overflow-y-auto px-8 py-8">
-            <div className="max-w-lg">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-sm font-semibold text-gray-200">Clients</h2>
-                <button onClick={() => setAddingClient(true)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors">
-                  <Plus size={12} /> Add client
-                </button>
-              </div>
-
-              {addingClient && (
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!clientName.trim()) return;
-                  setCreatingClient(true);
-                  try {
-                    await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null });
-                    setClientName('');
-                    setClientWebsite('');
-                    setAddingClient(false);
-                    setClientError('');
-                  } catch(err) {
-                    setClientError(err.response?.data?.error || 'Failed to create client');
-                  } finally {
-                    setCreatingClient(false);
-                  }
-                }} className="border border-border rounded-xl p-3 space-y-2 bg-surface-2 mb-4">
-                  <input value={clientName} onChange={e => setClientName(e.target.value)}
-                    placeholder="Client name" autoFocus
-                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
-                  <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
-                    placeholder="Website (optional)"
-                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
-                  {clientError && <p className="text-xs text-red-400">{clientError}</p>}
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientError(''); }}
-                      className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
-                    <button type="submit" disabled={creatingClient || !clientName.trim()}
-                      className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
-                      {creatingClient ? 'Creating…' : 'Create'}
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              <div className="space-y-1">
-                {clients.filter(c => !c.archived_at).map(client => (
-                  <div key={client.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 group">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
-                      style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}30` }}>
-                      {client.name[0].toUpperCase()}
-                    </div>
-                    {editingClientId === client.id ? (
-                      <input value={editClientName} onChange={e => setEditClientName(e.target.value)}
-                        onBlur={async () => {
-                          if (editClientName.trim() && editClientName !== client.name) {
-                            await updateClient(client.id, { name: editClientName.trim() });
-                          }
-                          setEditingClientId(null);
-                        }}
-                        onKeyDown={async e => {
-                          if (e.key === 'Enter') { e.currentTarget.blur(); }
-                          if (e.key === 'Escape') { setEditingClientId(null); }
-                        }}
-                        autoFocus
-                        className="flex-1 bg-surface-3 border border-accent/40 rounded-lg px-2 py-1 text-sm text-gray-200 outline-none" />
-                    ) : (
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-200 truncate">{client.name}</p>
-                        {client.website && <p className="text-xs text-gray-500 truncate">{client.website}</p>}
-                        <p className="text-xs text-gray-600">{client.board_count} board{client.board_count !== 1 ? 's' : ''}</p>
-                      </div>
-                    )}
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
-                      <button onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
-                        className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors" title="Rename">
-                        <Pencil size={12} />
-                      </button>
-                      <button onClick={() => archiveClient(client.id)}
-                        className="p-1.5 rounded text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Archive">
-                        <Archive size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {clients.filter(c => !c.archived_at).length === 0 && !addingClient && (
-                  <p className="text-sm text-gray-600 text-center py-4">No clients yet</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Connections panel */}
-        {section === 'connections' && currentProject && (
-          <div className="flex-1 overflow-y-auto px-8 py-8">
-            <div className="max-w-lg">
-              <div className="flex items-center gap-2.5 mb-1">
-                <GitBranch size={15} className="text-accent" />
-                <h2 className="text-sm font-semibold text-gray-200">Connections</h2>
-              </div>
-              <p className="text-xs text-gray-600 mb-6">
-                Koppla detta board till ett kodrepo. Agenter använder mappen för att läsa och skriva kod.
-              </p>
-              <ConnectionsPanel
-                project={currentProject}
-                onUpdated={() => loadProjects()}
-                updateProject={updateProject}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Editor panel (only when section === 'files') */}
+        {/* Editor panel (section === 'files') */}
         {section === 'files' && (<>
-        {selectedFile ? (
-          <>
-            {/* Editor header */}
-            <div className="flex items-center justify-between px-6 py-3.5 border-b border-border shrink-0 bg-surface-1">
-              <div className="flex items-center gap-2.5">
-                <FileText size={13} className="text-accent" />
-                <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
-                {selectedFile.scope === 'system' && (
-                  <span className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
-                    <Lock size={8} /> system
-                  </span>
-                )}
-                {selectedFile.archived && (
-                  <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
-                    archived
-                  </span>
-                )}
+          {selectedFile ? (
+            <>
+              <div className="flex items-center justify-between px-6 py-3.5 border-b border-border shrink-0 bg-surface-1">
+                <div className="flex items-center gap-2.5">
+                  <FileText size={13} className="text-accent" />
+                  <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
+                  {selectedFile.scope === 'system' && (
+                    <span className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
+                      <Lock size={8} /> system
+                    </span>
+                  )}
+                  {selectedFile.archived && (
+                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
+                      archived
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  {saving && <span className="text-[10px] text-gray-500">Saving…</span>}
+                  {saveStatus === 'saved' && (
+                    <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                      <Check size={10} /> Saved
+                    </span>
+                  )}
+                  {saveStatus === 'error' && <span className="text-[10px] text-red-400">Save failed</span>}
+                  {dirty && !saving && (
+                    <button
+                      onClick={saveCurrentContent}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+                    >
+                      <Save size={10} /> Save
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                {saving && <span className="text-[10px] text-gray-500">Saving…</span>}
-                {saveStatus === 'saved' && (
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-400">
-                    <Check size={10} /> Saved
-                  </span>
-                )}
-                {saveStatus === 'error' && <span className="text-[10px] text-red-400">Save failed</span>}
-                {dirty && !saving && (
-                  <button
-                    onClick={saveCurrentContent}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
-                  >
-                    <Save size={10} /> Save
-                  </button>
-                )}
-              </div>
-            </div>
 
-            {/* Textarea */}
-            {loadingContent ? (
-              <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">Loading…</div>
-            ) : (
-              <textarea
-                className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] font-mono leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
-                value={content}
-                onChange={e => handleContentChange(e.target.value)}
-                spellCheck={false}
-                placeholder="Start writing markdown…"
-                readOnly={selectedFile.archived}
-              />
-            )}
-            {selectedFile.archived && (
-              <div className="shrink-0 px-8 py-2 bg-amber-500/5 border-t border-amber-500/10 text-[10px] text-amber-400/70">
-                This file is archived and read-only. Restore it to edit.
-              </div>
-            )}
-            {selectedFile.scope === 'system' && (
-              <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-[10px] text-accent/60">
-                System file — changes affect all boards.
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-600 gap-3">
-            <FileText size={28} className="opacity-30" />
-            <p className="text-sm font-medium text-gray-500">Select a file to edit</p>
-            <p className="text-xs text-gray-600 max-w-xs">
-              Agents read these files as context. Changes take effect on the next agent run.
-            </p>
-          </div>
-        )}
+              {loadingContent ? (
+                <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">Loading…</div>
+              ) : (
+                <textarea
+                  className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] font-mono leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
+                  value={content}
+                  onChange={e => handleContentChange(e.target.value)}
+                  spellCheck={false}
+                  placeholder="Start writing markdown…"
+                  readOnly={selectedFile.archived}
+                />
+              )}
+              {selectedFile.archived && (
+                <div className="shrink-0 px-8 py-2 bg-amber-500/5 border-t border-amber-500/10 text-[10px] text-amber-400/70">
+                  This file is archived and read-only. Restore it to edit.
+                </div>
+              )}
+              {selectedFile.scope === 'system' && (
+                <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-[10px] text-accent/60">
+                  System file — changes affect all boards.
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-600 gap-3">
+              <FileText size={28} className="opacity-30" />
+              <p className="text-sm font-medium text-gray-500">Select a file to edit</p>
+              <p className="text-xs text-gray-600 max-w-xs">
+                Agents read these files as context. Changes take effect on the next agent run.
+              </p>
+            </div>
+          )}
         </>)}
       </div>
 
-      {/* Action errors */}
+      {/* ── Action errors ───────────────────────────────────────────────── */}
       {actionError && (
         <div className="fixed bottom-5 right-5 z-50 flex items-start gap-2.5 max-w-sm bg-surface-2 border border-red-500/30 rounded-xl px-4 py-3 shadow-xl">
           <p className="text-xs text-red-400 flex-1">{actionError}</p>
@@ -717,37 +698,29 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Archive confirm dialog */}
+      {/* Archive confirm */}
       {archiveConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
             <p className="text-sm font-semibold text-gray-200">Archive "{archiveConfirm.name}.md"?</p>
             <p className="text-xs text-gray-500">The file will be moved to the archive. Agents referencing it will still work while it remains on disk.</p>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => handleArchive(archiveConfirm)} className="flex-1 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors">
-                Archive
-              </button>
-              <button onClick={() => setArchiveConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">
-                Cancel
-              </button>
+              <button onClick={() => handleArchive(archiveConfirm)} className="flex-1 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors">Archive</button>
+              <button onClick={() => setArchiveConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete confirm dialog */}
+      {/* Delete confirm */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
             <p className="text-sm font-semibold text-gray-200">Delete "{deleteConfirm.name}.md"?</p>
             <p className="text-xs text-gray-500">This permanently removes the file. If any agents reference it, the delete will fail and you'll be prompted to archive instead.</p>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors">
-                Delete
-              </button>
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">
-                Cancel
-              </button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
             </div>
           </div>
         </div>
@@ -756,21 +729,109 @@ export default function SettingsPage() {
   );
 }
 
-function ConnectionsPanel({ project, onUpdated, updateProject }) {
-  const [repoUrl, setRepoUrl] = useState(project.repo_url || '');
-  const [clientRepos, setClientRepos] = useState([]);
-  const [loadingFolders, setLoadingFolders] = useState(true);
-  const [cloning, setCloning] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+// ─── Boards panel ────────────────────────────────────────────────────────────
+function BoardsPanel({ projects }) {
+  const active   = projects.filter(p => !p.archived_at);
+  const archived = projects.filter(p => p.archived_at);
+  const [showArchived, setShowArchived] = useState(false);
 
+  return (
+    <div className="flex-1 overflow-y-auto px-8 py-8">
+      <div className="max-w-lg">
+        <h2 className="text-sm font-semibold text-gray-200 mb-6">Boards</h2>
+        <div className="space-y-1 mb-4">
+          {active.map(p => (
+            <div key={p.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-base"
+                style={{ background: (p.color || '#6366f1') + '20', border: `1px solid ${(p.color || '#6366f1')}30` }}>
+                {p.emoji || '📋'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-200 truncate">{p.name}</p>
+                {p.client_name && <p className="text-xs text-gray-500 truncate">{p.client_name}</p>}
+              </div>
+              {p.client_path && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
+                  p.path_exists
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                }`}>
+                  {p.path_exists ? 'connected' : 'missing'}
+                </span>
+              )}
+            </div>
+          ))}
+          {active.length === 0 && <p className="text-sm text-gray-600">No active boards.</p>}
+        </div>
+
+        {archived.length > 0 && (
+          <button
+            onClick={() => setShowArchived(v => !v)}
+            className="flex items-center gap-1.5 text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+          >
+            {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
+            Archived ({archived.length})
+          </button>
+        )}
+        {showArchived && (
+          <div className="mt-2 space-y-1">
+            {archived.map(p => (
+              <div key={p.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 opacity-50">
+                <span className="text-base">{p.emoji || '📋'}</span>
+                <p className="text-sm text-gray-400 truncate">{p.name}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Connections panel ───────────────────────────────────────────────────────
+function ConnectionsPanel({ project, onUpdated, updateProject }) {
+  const [mode, setMode]           = useState(project.repo_url ? 'github' : 'local');
+  const [repoUrl, setRepoUrl]     = useState(project.repo_url || '');
+  const [localPath, setLocalPath] = useState(project.client_path || null);
+  const [folders, setFolders]     = useState([]);
+  const [basePath, setBasePath]   = useState('');
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [cloning, setCloning]     = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [error, setError]         = useState('');
+  const [success, setSuccess]     = useState('');
+
+  const isConnected = !!project.client_path;
+  const displayUrl  = project.repo_url
+    ? project.repo_url.replace(/^https?:\/\/(www\.)?/, '').replace(/\.git$/, '')
+    : null;
+
+  // Load client/ subfolders when local mode is active
   useEffect(() => {
+    if (mode !== 'local') return;
+    setLoadingFolders(true);
     projectsApi.clientRepos()
-      .then(setClientRepos)
-      .catch(() => setClientRepos([]))
+      .then(r => { setBasePath(r.basePath || ''); setFolders(r.folders || []); })
+      .catch(() => { setBasePath(''); setFolders([]); })
       .finally(() => setLoadingFolders(false));
-  }, []);
+  }, [mode]);
+
+  async function handleSelectFolder(path) {
+    setLocalPath(path);
+    setError(''); setSuccess('');
+  }
+
+  async function handleSaveLocal() {
+    if (!localPath) return;
+    setSaving(true); setError(''); setSuccess('');
+    try {
+      await updateProject(project.id, { client_path: localPath, repo_url: null });
+      onUpdated();
+      setSuccess('Linked ✓');
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to link folder');
+    } finally { setSaving(false); }
+  }
 
   async function handleClone() {
     if (!repoUrl.trim()) return;
@@ -779,143 +840,201 @@ function ConnectionsPanel({ project, onUpdated, updateProject }) {
       const result = await projectsApi.clone(project.id, { repo_url: repoUrl.trim() });
       onUpdated(result.project);
       setSuccess(result.already_existed
-        ? `Redan klonad — kopplad till ${result.client_path}`
-        : `Klonad och kopplad till ${result.client_path} ✓`);
-      // Refresh folder list
-      projectsApi.clientRepos().then(setClientRepos).catch(() => {});
+        ? `Already cloned — linked to ${result.client_path}`
+        : `Cloned and linked to ${result.client_path} ✓`);
     } catch (e) {
-      setError(e.response?.data?.error || 'Kloning misslyckades');
-    } finally {
-      setCloning(false);
-    }
+      setError(e.response?.data?.error || 'Clone failed');
+    } finally { setCloning(false); }
   }
 
-  async function handleConnectLocal(client_path) {
+  const [confirmSwitch, setConfirmSwitch]     = useState(false);
+  const [switchingFolder, setSwitchingFolder] = useState(false);
+  const switchLabel = project.repo_url ? 'Use local instead' : 'Use GitHub instead';
+  const switchMode  = project.repo_url ? 'local' : 'github';
+
+  async function handleSwitch() {
     setSaving(true); setError(''); setSuccess('');
     try {
-      await updateProject(project.id, { client_path, repo_url: null });
-      onUpdated();
-      setSuccess(`Kopplad till ${client_path} ✓`);
-    } catch {
-      setError('Misslyckades att koppla');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleDisconnect() {
-    setSaving(true);
-    try {
       await updateProject(project.id, { client_path: null, repo_url: null });
-      setRepoUrl('');
+      setRepoUrl(''); setLocalPath(null);
+      setMode(switchMode);
+      setConfirmSwitch(false);
       onUpdated();
-      setSuccess('Frånkopplad');
-    } catch {
-      setError('Misslyckades');
-    } finally {
-      setSaving(false);
-    }
+    } catch { setError('Failed to disconnect'); }
+    finally { setSaving(false); }
   }
-
-  const isConnected = !!project.client_path;
 
   return (
     <div className="space-y-6">
-      {/* Status */}
-      {isConnected ? (
-        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border text-sm ${
-          project.path_exists
-            ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
-            : 'bg-amber-500/10 border-amber-500/25 text-amber-300'
-        }`}>
-          {project.path_exists ? <Check size={15} className="shrink-0" /> : <AlertTriangle size={15} className="shrink-0" />}
-          <span className="font-mono text-xs flex-1 truncate">{project.client_path}</span>
-          <span className="text-xs opacity-70 shrink-0">{project.path_exists ? 'Ansluten' : 'Mappen saknas'}</span>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-border bg-surface-2 text-sm text-gray-500">
-          <GitBranch size={15} className="shrink-0" />
-          Inget repo kopplat ännu
+
+      {/* Connected status */}
+      {isConnected && (
+        <div className="flex items-center gap-3">
+          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${project.path_exists ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          <span className="text-sm font-medium text-gray-200">
+            {project.repo_url ? 'Connected via GitHub' : 'Connected locally'}
+          </span>
+          {!project.path_exists && (
+            <span className="text-xs text-amber-400 flex items-center gap-1">
+              <AlertTriangle size={11} /> Folder not found
+            </span>
+          )}
+          <span className="text-gray-700 text-xs">·</span>
+          {confirmSwitch ? (
+            <span className="flex items-center gap-2 text-xs">
+              <span className="text-gray-500">Switch connection?</span>
+              <button onClick={handleSwitch} disabled={saving}
+                className="text-red-400 hover:text-red-300 font-medium transition-colors">
+                {saving ? 'Switching…' : 'Yes'}
+              </button>
+              <button onClick={() => setConfirmSwitch(false)} className="text-gray-600 hover:text-gray-400 transition-colors">
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <button
+              onClick={() => setConfirmSwitch(true)}
+              className="text-xs text-red-500/70 hover:text-red-400 transition-colors"
+            >
+              {switchLabel}
+            </button>
+          )}
         </div>
       )}
 
-      {/* GitHub URL */}
-      <div>
-        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-          <Github size={11} /> GitHub URL
-        </p>
-        <div className="flex gap-2">
-          <input
-            value={repoUrl}
-            onChange={e => setRepoUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleClone()}
-            placeholder="https://github.com/user/repo"
-            className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
-          />
+      {/* Mode tabs — disabled when connected */}
+      <div className={`flex gap-1 p-1 bg-surface-2 rounded-xl w-fit ${isConnected ? 'opacity-40 pointer-events-none' : ''}`}>
+        {[
+          { id: 'github', label: 'Clone from GitHub', icon: Github },
+          { id: 'local',  label: 'Link local folder', icon: FolderOpen },
+        ].map(({ id, label, icon: Icon }) => (
           <button
-            onClick={handleClone}
-            disabled={cloning || !repoUrl.trim()}
-            className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+            key={id}
+            onClick={() => { setMode(id); setError(''); setSuccess(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              mode === id
+                ? 'bg-surface-1 text-gray-200 shadow-sm'
+                : 'text-gray-500 hover:text-gray-300'
+            }`}
           >
-            {cloning ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-            {cloning ? 'Klonar…' : 'Spara & klona'}
+            <Icon size={11} /> {label}
           </button>
-        </div>
-        <p className="text-[11px] text-gray-600 mt-2">
-          Repot klonas automatiskt till <span className="font-mono">client/</span> och kopplas till detta board.
-        </p>
+        ))}
       </div>
 
-      {/* Local folders */}
-      <div>
-        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
-          <FolderOpen size={11} /> Befintliga mappar i client/
-        </p>
-        {loadingFolders ? (
-          <div className="flex items-center gap-2 text-gray-500 text-sm">
-            <Loader2 size={13} className="animate-spin" /> Söker…
+      {/* GitHub mode */}
+      {mode === 'github' && !isConnected && (
+        <div className="space-y-3">
+          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+            GitHub repository URL
+          </label>
+          <div className="flex gap-2">
+            <input
+              value={repoUrl}
+              onChange={e => setRepoUrl(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleClone()}
+              placeholder="https://github.com/user/repo"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+            />
+            <button
+              onClick={handleClone}
+              disabled={cloning || !repoUrl.trim()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+            >
+              {cloning ? <Loader2 size={13} className="animate-spin" /> : <Github size={13} />}
+              {cloning ? 'Cloning…' : 'Clone & Save'}
+            </button>
           </div>
-        ) : clientRepos.length === 0 ? (
-          <p className="text-sm text-gray-600">
-            Inga mappar hittades i <span className="font-mono">client/</span>. Klona ett repo ovan så skapas det automatiskt.
+          <p className="text-[11px] text-gray-600">
+            The repository will be cloned into <span className="font-mono">client/</span> and connected to this board.
           </p>
-        ) : (
-          <div className="space-y-1.5">
-            {clientRepos.map(r => (
+        </div>
+      )}
+
+      {/* Local folder mode */}
+      {mode === 'local' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Select a folder</p>
+            {isConnected && !switchingFolder && (
               <button
-                key={r.client_path}
-                onClick={() => handleConnectLocal(r.client_path)}
-                disabled={saving}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-sm transition-colors text-left ${
-                  project.client_path === r.client_path
-                    ? 'border-accent bg-accent/10 text-accent'
-                    : 'border-border bg-surface-2 text-gray-400 hover:text-gray-200 hover:border-gray-500'
-                }`}
+                onClick={() => setSwitchingFolder(true)}
+                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >
-                <FolderOpen size={13} className="shrink-0" />
-                <span className="font-mono flex-1 text-xs">{r.client_path}</span>
-                {r.is_git && <span className="text-[10px] text-gray-600 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded">git</span>}
-                {project.client_path === r.client_path && <Check size={13} className="text-accent shrink-0" />}
+                Switch folder
               </button>
-            ))}
+            )}
+            {isConnected && switchingFolder && (
+              <button
+                onClick={() => { setSwitchingFolder(false); setLocalPath(project.client_path); }}
+                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
           </div>
-        )}
-      </div>
+
+          {basePath && (
+            <div className="flex items-center gap-1.5">
+              <FolderOpen size={11} className="text-gray-600 shrink-0" />
+              <span className="font-mono text-[11px] text-gray-600 truncate">{basePath}</span>
+            </div>
+          )}
+
+          {/* Folder list — grayed out when connected and not switching */}
+          <div className={isConnected && !switchingFolder ? 'opacity-40 pointer-events-none' : ''}>
+            {loadingFolders ? (
+              <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
+                <Loader2 size={13} className="animate-spin" /> Loading…
+              </div>
+            ) : folders.length === 0 ? (
+              <div className="px-4 py-6 rounded-xl border border-dashed border-border text-center">
+                <p className="text-sm text-gray-500">No folders found.</p>
+                <p className="text-xs text-gray-600 mt-1">Clone a GitHub repo to get started.</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {folders.map(f => {
+                  const selected = localPath === f.client_path;
+                  return (
+                    <button
+                      key={f.client_path}
+                      onClick={() => handleSelectFolder(f.client_path)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors text-left ${
+                        selected
+                          ? 'border-accent bg-accent/10 text-accent'
+                          : 'border-border bg-surface-2 text-gray-400 hover:text-gray-200 hover:border-gray-500'
+                      }`}
+                    >
+                      <FolderOpen size={13} className="shrink-0" />
+                      <span className="font-mono text-xs text-gray-200 flex-1 truncate">{f.name}</span>
+                      {f.is_git && (
+                        <span className="text-[10px] text-gray-600 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded border border-border">git</span>
+                      )}
+                      {selected && <Check size={13} className="shrink-0 text-accent" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Save — only when not connected or actively switching */}
+          {(!isConnected || switchingFolder) && localPath && (
+            <button
+              onClick={async () => { await handleSaveLocal(); setSwitchingFolder(false); }}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              {saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Feedback */}
       {error && <p className="text-red-400 text-sm flex items-center gap-2"><AlertTriangle size={13} />{error}</p>}
-      {success && <p className="text-emerald-400 text-sm flex items-center gap-2"><Check size={13} />{success}</p>}
-
-      {/* Disconnect */}
-      {isConnected && (
-        <button
-          onClick={handleDisconnect}
-          disabled={saving}
-          className="text-xs text-gray-600 hover:text-red-400 transition-colors flex items-center gap-1.5 pt-2 border-t border-border w-full"
-        >
-          <X size={11} /> Koppla ifrån
-        </button>
-      )}
     </div>
   );
 }
