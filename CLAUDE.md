@@ -359,9 +359,82 @@ Shows on an agent in the Sidebar when `agent.is_template || agent.created_from_t
 - `archived_at DATETIME` — present on: tasks, agent_templates, agents, columns
 - `agents.active INTEGER` — also used for agents (alongside `archived_at`); Sidebar filters by `active = 1`
 
+## Settings Page (`app/src/components/SettingsPage.jsx`)
+
+Single full-page view (replaces the old modal). Left nav + right panel layout.
+
+### Left nav — two sections
+
+**Board** (per-board settings):
+- Instruction Files — opens file list inline in the left panel below the nav
+- Connections — board ↔ client folder/repo link
+
+**Subscription** (superadmin only):
+- Clients, Team, Boards, Members, Superadmins
+
+Nav dots on Connections:
+- 🔴 Red — no folder connected
+- 🟡 Amber — connected but folder not found on disk
+- No dot — connected and healthy
+
+### Instruction Files panel
+File list renders inside a bordered box in the left panel when the section is active — visually distinct from the nav buttons above it. Two subsections: **System** (affects all boards, lock icon, read-only) and **Custom** (this board only, archive/delete actions). Auto-save with 1.5 s debounce.
+
+### Connections panel (`ConnectionsPanel` component)
+Links a board to a client folder. The folder can contain anything — code, documents, any files relevant to the board's work.
+
+**Two modes (tabs):**
+
+| Mode | What it does |
+|---|---|
+| Clone from GitHub | Enter a GitHub URL → clones into `client/<reponame>` → links board |
+| Link local folder | Pick from existing subfolders of `client/` on this machine |
+
+**Tab behavior:**
+- Tabs are **disabled** when a connection is already active
+- To switch mode, use the inline `Use GitHub instead` / `Use local instead` red link → confirm → disconnects and switches tab
+
+**Connected state:**
+- Status line: `● Connected locally` or `● Connected via GitHub`
+- Amber warning if `path_exists = false`
+- Folder list shown grayed out with current selection highlighted
+- `Switch folder` link (top right of list) enables the list to pick a different folder + Save without disconnecting
+
+**path_exists checks:**
+- `enrichProject()` on the server calls `fs.existsSync` on every project fetch — always live
+- `loadProjects()` is called on SettingsPage mount and when navigating to the Connections section
+- Manual refresh button (↺) in the Connections header re-fetches both project state and folder list
+
+**Windows path normalization bug (fixed):**
+`path.normalize('client/Velour')` on Windows returns `client\Velour`. The server validation now normalizes with `.replace(/\\/g, '/')` before checking `startsWith('client/')`.
+
+**API — `GET /api/projects/client-repos`** returns:
+```json
+{ "basePath": "C:\\...\\AutoKan\\client", "folders": [{ "name": "Velour", "client_path": "client/Velour", "abs_path": "...", "is_git": true }] }
+```
+
+### Subscription sections (superadmin only)
+- **Clients** — create/rename/archive clients; each shows board count
+- **Team** — list subscription teams
+- **Boards** — all boards with connection status badge
+- **Members** — placeholder (subscription-level members, not yet built)
+- **Superadmins** — add/remove superadmins by email
+
+### Preferences
+Light/dark theme was removed from Settings — it lives at profile level only.
+
+### Cloud vs local connection model (future)
+- **Local**: both tabs available; developer agent reads/writes directly to disk
+- **Cloud** (`CLOUD_MODE=true` / `NODE_ENV=production`): hide "Link local folder" tab; agent must work against a GitHub repo (forces git workflow)
+- Not yet implemented — `CLOUD_MODE` env var is the planned gate
+
+---
+
 ## Not Yet Built
 - Docker test environment (isolated Linux for Tester agent)
 - Secrets management UI panel
 - Webhooks / desktop notifications
 - CTO/Reviewer agent (optional code review before Human Review)
 - Agent assignment dropdown restricted to allowed agents per column in the UI (API enforces it, but UI doesn't filter yet)
+- Subscription-level Members panel (Settings → Subscription → Members)
+- Cloud mode: hide local folder tab when `CLOUD_MODE=true`
