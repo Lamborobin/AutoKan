@@ -7,20 +7,6 @@ import {
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
-// ─── Section constants ──────────────────────────────────────────────────────
-const BOARD_SECTIONS = [
-  { id: 'files',       label: 'Instruction Files', icon: FileText },
-  { id: 'connections', label: 'Connections',        icon: GitBranch },
-];
-
-const SUBSCRIPTION_SECTIONS = [
-  { id: 'sub_files',       label: 'Instruction Files', icon: FileText },
-  { id: 'sub_clients',     label: 'Clients',           icon: Building2 },
-  { id: 'sub_team',        label: 'Team',              icon: Users },
-  { id: 'sub_boards',      label: 'Boards',            icon: LayoutGrid },
-  { id: 'sub_members',     label: 'Members',           icon: UserCheck },
-  { id: 'sub_superadmins', label: 'Superadmins',       icon: Crown },
-];
 
 // ─── Main component ─────────────────────────────────────────────────────────
 export default function SettingsPage() {
@@ -306,17 +292,14 @@ export default function SettingsPage() {
           <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
           <div className="space-y-0.5">
             {navBtn('files', 'Instruction Files', FileText)}
-            {navBtn('connections', 'Connections', GitBranch, connectionDot)}
           </div>
         </div>
 
         {/* File list — only when section === 'files' (board-scoped) */}
         {section === 'files' && (
-          <div className="mx-2 mb-2 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+          <div className="mx-2 mb-1 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
             <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-240px)]">
               <div>
-                <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">Custom</p>
-                <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">This board only</p>
                 {customActive.map(f => (
                   <FileRow key={f.name} file={f} scope="board"
                     actions={
@@ -396,13 +379,28 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Subscription file list — only when section === 'sub_files' */}
-        {section === 'sub_files' && (
+        {/* Connections nav item — always visible in BOARD section */}
+        <div className="px-2 pb-1 shrink-0">
+          <div className="space-y-0.5">
+            {navBtn('connections', 'Connections', GitBranch, connectionDot)}
+          </div>
+        </div>
+
+        {/* SUBSCRIPTION section (superadmin only) */}
+        {isSuperAdmin && (
+          <div className="px-2 pt-3 pb-1 shrink-0 border-t border-border">
+            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
+            <div className="space-y-0.5">
+              {navBtn('sub_files', 'Instruction Files', FileText)}
+            </div>
+          </div>
+        )}
+
+        {/* Subscription file list — directly below the Instruction Files nav item */}
+        {section === 'sub_files' && isSuperAdmin && (
           <div className="mx-2 mb-2 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
-            <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-240px)]">
+            <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-340px)]">
               <div>
-                <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-1.5 mb-1">Workspace</p>
-                <p className="text-[9px] text-gray-700 px-1.5 mb-1.5 leading-relaxed">Shared by all boards</p>
                 {subFilesActive.map(f => (
                   <FileRow key={f.name} file={f} scope="subscription"
                     actions={
@@ -478,12 +476,15 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* SUBSCRIPTION section (superadmin only) */}
+        {/* Remaining subscription nav items */}
         {isSuperAdmin && (
-          <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
-            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
+          <div className="px-2 pb-3 shrink-0">
             <div className="space-y-0.5">
-              {SUBSCRIPTION_SECTIONS.map(({ id, label, icon: Icon }) => navBtn(id, label, Icon))}
+              {navBtn('sub_clients',     'Clients',      Building2)}
+              {navBtn('sub_team',        'Team',         Users)}
+              {navBtn('sub_boards',      'Boards',       LayoutGrid)}
+              {navBtn('sub_members',     'Members',      UserCheck)}
+              {navBtn('sub_superadmins', 'Superadmins',  Crown)}
             </div>
           </div>
         )}

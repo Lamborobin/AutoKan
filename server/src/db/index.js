@@ -5,8 +5,9 @@ const crypto = require('crypto');
 const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
 
 // Stable IDs — never change these after first migration
-const VELOUR_ID     = 'prj_a1b2c3d4';
-const TGH_ID        = 'prj_e5f6a7b8';
+const VELOUR_ID      = 'prj_a1b2c3d4';
+const TGH_ID         = 'prj_e5f6a7b8';
+const MY_BOARD_ID    = 'prj_myboard01';
 const DEFAULT_SUB_ID = 'sub_default';
 
 // Generates a new project ID: prj_ + 8 random hex chars
@@ -21,8 +22,9 @@ function legacyIdToNew(oldId) {
   return 'prj_' + crypto.createHash('sha256').update(oldId).digest('hex').slice(0, 8);
 }
 
-module.exports.VELOUR_ID = VELOUR_ID;
-module.exports.TGH_ID    = TGH_ID;
+module.exports.VELOUR_ID   = VELOUR_ID;
+module.exports.TGH_ID      = TGH_ID;
+module.exports.MY_BOARD_ID = MY_BOARD_ID;
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/autokan.db');
 
@@ -208,6 +210,10 @@ function initDb() {
   db.prepare(`INSERT OR IGNORE INTO projects (id, name, description, client_name, color, emoji)
     VALUES (?, 'Steel Platform', 'Industrial quoting and order management platform', 'TGH Iron & Steel', '#dc2626', '🏗️')`
   ).run(TGH_ID);
+  // My Board — personal board, no client
+  db.prepare(`INSERT OR IGNORE INTO projects (id, name, description, color, emoji)
+    VALUES (?, 'My Board', 'Personal workspace', '#6366f1', '🗂️')`
+  ).run(MY_BOARD_ID);
 
   // Migration: tasks table new columns
   const taskCols = db.prepare('PRAGMA table_info(tasks)').all().map(c => c.name);
@@ -600,8 +606,8 @@ function initDb() {
   const agentCount = db.prepare('SELECT COUNT(*) as c FROM agents').get();
   if (agentCount.c === 0) {
     const insertAgent = db.prepare(`
-      INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, is_template, template_system_prompt, color, created_from_template_id, project_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, is_template, template_system_prompt, color, created_from_template_id, project_id, role_ids)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const defaultAgents = [
       [
@@ -612,7 +618,8 @@ function initDb() {
         'instructions/project-manager.md',
         JSON.stringify(['instructions/client.md']),   // Planner: client context only, no codebase
         1, PM_TEMPLATE_SYSTEM_PROMPT,
-        '#6366f1', 'tpl_pm', VELOUR_ID
+        '#6366f1', 'tpl_pm', MY_BOARD_ID,
+        JSON.stringify(['perm_planning', 'role_access_backlog']),
       ],
       [
         'agent_dev', 'Developer', 'developer',
@@ -622,7 +629,8 @@ function initDb() {
         'instructions/developer.md',
         JSON.stringify(['instructions/project.md', 'instructions/client.md']), // dev: full context
         0, null,
-        '#3b82f6', 'tpl_dev', VELOUR_ID
+        '#3b82f6', 'tpl_dev', MY_BOARD_ID,
+        JSON.stringify(['perm_coding', 'role_access_inprogress']),
       ],
       [
         'agent_test', 'Tester', 'tester',
@@ -632,7 +640,8 @@ function initDb() {
         'instructions/tester.md',
         JSON.stringify(['instructions/project.md', 'instructions/client.md']), // tester: full context
         0, null,
-        '#8b5cf6', 'tpl_test', VELOUR_ID
+        '#8b5cf6', 'tpl_test', MY_BOARD_ID,
+        JSON.stringify(['perm_coding_tester', 'role_access_testing']),
       ],
     ];
     defaultAgents.forEach(a => insertAgent.run(...a));
@@ -785,6 +794,26 @@ function initDb() {
     console.log('✅ Seeded TGH Iron & Steel project');
   }
 
+  // Seed "My Board" — default personal board with no client (idempotent)
+  const myBoardExists = db.prepare('SELECT id FROM projects WHERE id = ?').get(MY_BOARD_ID);
+  if (!myBoardExists) {
+    db.prepare(`
+      INSERT INTO projects (id, name, description, color, emoji)
+      VALUES (?, 'My Board', 'Personal workspace', '#6366f1', '🗂️')
+    `).run(MY_BOARD_ID);
+    console.log('✅ Seeded My Board (personal board)');
+  }
+
+  // Migration: move the 3 default agents to My Board if they're still on Velour
+  // (fresh DBs seed them on My Board directly; existing DBs had them on Velour by default)
+  {
+    const changed = db.prepare(`
+      UPDATE agents SET project_id = ?
+      WHERE id IN ('agent_pm','agent_dev','agent_test') AND project_id = ?
+    `).run(MY_BOARD_ID, VELOUR_ID);
+    if (changed.changes > 0) console.log(`✅ Migrated ${changed.changes} default agent(s) to My Board`);
+  }
+
   // Scaffold per-project instruction folders for all known projects (idempotent — never overwrites)
   const tghClientMd = `# Client Context — TGH Iron & Steel
 
@@ -860,19 +889,7 @@ A feature is "done" when:
   // Scaffold per-project instruction folders — only client.md + project.md per board (idempotent)
   try { scaffoldProjectInstructions(VELOUR_ID, DEFAULT_SUB_ID); } catch (e) { console.warn('Could not scaffold Velour instructions:', e.message); }
   try { scaffoldProjectInstructions(TGH_ID, DEFAULT_SUB_ID, tghClientMd, '# TGH Iron & Steel — Project Context\n\nAdd project-specific context here.\n'); } catch (e) { console.warn('Could not scaffold TGH instructions:', e.message); }
-
-  // Migration: remove system files from per-project folders (both old and new paths)
-  const SYSTEM_ONLY_FILES = ['pm.md', 'project-manager.md', 'developer.md', 'tester.md'];
-  try {
-    for (const { id, subscription_id } of db.prepare('SELECT id, subscription_id FROM projects').all()) {
-      const subId = subscription_id || DEFAULT_SUB_ID;
-      const projectDir = path.join(__dirname, '../../../instructions', subId, id);
-      for (const file of SYSTEM_ONLY_FILES) {
-        const fp = path.join(projectDir, file);
-        if (fs.existsSync(fp)) fs.unlinkSync(fp);
-      }
-    }
-  } catch (e) { console.warn('Could not clean system files from project folders:', e.message); }
+  try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, '# Client Context — My Board\n\nThis is a personal workspace. Add any relevant client or project context here.\n', '# My Board — Project Context\n\nAdd project-specific context for this board here.\n'); } catch (e) { console.warn('Could not scaffold My Board instructions:', e.message); }
 
   // ── Clients table ────────────────────────────────────────────────────────
   db.exec(`
@@ -928,6 +945,22 @@ A feature is "done" when:
       db.exec('ALTER TABLE projects ADD COLUMN created_by TEXT REFERENCES users(id)');
       console.log('✅ Migrated: added created_by to projects');
     }
+  }
+
+  // Migration: remove system files from per-project instruction folders (idempotent)
+  // Must run after subscription_id column exists on projects
+  {
+    const SYSTEM_ONLY_FILES = ['pm.md', 'project-manager.md', 'developer.md', 'tester.md'];
+    try {
+      for (const { id, subscription_id } of db.prepare('SELECT id, subscription_id FROM projects').all()) {
+        const subId = subscription_id || DEFAULT_SUB_ID;
+        const projectDir = path.join(__dirname, '../../../instructions', subId, id);
+        for (const file of SYSTEM_ONLY_FILES) {
+          const fp = path.join(projectDir, file);
+          if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        }
+      }
+    } catch (e) { console.warn('Could not clean system files from project folders:', e.message); }
   }
 
   // ── Invites table ──────────────────────────────────────────
@@ -1093,4 +1126,4 @@ A feature is "done" when:
   return db;
 }
 
-module.exports = { getDb, initDb, VELOUR_ID, TGH_ID, generateProjectId };
+module.exports = { getDb, initDb, VELOUR_ID, TGH_ID, MY_BOARD_ID, generateProjectId };
