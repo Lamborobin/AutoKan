@@ -959,12 +959,6 @@ function initDb() {
     }
   }
 
-  // ── Seed default team ────────────────────────────────────────
-  db.prepare(`INSERT OR IGNORE INTO teams (id, name, color) VALUES ('team_mycompany', 'My Company Team', '#6366f1')`).run();
-  db.prepare(`INSERT OR IGNORE INTO team_members (id, team_id, email) VALUES ('tm_robin1', 'team_mycompany', 'lamborobin97@gmail.com')`).run();
-  db.prepare(`INSERT OR IGNORE INTO team_members (id, team_id, email) VALUES ('tm_robin2', 'team_mycompany', 'robin.larsson@softronic.se')`).run();
-  // Link existing users to team_members by email
-  db.prepare(`UPDATE team_members SET user_id = (SELECT id FROM users WHERE email = team_members.email) WHERE user_id IS NULL`).run();
 
   // ── Seed default subscription ──────────────────────────────────────────────
   db.prepare(`INSERT OR IGNORE INTO subscriptions (id, name) VALUES (?, 'My Workspace')`).run(DEFAULT_SUB_ID);
@@ -1007,8 +1001,6 @@ function initDb() {
     }
   }
 
-  // Remove lamborobin97@gmail.com from My Company Team (superadmins don't need team membership)
-  db.prepare(`DELETE FROM team_members WHERE team_id = 'team_mycompany' AND email = 'lamborobin97@gmail.com'`).run();
 
   // ── Seed project_members: only board owners (idempotent) ──
   // Access is explicit: owner on creation, then invite-only.

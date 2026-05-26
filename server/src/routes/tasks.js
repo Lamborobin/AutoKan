@@ -116,8 +116,8 @@ router.post('/', requirePermission('task:create'), (req, res) => {
   const col = db.prepare('SELECT id FROM columns WHERE id = ?').get(column_id);
   if (!col) return res.status(400).json({ error: 'Invalid column_id' });
 
-  // Resolve project: use provided or fall back to default
-  const resolvedProject = project_id || 'proj_velour';
+  // Use provided project_id (required from frontend; agents pass theirs explicitly)
+  const resolvedProject = project_id || null;
 
   const id = 'task_' + uuidv4().replace(/-/g, '').slice(0, 12);
 

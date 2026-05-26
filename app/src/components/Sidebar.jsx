@@ -632,7 +632,9 @@ const NAV_ITEMS = [ // kept for reference; no longer rendered as dropdown
 ];
 
 export default function Sidebar() {
-  const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage, boardMembers, user } = useStore();
+  const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage, boardMembers, user, projects, currentProjectId } = useStore();
+  const currentProject = projects.find(p => p.id === currentProjectId);
+  const isClientBoard = !!currentProject?.client_id;
   const [agentsOpen, setAgentsOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(null);
@@ -756,8 +758,8 @@ export default function Sidebar() {
             </div>
           )}
 
-          {/* Members */}
-          <div className="mt-3 pt-3 border-t border-border/50">
+          {/* Members — only shown for client boards */}
+          {isClientBoard && <div className="mt-3 pt-3 border-t border-border/50">
             <button
               onClick={() => setMembersOpen(o => !o)}
               className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-xs font-semibold text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest"
@@ -808,19 +810,21 @@ export default function Sidebar() {
                 </button>
               </div>
             )}
-          </div>
+          </div>}
         </div>
 
         {/* Footer — members + user menu */}
         <div className="p-3 border-t border-border space-y-1">
-          <button
-            onClick={() => setShowMembersModal(true)}
-            className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-3 transition-colors text-gray-500 hover:text-gray-300"
-            title="Manage board members"
-          >
-            <Users size={15} />
-            <span className="text-xs font-medium">Members & Teams</span>
-          </button>
+          {isClientBoard && (
+            <button
+              onClick={() => setShowMembersModal(true)}
+              className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-3 transition-colors text-gray-500 hover:text-gray-300"
+              title="Manage board members"
+            >
+              <Users size={15} />
+              <span className="text-xs font-medium">Members & Teams</span>
+            </button>
+          )}
           <UserMenu />
         </div>
       </aside>

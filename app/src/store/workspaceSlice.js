@@ -64,7 +64,9 @@ export const createWorkspaceSlice = (set, get) => ({
     set({ projects });
     const { currentProjectId } = get();
     if (!projects.find(p => p.id === currentProjectId)) {
-      const fallback = projects[0]?.id || null;
+      // Prefer personal board (no client) as default, otherwise first available
+      const personal = projects.find(p => !p.client_id && !p.archived_at);
+      const fallback = personal?.id || projects.find(p => !p.archived_at)?.id || null;
       get().setCurrentProject(fallback);
     }
   },

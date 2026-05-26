@@ -227,7 +227,7 @@ export const createBoardSlice = (set, get) => ({
   // ── Instruction Files (board-scoped) ──────────────────────────
   async loadInstructionFiles() {
     const { currentProjectId, subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     const files = await instructionsApi.list(true, currentProjectId, subId);
     set({ instructionFiles: files });
     return files;
@@ -235,7 +235,7 @@ export const createBoardSlice = (set, get) => ({
 
   async createInstructionFile(name, content) {
     const { currentProjectId, subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     const file = await instructionsApi.create({ name, content }, currentProjectId, subId);
     set(s => ({ instructionFiles: [...s.instructionFiles, file] }));
     return file;
@@ -243,7 +243,7 @@ export const createBoardSlice = (set, get) => ({
 
   async updateInstructionFile(filename, content) {
     const { currentProjectId, subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.update(filename, content, currentProjectId, subId);
     set(s => ({
       instructionFiles: s.instructionFiles.map(f =>
@@ -254,9 +254,9 @@ export const createBoardSlice = (set, get) => ({
 
   async archiveInstructionFile(filename) {
     const { currentProjectId, subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.archive(filename, currentProjectId, subId);
-    const prefix = subId && currentProjectId ? `instructions/${subId}/${currentProjectId}` : 'instructions';
+    const prefix = `instructions/${subId}/${currentProjectId}`;
     set(s => ({
       instructionFiles: s.instructionFiles.map(f =>
         f.name + '.md' === filename ? { ...f, archived: true, path: `${prefix}/archived/${filename}` } : f
@@ -266,9 +266,9 @@ export const createBoardSlice = (set, get) => ({
 
   async unarchiveInstructionFile(filename) {
     const { currentProjectId, subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.unarchive(filename, currentProjectId, subId);
-    const prefix = subId && currentProjectId ? `instructions/${subId}/${currentProjectId}` : 'instructions';
+    const prefix = `instructions/${subId}/${currentProjectId}`;
     set(s => ({
       instructionFiles: s.instructionFiles.map(f =>
         f.name + '.md' === filename ? { ...f, archived: false, path: `${prefix}/${filename}` } : f
@@ -278,7 +278,7 @@ export const createBoardSlice = (set, get) => ({
 
   async deleteInstructionFile(filename) {
     const { currentProjectId, subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.delete(filename, currentProjectId, subId);
     set(s => ({
       instructionFiles: s.instructionFiles.filter(f => f.name + '.md' !== filename),
@@ -288,8 +288,7 @@ export const createBoardSlice = (set, get) => ({
   // ── Instruction Files (subscription-scoped) ───────────────────
   async loadSubscriptionInstructionFiles() {
     const { subscription } = get();
-    const subId = subscription?.id || null;
-    if (!subId) return [];
+    const subId = subscription?.id || 'sub_default';
     const files = await instructionsApi.list(true, null, subId);
     set({ subscriptionInstructionFiles: files });
     return files;
@@ -297,8 +296,7 @@ export const createBoardSlice = (set, get) => ({
 
   async createSubscriptionInstructionFile(name, content) {
     const { subscription } = get();
-    const subId = subscription?.id || null;
-    if (!subId) throw new Error('No subscription');
+    const subId = subscription?.id || 'sub_default';
     const file = await instructionsApi.create({ name, content }, null, subId);
     set(s => ({ subscriptionInstructionFiles: [...s.subscriptionInstructionFiles, file] }));
     return file;
@@ -306,13 +304,13 @@ export const createBoardSlice = (set, get) => ({
 
   async updateSubscriptionInstructionFile(filename, content) {
     const { subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.update(filename, content, null, subId);
   },
 
   async archiveSubscriptionInstructionFile(filename) {
     const { subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.archive(filename, null, subId);
     const prefix = `instructions/${subId}`;
     set(s => ({
@@ -324,7 +322,7 @@ export const createBoardSlice = (set, get) => ({
 
   async unarchiveSubscriptionInstructionFile(filename) {
     const { subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.unarchive(filename, null, subId);
     const prefix = `instructions/${subId}`;
     set(s => ({
@@ -336,7 +334,7 @@ export const createBoardSlice = (set, get) => ({
 
   async deleteSubscriptionInstructionFile(filename) {
     const { subscription } = get();
-    const subId = subscription?.id || null;
+    const subId = subscription?.id || 'sub_default';
     await instructionsApi.delete(filename, null, subId);
     set(s => ({
       subscriptionInstructionFiles: s.subscriptionInstructionFiles.filter(f => f.name + '.md' !== filename),
