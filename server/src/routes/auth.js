@@ -96,10 +96,10 @@ router.post('/google', async (req, res) => {
       if (!personalExists) {
         const displayName = firstName ? `${firstName}'s Board` : 'My Board';
         db.prepare(`
-          INSERT INTO projects (id, name, description, color, emoji, owner_id)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO projects (id, name, description, color, emoji, owner_id, subscription_id)
+          VALUES (?, ?, ?, ?, ?, ?, 'sub_default')
         `).run(personalProjectId, displayName, 'Personal workspace', '#10b981', '🧑', id);
-        try { scaffoldProjectInstructions(personalProjectId); } catch (e) { console.warn('Could not scaffold personal board instructions:', e.message); }
+        try { scaffoldProjectInstructions(personalProjectId, 'sub_default'); } catch (e) { console.warn('Could not scaffold personal board instructions:', e.message); }
         console.log(`✅ Created personal board for ${email}`);
       }
     }

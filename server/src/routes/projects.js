@@ -140,7 +140,7 @@ router.post('/', requireAuth, (req, res) => {
   const project = db.prepare(`${PROJECT_SELECT} WHERE p.id = ?`).get(id);
 
   // Scaffold per-project instruction files (copies system defaults + blank client.md)
-  try { scaffoldProjectInstructions(id); } catch (e) { console.warn('Could not scaffold instructions:', e.message); }
+  try { scaffoldProjectInstructions(id, 'sub_default'); } catch (e) { console.warn('Could not scaffold instructions:', e.message); }
 
   res.status(201).json(project);
 });
