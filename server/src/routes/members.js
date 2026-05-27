@@ -59,11 +59,15 @@ router.post('/', requireAuth, async (req, res) => {
   // Check if user exists already
   const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
 
+  const roleIds = JSON.stringify(
+    Array.isArray(req.body.role_ids) ? req.body.role_ids : ['role_access_any']
+  );
+
   const id = 'pm_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO project_members (id, project_id, email, user_id, invited_by)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, projectId, email, existingUser?.id || null, req.user.sub);
+    INSERT INTO project_members (id, project_id, email, user_id, invited_by, role_ids)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, projectId, email, existingUser?.id || null, req.user.sub, roleIds);
 
   const inviterName = `${req.user.first_name || ''} ${req.user.last_name || ''}`.trim() || req.user.email;
 
@@ -164,6 +168,29 @@ router.post('/add-team', requireAuth, async (req, res) => {
   res.json({ added, skipped, teamName: team.name });
 });
 
+// PATCH /api/projects/:projectId/members/:memberId — update member role_ids
+router.patch('/:memberId', requireAuth, (req, res) => {
+  const { projectId, memberId } = req.params;
+  const db = getDb();
+
+  const member = db.prepare('SELECT * FROM project_members WHERE id = ? AND project_id = ?').get(memberId, projectId);
+  if (!member) return res.status(404).json({ error: 'Member not found' });
+
+  const { role_ids } = req.body;
+  if (!Array.isArray(role_ids)) return res.status(400).json({ error: 'role_ids must be an array' });
+
+  db.prepare('UPDATE project_members SET role_ids = ? WHERE id = ?').run(JSON.stringify(role_ids), memberId);
+
+  const updated = db.prepare(`
+    SELECT pm.*, u.first_name, u.last_name, u.picture
+    FROM project_members pm
+    LEFT JOIN users u ON pm.user_id = u.id
+    WHERE pm.id = ?
+  `).get(memberId);
+
+  res.json(updated);
+});
+
 // DELETE /api/projects/:projectId/members/:memberId — remove member
 router.delete('/:memberId', requireAuth, (req, res) => {
   const { projectId, memberId } = req.params;
@@ -171,14 +198,6 @@ router.delete('/:memberId', requireAuth, (req, res) => {
 
   const member = db.prepare('SELECT * FROM project_members WHERE id = ? AND project_id = ?').get(memberId, projectId);
   if (!member) return res.status(404).json({ error: 'Member not found' });
-
-  // Cannot remove yourself
-  if (req.user && member.email === req.user.email) {
-    return res.status(403).json({ error: 'You cannot remove yourself from a board' });
-  }
-  if (req.user && member.user_id === req.user.sub) {
-    return res.status(403).json({ error: 'You cannot remove yourself from a board' });
-  }
 
   db.prepare('DELETE FROM project_members WHERE id = ?').run(memberId);
   res.json({ ok: true });

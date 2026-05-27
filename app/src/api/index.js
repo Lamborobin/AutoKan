@@ -132,6 +132,7 @@ export const membersApi = {
   list: (projectId) => api.get(`/projects/${projectId}/members`).then(r => r.data),
   add: (projectId, email) => api.post(`/projects/${projectId}/members`, { email }).then(r => r.data),
   addTeam: (projectId, teamId) => api.post(`/projects/${projectId}/members/add-team`, { teamId }).then(r => r.data),
+  update: (projectId, memberId, data) => api.patch(`/projects/${projectId}/members/${memberId}`, data).then(r => r.data),
   remove: (projectId, memberId) => api.delete(`/projects/${projectId}/members/${memberId}`).then(r => r.data),
 };
 

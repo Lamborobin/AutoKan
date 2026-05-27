@@ -41,9 +41,9 @@ export default function BoardsModal({ onClose }) {
   const filtered = useMemo(() => {
     let result = active;
 
-    // Scope toggle — "my boards" = boards created by me
+    // Scope toggle — "my boards" = personal boards (no client)
     if (scope === 'mine') {
-      result = result.filter(p => p.created_by === user?.id);
+      result = result.filter(p => !p.client_id);
     }
 
     // Client dropdown
@@ -243,7 +243,6 @@ export default function BoardsModal({ onClose }) {
   }
 
   const clientOptions = [
-    { value: '__none__', label: 'No client' },
     ...activeClients.map(c => ({ value: c.id, label: c.name })),
   ];
 
@@ -343,7 +342,7 @@ export default function BoardsModal({ onClose }) {
             {/* All / My boards toggle */}
             <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
               <button
-                onClick={() => setScope('mine')}
+                onClick={() => { setScope('mine'); setClientFilter(''); }}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                   scope === 'mine'
                     ? 'bg-accent text-white'
@@ -364,13 +363,15 @@ export default function BoardsModal({ onClose }) {
               </button>
             </div>
 
-            {/* Client dropdown */}
-            <FilterDropdown
-              value={clientFilter}
-              onChange={setClientFilter}
-              placeholder="All clients"
-              options={clientOptions}
-            />
+            {/* Client dropdown — only in All boards tab */}
+            {scope === 'all' && (
+              <FilterDropdown
+                value={clientFilter}
+                onChange={setClientFilter}
+                placeholder="All clients"
+                options={clientOptions}
+              />
+            )}
 
             {/* Creator dropdown — only show when there are multiple creators or user is superadmin */}
             {(isSuperAdmin || creators.length > 1) && (
@@ -415,7 +416,7 @@ export default function BoardsModal({ onClose }) {
               ))}
               {grouped.noClient.length > 0 && (
                 <Section
-                  title={grouped.byClient.length > 0 ? 'No client' : undefined}
+                  title={scope === 'all' && grouped.byClient.length > 0 ? 'No client' : undefined}
                   boards={grouped.noClient}
                 />
               )}

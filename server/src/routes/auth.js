@@ -108,7 +108,7 @@ router.post('/google', async (req, res) => {
         const pmId = 'pm_' + require('crypto').randomBytes(6).toString('hex');
         db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at) VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)
           .run(pmId, personalProjectId, email, id);
-        try { scaffoldProjectInstructions(personalProjectId, 'sub_default'); } catch (e) { console.warn('Could not scaffold personal board:', e.message); }
+        try { scaffoldProjectInstructions(personalProjectId, 'sub_default', null, null, true); } catch (e) { console.warn('Could not scaffold personal board:', e.message); }
         console.log(`✅ Created personal board for ${email}`);
       }
     }

@@ -418,6 +418,13 @@ export const createBoardSlice = (set, get) => ({
     return result;
   },
 
+  async updateBoardMemberRoles(memberId, roleIds) {
+    const { currentProjectId } = get();
+    const updated = await membersApi.update(currentProjectId, memberId, { role_ids: roleIds });
+    set(s => ({ boardMembers: s.boardMembers.map(m => m.id === memberId ? { ...m, role_ids: updated.role_ids } : m) }));
+    return updated;
+  },
+
   async removeBoardMember(memberId) {
     const { currentProjectId } = get();
     await membersApi.remove(currentProjectId, memberId);

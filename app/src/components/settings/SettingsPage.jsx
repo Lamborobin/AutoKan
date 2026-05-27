@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
-  Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck,
+  Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
 } from 'lucide-react';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
@@ -31,6 +31,8 @@ export default function SettingsPage() {
     loadProjects,
     isSuperAdmin,
     subscription,
+    loadSubscription,
+    updateSubscriptionName,
     subscriptionAdmins,
     addSuperAdmin,
     removeSuperAdmin,
@@ -45,9 +47,39 @@ export default function SettingsPage() {
   } = useStore();
 
   const currentProject = projects.find(p => p.id === currentProjectId);
+  const isClientBoard = !!currentProject?.client_id;
 
   const [section, setSection]         = useState('files');
   const [connRefreshKey, setConnRefreshKey] = useState(0);
+
+  // Redirect away from Connections if we're on a personal board
+  useEffect(() => {
+    if (section === 'connections' && !isClientBoard) {
+      setSection('files');
+    }
+  }, [isClientBoard, section]);
+
+  // ── Subscription overview state ─────────────────────────────────────────
+  const [subName, setSubName]           = useState('');
+  const [editingSubName, setEditingSubName] = useState(false);
+  const [savingSubName, setSavingSubName]   = useState(false);
+  const [subNameError, setSubNameError]     = useState('');
+
+  useEffect(() => {
+    if (subscription?.name) setSubName(subscription.name);
+  }, [subscription?.name]);
+
+  async function handleSaveSubName(e) {
+    e.preventDefault();
+    if (!subName.trim()) return;
+    setSavingSubName(true); setSubNameError('');
+    try {
+      await updateSubscriptionName(subName.trim());
+      setEditingSubName(false);
+    } catch (err) {
+      setSubNameError(err.response?.data?.error || 'Failed to update');
+    } finally { setSavingSubName(false); }
+  }
 
   // ── Superadmin state ────────────────────────────────────────────────────
   const [adminEmail, setAdminEmail]   = useState('');
@@ -97,8 +129,11 @@ export default function SettingsPage() {
   const [actionError, setActionError]   = useState(null);
   const saveTimerRef = useRef(null);
 
-  // Refresh project data on mount so path_exists is current
-  useEffect(() => { loadProjects().catch(() => {}); }, []);
+  // Refresh project + subscription data on mount
+  useEffect(() => {
+    loadProjects().catch(() => {});
+    loadSubscription().catch(() => {});
+  }, []);
 
   // Reload board files when board changes
   useEffect(() => {
@@ -113,6 +148,7 @@ export default function SettingsPage() {
       setSelectedFile(null);
     }
     if (section.startsWith('sub_')) {
+      loadSubscription().catch(() => {});
       loadTeams().catch(() => {});
       loadClients().catch(() => {});
     }
@@ -121,8 +157,10 @@ export default function SettingsPage() {
     }
   }, [section]);
 
-  const customActive   = instructionFiles.filter(f => !f.archived);
-  const customArchived = instructionFiles.filter(f => f.archived);
+  // client.md and project.md are client-board-only context files — hide on personal boards
+  const CLIENT_BOARD_FILES = new Set(['client', 'project']);
+  const customActive   = instructionFiles.filter(f => !f.archived  && (isClientBoard || !CLIENT_BOARD_FILES.has(f.name)));
+  const customArchived = instructionFiles.filter(f =>  f.archived  && (isClientBoard || !CLIENT_BOARD_FILES.has(f.name)));
   const subFilesActive   = subscriptionInstructionFiles.filter(f => !f.archived);
   const subFilesArchived = subscriptionInstructionFiles.filter(f => f.archived);
 
@@ -379,19 +417,23 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Connections nav item — always visible in BOARD section */}
-        <div className="px-2 pb-1 shrink-0">
-          <div className="space-y-0.5">
-            {navBtn('connections', 'Connections', GitBranch, connectionDot)}
+        {/* Connections nav item — only visible for client boards */}
+        {isClientBoard && (
+          <div className="px-2 pb-1 shrink-0">
+            <div className="space-y-0.5">
+              {navBtn('connections', 'Connections', GitBranch, connectionDot)}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* SUBSCRIPTION section (superadmin only) */}
         {isSuperAdmin && (
           <div className="px-2 pt-3 pb-1 shrink-0 border-t border-border">
             <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
             <div className="space-y-0.5">
-              {navBtn('sub_files', 'Instruction Files', FileText)}
+              {navBtn('sub_overview', 'Overview', Settings2)}
+              {navBtn('sub_clients',  'Clients',  Building2)}
+              {navBtn('sub_files',    'Instruction Files', FileText)}
             </div>
           </div>
         )}
@@ -480,7 +522,6 @@ export default function SettingsPage() {
         {isSuperAdmin && (
           <div className="px-2 pb-3 shrink-0">
             <div className="space-y-0.5">
-              {navBtn('sub_clients',     'Clients',      Building2)}
               {navBtn('sub_team',        'Team',         Users)}
               {navBtn('sub_boards',      'Boards',       LayoutGrid)}
               {navBtn('sub_members',     'Members',      UserCheck)}
@@ -519,6 +560,60 @@ export default function SettingsPage() {
                 updateProject={updateProject}
                 refreshKey={connRefreshKey}
               />
+            </div>
+          </div>
+        )}
+
+        {/* Subscription overview panel */}
+        {section === 'sub_overview' && isSuperAdmin && (
+          <div className="flex-1 overflow-y-auto px-8 py-8">
+            <div className="max-w-lg space-y-8">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-200 mb-1">Subscription</h2>
+                <p className="text-xs text-gray-500 mb-6">
+                  Workspace-level settings. Changes apply to all boards and members.
+                </p>
+
+                {/* Workspace name */}
+                <div className="bg-surface-2 border border-border rounded-xl p-4 space-y-3">
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Workspace name</p>
+                  {editingSubName ? (
+                    <form onSubmit={handleSaveSubName} className="space-y-2">
+                      <input
+                        value={subName}
+                        onChange={e => setSubName(e.target.value)}
+                        autoFocus
+                        className="w-full bg-surface-3 border border-accent/40 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/60"
+                      />
+                      {subNameError && <p className="text-xs text-red-400">{subNameError}</p>}
+                      <div className="flex gap-2">
+                        <button type="submit" disabled={savingSubName || !subName.trim()}
+                          className="px-3 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
+                          {savingSubName ? 'Saving…' : 'Save'}
+                        </button>
+                        <button type="button" onClick={() => { setEditingSubName(false); setSubName(subscription?.name || ''); setSubNameError(''); }}
+                          className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-gray-200">{subscription?.name || '—'}</p>
+                      <button onClick={() => { setEditingSubName(true); setSubNameError(''); }}
+                        className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors" title="Rename">
+                        <Pencil size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Subscription ID (read-only info) */}
+                <div className="bg-surface-2 border border-border rounded-xl p-4 mt-3 space-y-1">
+                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Subscription ID</p>
+                  <p className="font-mono text-xs text-gray-500">{subscription?.id || '—'}</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -977,35 +1072,44 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
 
       {/* Connected status */}
       {isConnected && (
-        <div className="flex items-center gap-3">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${project.path_exists ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-          <span className="text-sm font-medium text-gray-200">
-            {project.repo_url ? 'Connected via GitHub' : 'Connected locally'}
-          </span>
-          {!project.path_exists && (
-            <span className="text-xs text-amber-400 flex items-center gap-1">
-              <AlertTriangle size={11} /> Folder not found
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-3">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${project.path_exists ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+            <span className="text-sm font-medium text-gray-200">
+              {project.repo_url ? 'Connected via GitHub' : 'Connected locally'}
             </span>
+            {!project.path_exists && (
+              <span className="text-xs text-amber-400 flex items-center gap-1">
+                <AlertTriangle size={11} /> Folder not found
+              </span>
+            )}
+            <span className="text-gray-700 text-xs">·</span>
+            {confirmSwitch ? (
+              <span className="flex items-center gap-2 text-xs">
+                <span className="text-gray-500">Switch connection?</span>
+                <button onClick={handleSwitch} disabled={saving}
+                  className="text-red-400 hover:text-red-300 font-medium transition-colors">
+                  {saving ? 'Switching…' : 'Yes'}
+                </button>
+                <button onClick={() => setConfirmSwitch(false)} className="text-gray-600 hover:text-gray-400 transition-colors">
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setConfirmSwitch(true)}
+                className="text-xs text-red-500/70 hover:text-red-400 transition-colors"
+              >
+                {switchLabel}
+              </button>
+            )}
+          </div>
+          {/* Show the connected URL or path */}
+          {displayUrl && (
+            <p className="font-mono text-xs text-gray-500 pl-4">{displayUrl}</p>
           )}
-          <span className="text-gray-700 text-xs">·</span>
-          {confirmSwitch ? (
-            <span className="flex items-center gap-2 text-xs">
-              <span className="text-gray-500">Switch connection?</span>
-              <button onClick={handleSwitch} disabled={saving}
-                className="text-red-400 hover:text-red-300 font-medium transition-colors">
-                {saving ? 'Switching…' : 'Yes'}
-              </button>
-              <button onClick={() => setConfirmSwitch(false)} className="text-gray-600 hover:text-gray-400 transition-colors">
-                Cancel
-              </button>
-            </span>
-          ) : (
-            <button
-              onClick={() => setConfirmSwitch(true)}
-              className="text-xs text-red-500/70 hover:text-red-400 transition-colors"
-            >
-              {switchLabel}
-            </button>
+          {!project.repo_url && project.client_path && (
+            <p className="font-mono text-xs text-gray-500 pl-4">{project.client_path}</p>
           )}
         </div>
       )}

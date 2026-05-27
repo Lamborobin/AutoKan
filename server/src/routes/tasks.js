@@ -9,12 +9,12 @@ const { sendMentionEmail } = require('../services/emailService');
 const router = express.Router();
 
 // All agent auto-triggers are capability-based, not ID-based
-function agentHasCapability(agentId, capability, db) {
-  if (!agentId) return false;
+function getAgentCapabilities(agentId, db) {
+  if (!agentId) return [];
   const agent = db.prepare('SELECT role_ids FROM agents WHERE id = ?').get(agentId);
-  if (!agent) return false;
-  try { return JSON.parse(agent.role_ids || '[]').includes(capability); }
-  catch { return false; }
+  if (!agent) return [];
+  try { return JSON.parse(agent.role_ids || '[]'); }
+  catch { return []; }
 }
 
 // Dynamic role-based column access check — works for system and custom columns
@@ -123,7 +123,8 @@ router.post('/', requirePermission('task:create'), (req, res) => {
 
   // If a planning-capable agent is assigned at creation time in Backlog, auto-request planning review
   let pmReviewStatus = null;
-  if (column_id === 'col_backlog' && assigned_agent_id && agentHasCapability(assigned_agent_id, 'perm_planning', db)) {
+  const createCapabilities = getAgentCapabilities(assigned_agent_id, db);
+  if (column_id === 'col_backlog' && assigned_agent_id && createCapabilities.includes('perm_planning')) {
     pmReviewStatus = 'pending';
   }
 
@@ -225,19 +226,20 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
 
   let triggerPm = false;
 
-  // Trigger agent only when BOTH the right role is assigned AND the task is in the matching column
+  // Trigger agent only when BOTH the right capability is assigned AND the task is in the matching column
   if (req.body.assigned_agent_id !== undefined) {
     const newAgentId = req.body.assigned_agent_id;
-    if (task.column_id === 'col_backlog' && agentHasCapability(newAgentId, 'perm_planning', db) && !task.pm_approval_status) {
+    const capabilities = getAgentCapabilities(newAgentId, db);
+    if (task.column_id === 'col_backlog' && capabilities.includes('perm_planning') && !task.pm_approval_status) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'pending' WHERE id = ?`).run(task.id);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review automatically requested on assignment');
       triggerPm = true;
-    } else if (task.column_id === 'col_inprogress' && agentHasCapability(newAgentId, 'perm_coding', db)) {
+    } else if (task.column_id === 'col_inprogress' && capabilities.includes('perm_coding')) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'developer_assigned', 'Developer assigned — starting implementation');
       triggerDevAgent(task.id);
-    } else if (task.column_id === 'col_testing' && agentHasCapability(newAgentId, 'perm_coding_tester', db)) {
+    } else if (task.column_id === 'col_testing' && capabilities.includes('perm_coding_tester')) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'tester_assigned', 'Tester assigned — starting test run');
       triggerTesterAgent(task.id);
@@ -297,11 +299,12 @@ router.post('/:id/move', requirePermission('task:move'), (req, res) => {
 
   // Trigger agent if task moved into a column where the assigned agent has the matching capability
   if (updated.assigned_agent_id) {
-    if (column_id === 'col_backlog' && agentHasCapability(updated.assigned_agent_id, 'perm_planning', db) && !task.pm_approval_status) {
+    const capabilities = getAgentCapabilities(updated.assigned_agent_id, db);
+    if (column_id === 'col_backlog' && capabilities.includes('perm_planning') && !task.pm_approval_status) {
       triggerPmAgent(task.id);
-    } else if (column_id === 'col_inprogress' && agentHasCapability(updated.assigned_agent_id, 'perm_coding', db)) {
+    } else if (column_id === 'col_inprogress' && capabilities.includes('perm_coding')) {
       triggerDevAgent(task.id);
-    } else if (column_id === 'col_testing' && agentHasCapability(updated.assigned_agent_id, 'perm_coding_tester', db)) {
+    } else if (column_id === 'col_testing' && capabilities.includes('perm_coding_tester')) {
       triggerTesterAgent(task.id);
     }
   }

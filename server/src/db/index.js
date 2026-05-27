@@ -806,7 +806,21 @@ function initDb() {
 
   // Scaffold per-project instruction folders — only client.md + project.md per board (idempotent)
   try { scaffoldProjectInstructions(VELOUR_ID, DEFAULT_SUB_ID); } catch (e) { console.warn('Could not scaffold Velour instructions:', e.message); }
-  try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, '# Client Context — My Board\n\nThis is a personal workspace. Add any relevant client or project context here.\n', '# My Board — Project Context\n\nAdd project-specific context for this board here.\n'); } catch (e) { console.warn('Could not scaffold My Board instructions:', e.message); }
+  try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, null, null, true); } catch (e) { console.warn('Could not scaffold My Board instructions:', e.message); }
+
+  // Clean up client.md / project.md from personal boards (no client_id) — one-time idempotent fix
+  try {
+    const personalBoards = db.prepare('SELECT id FROM projects WHERE client_id IS NULL').all();
+    const fs = require('fs');
+    const path = require('path');
+    const PROJECT_ROOT = path.join(__dirname, '../../..');
+    for (const { id } of personalBoards) {
+      for (const fname of ['client.md', 'project.md']) {
+        const fp = path.join(PROJECT_ROOT, 'instructions', DEFAULT_SUB_ID, id, fname);
+        if (fs.existsSync(fp)) { fs.unlinkSync(fp); console.log(`Removed ${fname} from personal board ${id}`); }
+      }
+    }
+  } catch (e) { console.warn('Could not clean personal board context files:', e.message); }
 
   // ── Clients table ────────────────────────────────────────────────────────
   db.exec(`
@@ -956,6 +970,10 @@ function initDb() {
       // Auto-seeded (no invited_by) rows are implicitly accepted
       db.exec('UPDATE project_members SET accepted_at = added_at WHERE invited_by IS NULL');
       console.log('✅ Migrated: added accepted_at to project_members');
+    }
+    if (!pmCols.includes('role_ids')) {
+      db.exec(`ALTER TABLE project_members ADD COLUMN role_ids TEXT DEFAULT '["role_access_any"]'`);
+      console.log('✅ Migrated: added role_ids to project_members');
     }
   }
 

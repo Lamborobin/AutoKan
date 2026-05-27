@@ -139,9 +139,9 @@ function removeWorktree(worktreePath) {
   }
 }
 
-// Global codebase files — loaded for technical agents (dev, tester) but NOT for PM.
-// A PM understands client priorities and product decisions, not the codebase.
-const CODEBASE_FILES = ['CLAUDE.md', 'README.md'];
+// CLAUDE.md is loaded for all agents — it contains the context file table and project rules.
+// README.md is loaded only for agents with coder capabilities — it describes the codebase.
+const CODER_CAPABILITIES = ['perm_coding', 'perm_backend', 'perm_frontend', 'perm_coding_tester'];
 
 // Lazy-init so dotenv has time to load before we read the key
 let _client = null;
@@ -234,9 +234,9 @@ function readFile(filePath, subscriptionId, projectId) {
 
 function buildContextBlock(agent, subscriptionId, projectId) {
   const instructionFiles = JSON.parse(agent.instruction_files || '[]');
-  // PM role: client context only — no codebase files.
-  // Technical roles (developer, tester): get codebase files too.
-  const globalFiles = agent.role === 'pm' ? [] : CODEBASE_FILES;
+  const agentCapabilities = JSON.parse(agent.role_ids || '[]');
+  const isCoderAgent = CODER_CAPABILITIES.some(cap => agentCapabilities.includes(cap));
+  const globalFiles = ['CLAUDE.md', ...(isCoderAgent ? ['README.md'] : [])];
   const allContextFiles = [...globalFiles, ...instructionFiles];
   const sections = [];
 

@@ -17,21 +17,24 @@ function scaffoldSubscriptionInstructions(subscriptionId) {
 }
 
 /**
- * Scaffold an instructions/{subscriptionId}/{projectId}/ folder with per-board context files.
- * System files (project-manager.md, developer.md, tester.md) live in the subscription folder,
- * NOT in the project folder.
+ * Scaffold an instructions/{subscriptionId}/{projectId}/ folder.
+ * For client boards: also creates client.md and project.md context files.
+ * For personal boards (skipContextFiles=true): only creates the directory.
  * Safe to call multiple times — existing files are never overwritten.
  * @param {string} projectId
  * @param {string} subscriptionId
- * @param {string|null} clientMdContent  Initial content for client.md (null = generic placeholder)
- * @param {string|null} projectMdContent Initial content for project.md (null = generic placeholder)
+ * @param {string|null} clientMdContent    Initial content for client.md (null = generic placeholder)
+ * @param {string|null} projectMdContent   Initial content for project.md (null = generic placeholder)
+ * @param {boolean}     skipContextFiles   When true, only create the folder (no client/project .md)
  */
-function scaffoldProjectInstructions(projectId, subscriptionId, clientMdContent = null, projectMdContent = null) {
+function scaffoldProjectInstructions(projectId, subscriptionId, clientMdContent = null, projectMdContent = null, skipContextFiles = false) {
   const projectDir = subscriptionId
     ? path.join(GLOBAL_INSTRUCTIONS_DIR, subscriptionId, projectId)
-    : path.join(GLOBAL_INSTRUCTIONS_DIR, projectId); // fallback if no subscription (shouldn't happen)
+    : path.join(GLOBAL_INSTRUCTIONS_DIR, projectId);
 
   if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
+
+  if (skipContextFiles) return; // personal board — directory only, no context files
 
   const clientMd = path.join(projectDir, 'client.md');
   if (!fs.existsSync(clientMd)) {

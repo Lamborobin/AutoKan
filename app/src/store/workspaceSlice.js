@@ -1,5 +1,6 @@
 import { subscriptionApi, clientsApi, projectsApi } from '../api';
 
+
 export const createWorkspaceSlice = (set, get) => ({
   // ── State ─────────────────────────────────────────────────────
   isSuperAdmin: false,
@@ -15,6 +16,12 @@ export const createWorkspaceSlice = (set, get) => ({
       const data = await subscriptionApi.get();
       set({ subscription: data, subscriptionAdmins: data.admins || [], isSuperAdmin: data.isSuperAdmin || false });
     } catch {}
+  },
+
+  async updateSubscriptionName(name) {
+    const updated = await subscriptionApi.updateName(name);
+    set(s => ({ subscription: { ...s.subscription, name: updated.name } }));
+    return updated;
   },
 
   async addSuperAdmin(email) {
@@ -60,7 +67,10 @@ export const createWorkspaceSlice = (set, get) => ({
 
   // ── Projects ──────────────────────────────────────────────────
   async loadProjects() {
-    const projects = await projectsApi.list();
+    const data = await projectsApi.list();
+    // Deduplicate by id — safeguard against stray duplicate DB rows
+    const seen = new Set();
+    const projects = data.filter(p => { if (seen.has(p.id)) return false; seen.add(p.id); return true; });
     set({ projects });
     const { currentProjectId } = get();
     if (!projects.find(p => p.id === currentProjectId)) {

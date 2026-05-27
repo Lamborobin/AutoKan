@@ -28,6 +28,8 @@ export function sanitizeFileName(str) {
 
 export function useAgentForm(initial = {}) {
   const currentProjectId = useStore(s => s.currentProjectId);
+  const subscription     = useStore(s => s.subscription);
+  const subId = subscription?.id || 'sub_default';
   const [form, setForm] = useState({
     name: '',
     model: 'claude-sonnet-4-5',
@@ -48,15 +50,15 @@ export function useAgentForm(initial = {}) {
 
   useEffect(() => {
     Promise.all([
-      instructionsApi.list(false, null),             // system (global) files
-      instructionsApi.list(false, currentProjectId), // custom (per-board) files
+      instructionsApi.list(false, null, subId),             // system (global) files
+      instructionsApi.list(false, currentProjectId, subId), // custom (per-board) files
     ]).then(([system, custom]) => {
       setAvailableFiles([
         ...system.map(f => ({ ...f, scope: 'system' })),
         ...custom.map(f => ({ ...f, scope: 'custom' })),
       ]);
     }).catch(() => {});
-  }, [currentProjectId]);
+  }, [currentProjectId, subId]);
 
   function handleNameChange(name) {
     setForm(f => ({ ...f, name }));
@@ -82,10 +84,10 @@ export function useAgentForm(initial = {}) {
     if (newPrompt.active && newPrompt.name.trim()) {
       const safeName = sanitizeFileName(newPrompt.name);
       if (!safeName) throw new Error('Invalid system prompt file name');
-      const result = await instructionsApi.create({ name: safeName, content: newPrompt.content }, currentProjectId);
+      const result = await instructionsApi.create({ name: safeName, content: newPrompt.content }, currentProjectId, subId);
       Promise.all([
-        instructionsApi.list(false, null),
-        instructionsApi.list(false, currentProjectId),
+        instructionsApi.list(false, null, subId),
+        instructionsApi.list(false, currentProjectId, subId),
       ]).then(([sys, cus]) => setAvailableFiles([
         ...sys.map(f => ({ ...f, scope: 'system' })),
         ...cus.map(f => ({ ...f, scope: 'custom' })),
