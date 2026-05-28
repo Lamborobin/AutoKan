@@ -62,11 +62,6 @@ Once answered, create the folder and update the Monorepo Structure in `CLAUDE.md
 **Exempt:** folders created by system scaffolding (e.g. `instructions/{subscriptionId}/{projectId}/`) are part of the app's programmatic behavior and do not require this check — this rule only applies when explicitly requested by a user or agent.
 
 ---
-**Use case — building a product**
-Client X wants a new website. Their entire codebase lives in `client/clientX/`. Agents read that folder, implement work on the board, and commit back to it. The board tracks every task from brief to deployment. Any non-technical user can drive the workflow through the UI — no terminal required.
-
-**Use case — processing files**
-Client Y drops files into `client/clientY/`. Agents read those files, interpret the client's intent from their contents, create tasks on the board, and act on them. The app surfaces what the agent understood and what it did, so the human can confirm or correct.
 
 ## Code & Architecture Rules
 

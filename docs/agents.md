@@ -14,6 +14,10 @@ Agents are server-side processes triggered automatically by the pipeline — the
 | Developer | `agent_dev` | `perm_coding` |
 | Tester | `agent_test` | `perm_coding_tester`|
 
+### Where defaults live
+
+The three default agents are seeded from a single source — **`server/src/seed/agent-templates.json`**. Each entry defines both the template (inserted into `agent_templates`) and the corresponding default agent (inserted into `agents`). Edit that file to change a default's name, model, description, system prompt, instruction files, permissions, or role IDs. Changes only take effect on a fresh DB — run `npm run db:reset` and restart.
+
 ---
 
 ## Escalating to Human

@@ -7,6 +7,38 @@ Auth: `Authorization: Bearer <jwt>` for humans · `X-Agent-Id: <agent_id>` for a
 
 ---
 
+## Health
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/health | Liveness check — returns `{ status: 'ok' }`. No auth. |
+
+---
+
+## Auth
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /api/auth/google | Exchange a Google ID token for a JWT. Body: `{ credential, inviteToken? }`. First user auto-promoted to superadmin. |
+| GET | /api/auth/me | Current user profile + `isSuperAdmin` flag |
+| PATCH | /api/auth/profile | Update `first_name`, `last_name`, `company_name` |
+| GET | /api/auth/users | List users (for invite/admin pickers) |
+
+---
+
+## AI Context Docs (superadmin)
+
+The `/api/docs` group serves the editable doc files driven by `agent.config.json`'s `ai_context` groups (consumed by the Settings → AI Context panel). Edit history is stored in `docs/.versions/` and is wiped by `npm run db:reset`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/docs | Get all doc groups with file content + last_modified |
+| GET | /api/docs/:key/versions | List saved versions for a doc (superadmin) |
+| GET | /api/docs/:key/versions/:filename | Read a specific version (superadmin) |
+| PATCH | /api/docs/:key | Overwrite doc content (archives current as a new version) (superadmin) |
+
+---
+
 ## Tasks
 
 | Method | Endpoint | Description |

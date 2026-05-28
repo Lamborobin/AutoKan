@@ -50,27 +50,33 @@ Open the frontend and sign in with Google. The first user is automatically made 
 
 ```
 AutoKan/
-├── agents/          # Base agent config (config.json) and default prompt files
 ├── client/          # Live client repos — one subfolder per connected board
 ├── docs/            # Technical documentation — architecture, API, rules, decisions
 ├── instructions/    # Instruction files scoped by subscription and board
 ├── server/          # Node.js + Express + SQLite API (port 3001)
+│   └── src/
+│       ├── config/  # Stable IDs (constants.js), agent.config.json
+│       ├── db/      # Schema only (CREATE TABLE)
+│       ├── seed/    # Default data — seedDefaults + agent-templates.json
+│       ├── routes/  # One file per resource group
+│       ├── services/# agentRunner, emailService
+│       └── utils/   # ids.js (generators), instructions.js (scaffolding)
 ├── app/             # React frontend (Vite, port 5173)
 └── data/            # SQLite database (auto-created, gitignored)
 ```
 
+See `docs/architecture.md` for the full tree.
+
 ---
 
-## Context files
+## Use cases
 
-Full documentation lives in `docs/`:
+**Building a product** — Client X wants a new website. Their entire codebase lives in `client/clientX/`. Agents read that folder, implement work on the board, and commit back to it. The board tracks every task from brief to deployment. Any non-technical user can drive the workflow through the UI — no terminal required.
 
-| File | Contents |
-|---|---|
-| `docs/architecture.md` | System design, pipeline, data flow |
-| `docs/api.md` | Full API reference |
-| `docs/agents.md` | PM / Dev / Tester flows, instruction file system |
-| `docs/capabilities.md` | Capability-based triggers, column access |
-| `docs/rules.md` | Hard constraints for all development work |
-| `docs/decisions.md` | Architecture decision records |
-| `docs/upcoming-changes.md` | Planned features not yet built |
+**Processing files** — Client Y drops files into `client/clientY/`. Agents read those files, interpret the client's intent from their contents, create tasks on the board, and act on them. The app surfaces what the agent understood and what it did, so the human can confirm or correct.
+
+---
+
+## Documentation
+
+`CLAUDE.md` (at the repo root) is the canonical index of every context file in `docs/`, with a "Read when…" column that tells agents and developers when to load each one. Start there.

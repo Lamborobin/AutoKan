@@ -62,14 +62,18 @@ REST API (Express)          ← single source of truth for all state changes
 
 ## Pipeline
 
+Happy path:
+
 ```
 Backlog → In Progress → Testing → Human Review → Done
- (PM Q&A)  (Dev branch)              ↑
-            ↑      |          (Tester passes)
-            └──────┘  (1 retry on failure)
-                   ↓
-            Human Action  (blocked: errors, max retries, agent escalation)
 ```
+
+Branches:
+
+- **Tester fails (retry 0)** → back to `In Progress` for one more attempt
+- **Tester fails (retry exceeded)** → `Human Action` with failure summary
+- **Agent escalates / blocked / max retries** (any column) → `Human Action`
+- **Human resolves blocker** in Human Action → moves task back to continue
 
 ### Column IDs
 
@@ -81,6 +85,7 @@ Backlog → In Progress → Testing → Human Review → Done
 | Human Action | `col_humanaction` | Task is blocked — agent escalated, max retries hit, or explicit flag. |
 | Human Review | `col_humanreview` | Work is complete and tested. Human gives final sign-off. |
 | Done | `col_done` | Task complete. Human approved. |
+| Unassigned | `col_unassigned` | Holding bucket (position `-1`) — not part of the pipeline flow. |
 
 ---
 
