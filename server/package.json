@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "db:init": "node src/db/init.js"
+    "db:init": "node src/db/init.js",
+    "db:reset": "node scripts/reset-db.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

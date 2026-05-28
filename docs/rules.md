@@ -88,10 +88,12 @@ When implementing any task, follow these in order:
 - Never seed data that the user can edit in the UI without a `WHERE ... IS NULL` guard
 - **Never use `UPDATE` unconditionally** on user-owned rows — this overwrites customisations on every server restart
 
-### Migration safety
-- **Never use `UPDATE` without `WHERE ... IS NULL`** for fields the user can edit in the UI
-- Always check if a column exists before running `ALTER TABLE` — migrations run on every startup
-- The `template_system_prompt` of `agent_pm` uses `WHERE template_system_prompt IS NULL` — preserve this pattern for any user-editable field
+### Schema changes — no migrations (local dev)
+- **Do not add migrations.** `server/src/db/index.js` is a single source of truth: `CREATE TABLE` + seeds only. We're early enough that wiping the DB is cheap.
+- When you add or change a column, table, or index in `server/src/db/index.js`, **tell the user**: "This change requires a database reset — run `npm run db:reset` from `server/` and restart." Do not silently add an `ALTER TABLE` or any conditional migration code.
+- `npm run db:reset` (→ `server/scripts/reset-db.js`) is the canonical full reset: deletes `autokan.db`, `docs/.versions/` (AI context edit history), and per-project instruction folders (`instructions/sub_default/prj_*/`). Subscription-level instruction files are preserved. Always use this instead of manually deleting files.
+- Seeds must remain idempotent (`INSERT OR IGNORE`). Never use unconditional `UPDATE` on user-editable rows — it would overwrite UI customisations on every restart.
+- This policy is **local dev only**. Once the app has real users, migrations become mandatory — revisit this rule then.
 
 ### Personal data — never reset, never overwrite
 - All tasks

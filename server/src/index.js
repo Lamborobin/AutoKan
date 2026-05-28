@@ -2,7 +2,7 @@ require('dotenv').config({ override: true });
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const { initDb } = require('./db');
+const { getDb } = require('./db');
 const { attachUser } = require('./middleware/auth');
 const tasksRouter = require('./routes/tasks');
 const authRouter = require('./routes/auth');
@@ -63,8 +63,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: err.message || 'Internal server error' });
 });
 
-// Init DB and start
-initDb();
+// Warm up DB connection on startup (triggers schema + seed on first call)
+getDb();
 app.listen(PORT, () => {
   console.log(`\n🚀 AutoKan server running at http://localhost:${PORT}`);
   console.log(`   API health: http://localhost:${PORT}/api/health\n`);

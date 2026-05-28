@@ -3,7 +3,9 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const { execSync } = require('child_process');
-const { getDb, generateProjectId, VELOUR_ID } = require('../db');
+const { getDb } = require('../db');
+const { generateProjectId } = require('../utils/ids');
+const { TEST_CLIENT_ID } = require('../config/constants');
 const { requireAuth } = require('../middleware/auth');
 const { scaffoldProjectInstructions } = require('../utils/instructions');
 
@@ -235,7 +237,7 @@ router.post('/:id/archive', requireAuth, (req, res) => {
   const db = getDb();
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
   if (!project) return res.status(404).json({ error: 'Project not found' });
-  if (project.id === VELOUR_ID) return res.status(400).json({ error: 'Cannot archive the default project' });
+  if (project.id === TEST_CLIENT_ID) return res.status(400).json({ error: 'Cannot archive the default project' });
 
   db.prepare('UPDATE projects SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
@@ -251,7 +253,7 @@ router.post('/:id/unarchive', requireAuth, (req, res) => {
 // DELETE /api/projects/:id
 router.delete('/:id', requireAuth, (req, res) => {
   const db = getDb();
-  if (req.params.id === VELOUR_ID) return res.status(400).json({ error: 'Cannot delete the default project' });
+  if (req.params.id === TEST_CLIENT_ID) return res.status(400).json({ error: 'Cannot delete the default project' });
 
   const taskCount = db.prepare('SELECT COUNT(*) AS c FROM tasks WHERE project_id = ?').get(req.params.id);
   if (taskCount.c > 0) {

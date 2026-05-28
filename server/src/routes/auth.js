@@ -2,7 +2,8 @@ const express = require('express');
 const { OAuth2Client } = require('google-auth-library');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
-const { getDb, generateProjectId, VELOUR_ID, MY_BOARD_ID } = require('../db');
+const { getDb } = require('../db');
+const { generateProjectId } = require('../utils/ids');
 const { scaffoldProjectInstructions } = require('../utils/instructions');
 const { requireAuth } = require('../middleware/auth');
 
@@ -84,31 +85,66 @@ router.post('/google', async (req, res) => {
       db.prepare('UPDATE project_members SET user_id = ? WHERE email = ? AND user_id IS NULL').run(id, email);
       db.prepare('UPDATE team_members SET user_id = ? WHERE email = ? AND user_id IS NULL').run(id, email);
 
-      // Assign all unowned projects to the first user who logs in
-      const velourOwner = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(VELOUR_ID);
-      if (!velourOwner?.owner_id) {
-        db.prepare('UPDATE projects SET owner_id = ? WHERE id = ?').run(id, VELOUR_ID);
+      // First user to register becomes superadmin (bootstrap — no hardcoded email needed)
+      const adminCount = db.prepare('SELECT COUNT(*) AS c FROM subscription_admins').get().c;
+      if (adminCount === 0) {
+        const subscriptionId = db.prepare(`SELECT id FROM subscriptions ORDER BY created_at ASC LIMIT 1`).get()?.id;
+        if (subscriptionId) {
+          const saId = 'sa_' + require('crypto').randomBytes(6).toString('hex');
+          db.prepare(`INSERT OR IGNORE INTO subscription_admins (id, subscription_id, user_id) VALUES (?, ?, ?)`)
+            .run(saId, subscriptionId, id);
+          console.log(`✅ Promoted ${email} to superadmin (first user)`);
+        }
       }
 
-      // Claim the seeded "My Board" if it has no owner yet — this becomes their personal board
-      const myBoardOwner = db.prepare('SELECT owner_id FROM projects WHERE id = ?').get(MY_BOARD_ID);
-      if (!myBoardOwner?.owner_id) {
-        db.prepare('UPDATE projects SET owner_id = ?, created_by = ? WHERE id = ?').run(id, id, MY_BOARD_ID);
-        // Add to project_members so GET /api/projects returns it immediately
-        const pmId = 'pm_' + require('crypto').randomBytes(6).toString('hex');
-        db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at) VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)
-          .run(pmId, MY_BOARD_ID, email, id);
-        console.log(`✅ Assigned My Board to ${email}`);
+      // Personal board = no client attached. Claim an unowned one if it exists
+      // (the seeded board on a fresh DB), otherwise create a fresh one for this user.
+      const subscriptionId = db.prepare(
+        `SELECT id FROM subscriptions ORDER BY created_at ASC LIMIT 1`
+      ).get()?.id;
+
+      const orphanPersonalBoard = db.prepare(`
+        SELECT id FROM projects
+        WHERE client_id IS NULL AND owner_id IS NULL AND archived_at IS NULL
+        ORDER BY created_at ASC LIMIT 1
+      `).get();
+
+      const crypto = require('crypto');
+      const pmRowId = () => 'pm_' + crypto.randomBytes(6).toString('hex');
+
+      // Claim any seeded client projects that have no owner yet — makes them
+      // visible to the first user without needing to know specific project IDs.
+      const orphanClientProjects = db.prepare(`
+        SELECT id FROM projects
+        WHERE client_id IS NOT NULL AND owner_id IS NULL AND archived_at IS NULL
+      `).all();
+      for (const proj of orphanClientProjects) {
+        db.prepare('UPDATE projects SET owner_id = ?, created_by = ? WHERE id = ?')
+          .run(id, id, proj.id);
+        db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at)
+                    VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)
+          .run(pmRowId(), proj.id, email, id);
+        console.log(`✅ Assigned client project ${proj.id} to ${email}`);
+      }
+
+      if (orphanPersonalBoard) {
+        db.prepare('UPDATE projects SET owner_id = ?, created_by = ? WHERE id = ?')
+          .run(id, id, orphanPersonalBoard.id);
+        db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at)
+                    VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)
+          .run(pmRowId(), orphanPersonalBoard.id, email, id);
+        console.log(`✅ Assigned personal board ${orphanPersonalBoard.id} to ${email}`);
       } else {
-        // My Board already claimed — create a fresh personal board for this user
         const personalProjectId = generateProjectId();
         const displayName = firstName ? `${firstName}'s Board` : 'My Board';
-        db.prepare(`INSERT INTO projects (id, name, description, color, emoji, owner_id, subscription_id) VALUES (?, ?, ?, ?, ?, ?, 'sub_default')`)
-          .run(personalProjectId, displayName, 'Personal workspace', '#10b981', '🧑', id);
-        const pmId = 'pm_' + require('crypto').randomBytes(6).toString('hex');
-        db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at) VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)
-          .run(pmId, personalProjectId, email, id);
-        try { scaffoldProjectInstructions(personalProjectId, 'sub_default', null, null, true); } catch (e) { console.warn('Could not scaffold personal board:', e.message); }
+        db.prepare(`INSERT INTO projects (id, name, description, color, emoji, owner_id, subscription_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run(personalProjectId, displayName, 'Personal workspace', '#10b981', '🧑', id, subscriptionId);
+        db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at)
+                    VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)
+          .run(pmRowId(), personalProjectId, email, id);
+        try { scaffoldProjectInstructions(personalProjectId, subscriptionId, null, null, true); }
+        catch (e) { console.warn('Could not scaffold personal board:', e.message); }
         console.log(`✅ Created personal board for ${email}`);
       }
     }

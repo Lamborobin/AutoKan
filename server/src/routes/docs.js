@@ -11,7 +11,7 @@ const MAX_VERSIONS  = 10;
 
 // Read group/file definitions from agent.config.json — no hardcoding here
 function getConfig() {
-  const raw = fs.readFileSync(path.join(PROJECT_ROOT, 'agent.config.json'), 'utf8');
+  const raw = fs.readFileSync(path.join(__dirname, '../config/agent.config.json'), 'utf8');
   return JSON.parse(raw).ai_context?.groups || [];
 }
 

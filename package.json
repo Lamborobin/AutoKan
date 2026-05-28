@@ -8,7 +8,8 @@
     "dev:server": "cd server && npm run dev",
     "dev:app": "cd app && npm run dev",
     "install:all": "npm install && cd server && npm install && cd ../app && npm install",
-    "build": "cd app && npm run build"
+    "build": "cd app && npm run build",
+    "db:reset": "cd server && node scripts/reset-db.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

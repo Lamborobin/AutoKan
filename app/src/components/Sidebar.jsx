@@ -815,16 +815,6 @@ export default function Sidebar() {
 
         {/* Footer — members + user menu */}
         <div className="p-3 border-t border-border space-y-1">
-          {isClientBoard && (
-            <button
-              onClick={() => setShowMembersModal(true)}
-              className="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-surface-3 transition-colors text-gray-500 hover:text-gray-300"
-              title="Manage board members"
-            >
-              <Users size={15} />
-              <span className="text-xs font-medium">Members & Teams</span>
-            </button>
-          )}
           <UserMenu />
         </div>
       </aside>

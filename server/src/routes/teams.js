@@ -125,8 +125,8 @@ router.delete('/:id/members/:email', requireAuth, (req, res) => {
   const db = getDb();
   const decodedEmail = decodeURIComponent(req.params.email);
 
-  // Cannot remove yourself
-  if (req.user && decodedEmail === req.user.email) {
+  // Non-superadmins cannot remove themselves
+  if (req.user && decodedEmail === req.user.email && !req.isSuperAdmin) {
     return res.status(403).json({ error: 'You cannot remove yourself from a team' });
   }
 

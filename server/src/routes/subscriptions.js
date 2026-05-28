@@ -1,11 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
+const { DEFAULT_SUB_ID } = require('../config/constants');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
-
-const DEFAULT_SUB_ID = 'sub_default';
 
 // GET /api/subscriptions/me — get subscription info + admins
 router.get('/me', requireAuth, (req, res) => {

@@ -8,7 +8,6 @@ Read this file when making structural changes, or when the reason behind a syste
 
 ```
 AutoKan/
-├── agent.config.json        # Model map, complexity routing, pipeline definition (not yet wired to server)
 ├── client/                  # Live client repos — one subfolder per connected board
 │   └── {clientName}/        # one subfolder per board — the actual code agents work in
 ├── docs/                    # Extended documentation — read on demand via CLAUDE.md
@@ -24,9 +23,11 @@ AutoKan/
 │           └── archived/
 ├── server/
 │   └── src/
-│       ├── db/              # Schema, migrations, seeding — single source of truth for DB
+│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (models, pipeline, AI context groups)
+│       ├── db/              # Schema only — CREATE TABLE definitions, calls seed/ on init
 │       ├── middleware/      # JWT verification, isSuperAdmin, agent header passthrough
 │       ├── routes/          # One file per resource group (tasks, agents, projects, members…)
+│       ├── seed/            # Default data — index.js (seedDefaults), agent-templates.json (PM/Dev/Test templates)
 │       ├── services/        # agentRunner.js (AI triggers), emailService.js (notifications)
 │       └── utils/           # instructions.js (scaffold/manage instruction file structure)
 ├── app/

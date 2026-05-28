@@ -39,7 +39,7 @@ function RolePill({ color, label }) {
 
 export default function MembersModal({ onClose }) {
   const {
-    user, users,
+    user, users, isSuperAdmin,
     boardMembers, loadBoardMembers, addBoardMember, removeBoardMember, updateBoardMemberRoles,
     teams, loadTeams, createTeam,
     roles,
@@ -515,7 +515,7 @@ export default function MembersModal({ onClose }) {
                                   </div>
                                   {name && <p className="text-[10px] text-gray-600 truncate">{tm.email}</p>}
                                 </div>
-                                {(
+                                {(!isSelf || isSuperAdmin) && (
                                 confirmRemoveTeamMember === key ? (
                                   <div className="flex items-center gap-1 shrink-0">
                                     <span className="text-[10px] text-gray-500">Remove?</span>
