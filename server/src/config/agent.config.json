@@ -65,13 +65,12 @@
     "col_inprogress":  { "name": "In Progress",   "auto_assign": "developer" },
     "col_testing":     { "name": "Testing",        "auto_assign": "tester" },
     "col_humanaction": { "name": "Human Action",   "auto_assign": null },
-    "col_humanreview": { "name": "Human Review",   "auto_assign": null },
     "col_done":        { "name": "Done",           "auto_assign": null }
   },
 
   "pipeline": {
     "description": "Default task flow",
-    "flow": ["col_backlog", "col_inprogress", "col_testing", "col_humanreview", "col_done"],
+    "flow": ["col_backlog", "col_inprogress", "col_testing", "col_humanaction", "col_done"],
     "retry_from": "col_inprogress",
     "max_retries": 1,
     "on_max_retries": "col_humanaction"

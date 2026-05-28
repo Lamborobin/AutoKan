@@ -65,15 +65,18 @@ REST API (Express)          ← single source of truth for all state changes
 Happy path:
 
 ```
-Backlog → In Progress → Testing → Human Review → Done
+Backlog → In Progress → Testing → Human Action → Done
 ```
+
+Human Action is the single column for anything that needs human attention — whether that's a blocker, a sign-off after testing passes, or a max-retry failure. The task's reason / log entries distinguish *why* it's there.
 
 Branches:
 
+- **Tester passes** → `Human Action` with "Ready for sign-off"
 - **Tester fails (retry 0)** → back to `In Progress` for one more attempt
 - **Tester fails (retry exceeded)** → `Human Action` with failure summary
-- **Agent escalates / blocked / max retries** (any column) → `Human Action`
-- **Human resolves blocker** in Human Action → moves task back to continue
+- **Agent escalates / blocked** (any column) → `Human Action` with reason
+- **Human resolves / signs off** in Human Action → moves task back to continue (or to Done)
 
 ### Column IDs
 
@@ -81,9 +84,8 @@ Branches:
 |---|---|---|
 | Backlog | `col_backlog` | Tasks not yet started. PM planning runs here before any work begins. |
 | In Progress | `col_inprogress` | Agent or human works the task based on their capabilities. |
-| Testing | `col_testing` | Tester agent runs automated checks. Pass → Human Review. Fail → retry once, then Human Action. |
-| Human Action | `col_humanaction` | Task is blocked — agent escalated, max retries hit, or explicit flag. |
-| Human Review | `col_humanreview` | Work is complete and tested. Human gives final sign-off. |
+| Testing | `col_testing` | Tester agent runs automated checks. Pass → Human Action. Fail → retry once, then Human Action. |
+| Human Action | `col_humanaction` | Task needs a human — blocker, sign-off, max retries, or explicit flag. |
 | Done | `col_done` | Task complete. Human approved. |
 | Unassigned | `col_unassigned` | Holding bucket (position `-1`) — not part of the pipeline flow. |
 
@@ -119,7 +121,7 @@ Personal boards have `client_id = NULL` — they don't scaffold `client.md` or `
 6.  Human moves task to In Progress → dev agent triggered
 7.  Dev agent creates git worktree → implements → commits to feature/<taskId> → opens PR
 8.  Task moves to Testing → tester agent triggered
-9.  Tester runs checks → passes (Human Review) or fails (retry → In Progress or Human Action)
+9.  Tester runs checks → passes (Human Action: "Ready for sign-off") or fails (retry → In Progress or Human Action)
 10. Human reviews PR → approves → task moves to Done
 ```
 

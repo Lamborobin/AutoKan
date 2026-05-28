@@ -4,7 +4,6 @@ export const COLUMN = {
   INPROGRESS:   'col_inprogress',
   TESTING:      'col_testing',
   HUMAN_ACTION: 'col_humanaction',
-  HUMAN_REVIEW: 'col_humanreview',
   DONE:         'col_done',
   UNASSIGNED:   'col_unassigned',
 };

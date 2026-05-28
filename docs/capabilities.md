@@ -58,7 +58,7 @@ Tests code against acceptance criteria. Runs in `PROJECT_ROOT` (no worktree). Wr
 4. Agent calls `task_complete { passed: true | false }`
 
 **Exit — passed:**
-- Task moves to `col_humanreview`
+- Task moves to `col_humanaction` (ready for human sign-off)
 
 **Exit — failed:**
 - Retry 0 → task moves back to `col_inprogress`
@@ -114,7 +114,7 @@ Architectural analysis and design. Produces structural recommendations — does 
 1. Task lands in In Progress with an architect-capable agent assigned
 2. Agent reads the codebase (`read_file`, `bash` for analysis commands)
 3. Produces a written architectural proposal or review in the project's instruction folder
-4. Calls `task_complete` with a summary → task moves to `col_humanreview` (always — no auto-merge)
+4. Calls `task_complete` with a summary → task moves to `col_humanaction` (ready for human sign-off) (always — no auto-merge)
 5. Human reviews the proposal and decides next steps
 
 If the scope requires code changes, agent documents them in the proposal rather than implementing them directly.
@@ -141,7 +141,7 @@ Read-only code analysis. Agent reads and understands the codebase but cannot mod
 1. Task assigned to agent in any column
 2. Agent reads relevant files (`read_file`, `bash` for read-only commands like `grep`, `find`)
 3. Logs findings progressively via `task_log`
-4. Calls `task_complete` with a full analysis summary → task moves to `col_humanreview`
+4. Calls `task_complete` with a full analysis summary → task moves to `col_humanaction` (ready for human sign-off)
 
 ---
 
@@ -156,7 +156,7 @@ Data migration tasks — schema changes, data transformations, migration scripts
 2. Agent reads the current schema and existing migrations
 3. Writes migration script(s) — write access enforced to migration paths
 4. Runs the migration in a dry-run or staging context (`bash`)
-5. Calls `task_complete` with migration summary → task moves to `col_humanreview` for human to apply or approve
+5. Calls `task_complete` with migration summary → task moves to `col_humanaction` (ready for human sign-off) for human to apply or approve
 
 ---
 
@@ -170,7 +170,7 @@ Network testing and external endpoint checks. Runs locally or against reachable 
 1. Task assigned with a network-capable agent
 2. Agent runs network commands (`bash` — `curl`, `ping`, `traceroute`, port checks)
 3. Logs results via `task_log`
-4. Calls `task_complete` with findings → task moves to `col_humanreview`
+4. Calls `task_complete` with findings → task moves to `col_humanaction` (ready for human sign-off)
 
 Agent must not initiate destructive or unauthorized external requests. If a target is unreachable or credentials are missing, calls `request_human`.
 
@@ -186,7 +186,7 @@ Cloud environment access — health checks, deployment status, safe operational 
 1. Task assigned with a cloud-capable agent
 2. Agent queries cloud APIs or runs read-only cloud CLI commands (`bash`)
 3. Reports status, logs, or health check results via `task_log`
-4. Calls `task_complete` with findings → task moves to `col_humanreview`
+4. Calls `task_complete` with findings → task moves to `col_humanaction` (ready for human sign-off)
 
 If action is required (scaling, restart, config change), agent documents the recommendation and calls `request_human` — it does not act.
 
@@ -202,7 +202,7 @@ Security analysis and vulnerability review. Reads code and `.env` usage — neve
 1. Task assigned with a security-capable agent
 2. Agent reads source files, checks `.env` usage, scans for known patterns (`bash` — static analysis tools, `grep`)
 3. Logs findings progressively via `task_log`
-4. Calls `task_complete` with a structured findings report → task moves to `col_humanreview`
+4. Calls `task_complete` with a structured findings report → task moves to `col_humanaction` (ready for human sign-off)
 
 Agent never logs secret values — only describes the gap (e.g. "hardcoded credential found in `server/config.js:42`").
 
@@ -218,7 +218,7 @@ Reads and summarises logs from the filesystem and cloud (when cloud access is en
 1. Task assigned with a log-reader agent
 2. Agent reads log files (`read_file`, `bash` — `tail`, `grep`, log CLI commands)
 3. Identifies errors, warnings, or anomalies
-4. Calls `task_complete` with a structured summary → task moves to `col_humanreview`
+4. Calls `task_complete` with a structured summary → task moves to `col_humanaction` (ready for human sign-off)
 
 ---
 
@@ -232,7 +232,7 @@ Extracts and analyses data from relevant project areas. Read-only. Does not modi
 1. Task assigned with an analytics-capable agent
 2. Agent reads data files or queries relevant exports (`read_file`, `bash`)
 3. Runs analysis, builds summaries, identifies patterns
-4. Calls `task_complete` with findings → task moves to `col_humanreview`
+4. Calls `task_complete` with findings → task moves to `col_humanaction` (ready for human sign-off)
 
 ---
 

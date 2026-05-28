@@ -767,7 +767,7 @@ const TESTER_TOOLS = [
   },
   {
     name: 'task_complete',
-    description: 'Call this when testing is done. If passed=true the task moves to Human Review. If passed=false it moves back to In Progress for a fix (or to Human Action if max retries reached).',
+    description: 'Call this when testing is done. If passed=true the task moves to Human Action for human sign-off. If passed=false it moves back to In Progress for a fix (or stays in Human Action if max retries reached).',
     input_schema: {
       type: 'object',
       properties: {
@@ -907,12 +907,12 @@ async function runTesterAgent(taskId) {
       } else if (block.name === 'task_complete') {
         const { passed, summary } = block.input;
         if (passed) {
-          db.prepare('UPDATE tasks SET progress = 100, column_id = ? WHERE id = ?').run('col_humanreview', taskId);
+          db.prepare('UPDATE tasks SET progress = 100, column_id = ? WHERE id = ?').run('col_humanaction', taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
             .run(uuidv4(), taskId, testerAgent.id, 'tests_passed', summary);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_humanreview', 'Tests passed — moved to Human Review');
-          console.log(`[AgentRunner][tester][${taskId}] tests passed → Human Review`);
+            .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_humanaction', 'Tests passed — ready for human sign-off');
+          console.log(`[AgentRunner][tester][${taskId}] tests passed → Human Action (awaiting sign-off)`);
         } else {
           const newRetryCount = retryCount + 1;
           const MAX_RETRIES = 1;

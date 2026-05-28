@@ -55,6 +55,13 @@ Format: **Decision** → **Reason** → **Status**
 
 ---
 
+## Human Action absorbs Human Review — single human column
+**Decided:** During doc/code audit  
+**Reason:** Two columns for "needs human" (Human Review for sign-off, Human Action for blockers) was redundant — both required the same human action: open the task and decide what's next. The distinction was carried by log entries and the task's reason field anyway. One column is simpler for the UI, simpler for agents to target, and matches how users actually triage.  
+**Status:** Implemented. `col_humanreview` removed from seed, agent.config.json, frontend constants. Tester pass now moves the task to `col_humanaction` with reason "Ready for human sign-off". The `human_review_comment` / `human_review_date` columns on `tasks` are kept — they describe the *sign-off action*, not the column.
+
+---
+
 ## No migrations in local dev — drop and reseed instead
 **Decided:** Early development phase  
 **Reason:** Maintaining `ALTER TABLE` migrations adds friction and complexity before the schema is stable. At this stage the data model is still being shaped — a wipe and reseed is faster, safer, and keeps `db/index.js` clean. Migrations become mandatory once real user data exists.  

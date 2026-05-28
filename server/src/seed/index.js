@@ -71,13 +71,12 @@ function seedColumns(db) {
     `INSERT OR IGNORE INTO columns (id, name, position, color, is_protected) VALUES (?, ?, ?, ?, ?)`
   );
   [
-    ['col_unassigned',   'Unassigned',    -1, '#f59e0b', 1],
-    ['col_backlog',      'Backlog',        0, '#64748b', 1],
-    ['col_inprogress',   'In Progress',    1, '#3b82f6', 1],
-    ['col_testing',      'Testing',        2, '#8b5cf6', 1],
-    ['col_humanaction',  'Human Action',   3, '#f59e0b', 1],
-    ['col_humanreview',  'Human Review',   4, '#a855f7', 1],
-    ['col_done',         'Done',           5, '#10b981', 1],
+    ['col_unassigned',  'Unassigned',   -1, '#f59e0b', 1],
+    ['col_backlog',     'Backlog',       0, '#64748b', 1],
+    ['col_inprogress',  'In Progress',   1, '#3b82f6', 1],
+    ['col_testing',     'Testing',       2, '#8b5cf6', 1],
+    ['col_humanaction', 'Human Action',  3, '#f59e0b', 1],
+    ['col_done',        'Done',          4, '#10b981', 1],
   ].forEach(c => insert.run(...c));
 }
 
