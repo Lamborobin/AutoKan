@@ -8,10 +8,9 @@ Read this file when making structural changes, or when the reason behind a syste
 
 ```
 AutoKan/
-├── agents/                  # Base agent config and default prompt files
-│   └── config.json          # Model map, column auto-assign, pipeline definition
+├── agent.config.json        # Model map, complexity routing, pipeline definition (not yet wired to server)
 ├── client/                  # Live client repos — one subfolder per connected board
-│   └── {clientName}/        # e.g. client/Velour/ — the actual code agents work in
+│   └── {clientName}/        # one subfolder per board — the actual code agents work in
 ├── docs/                    # Extended documentation — read on demand via CLAUDE.md
 ├── instructions/            # Instruction files — scoped by subscription and board
 │   └── {subscriptionId}/    # e.g. sub_default/

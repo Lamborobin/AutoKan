@@ -1,0 +1,104 @@
+{
+  "version": "1",
+  "description": "AutoKan agent configuration. Edit to add/merge/remove roles.",
+
+  "models": {
+    "default": "claude-sonnet-4-5",
+    "complex": "claude-opus-4-5",
+    "fast": "claude-haiku-4-5-20251001"
+  },
+
+  "complexity_model_map": {
+    "low": "claude-haiku-4-5-20251001",
+    "medium": "claude-sonnet-4-5",
+    "high": "claude-opus-4-5"
+  },
+
+  "agents": {
+    "pm": {
+      "id": "agent_pm",
+      "name": "Project Manager",
+      "model": "claude-opus-4-5",
+      "prompt_file": "instructions/project-manager.md",
+      "permissions": [
+        "task:create",
+        "task:read",
+        "task:update",
+        "task:delete",
+        "task:move",
+        "task:assign",
+        "task:log"
+      ]
+    },
+    "developer": {
+      "id": "agent_dev",
+      "name": "Developer",
+      "model": "claude-sonnet-4-5",
+      "prompt_file": "instructions/developer.md",
+      "permissions": [
+        "task:read",
+        "task:move",
+        "task:update:status",
+        "task:update:progress",
+        "task:log",
+        "task:request_human"
+      ]
+    },
+    "tester": {
+      "id": "agent_test",
+      "name": "Tester",
+      "model": "claude-sonnet-4-5",
+      "prompt_file": "instructions/tester.md",
+      "permissions": [
+        "task:read",
+        "task:move",
+        "task:update:status",
+        "task:update:progress",
+        "task:log",
+        "task:request_human"
+      ]
+    }
+  },
+
+  "columns": {
+    "col_backlog":     { "name": "Backlog",       "auto_assign": "pm" },
+    "col_inprogress":  { "name": "In Progress",   "auto_assign": "developer" },
+    "col_testing":     { "name": "Testing",        "auto_assign": "tester" },
+    "col_humanaction": { "name": "Human Action",   "auto_assign": null },
+    "col_humanreview": { "name": "Human Review",   "auto_assign": null },
+    "col_done":        { "name": "Done",           "auto_assign": null }
+  },
+
+  "pipeline": {
+    "description": "Default task flow",
+    "flow": ["col_backlog", "col_inprogress", "col_testing", "col_humanreview", "col_done"],
+    "retry_from": "col_inprogress",
+    "max_retries": 1,
+    "on_max_retries": "col_humanaction"
+  },
+
+  "ai_context": {
+    "groups": [
+      {
+        "key": "behavior",
+        "label": "Agent Behavior",
+        "files": [
+          { "key": "agents",       "label": "Agents",       "file": "docs/agents.md" },
+          { "key": "capabilities", "label": "Capabilities", "file": "docs/capabilities.md" },
+          { "key": "frontend",     "label": "Frontend",     "file": "docs/frontend.md" },
+          { "key": "rules",        "label": "Rules",        "file": "docs/rules.md" }
+        ]
+      },
+      {
+        "key": "references",
+        "label": "Agent References",
+        "files": [
+          { "key": "architecture", "label": "Architecture",     "file": "docs/architecture.md" },
+          { "key": "api",          "label": "API",              "file": "docs/api.md" },
+          { "key": "decisions",    "label": "Decisions",        "file": "docs/decisions.md" },
+          { "key": "upcoming",     "label": "Upcoming Changes", "file": "docs/upcoming-changes.md" }
+        ]
+      }
+    ]
+  }
+}

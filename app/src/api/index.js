@@ -162,6 +162,13 @@ export const clientsApi = {
   delete: (id) => api.delete(`/clients/${id}`).then(r => r.data),
 };
 
+export const docsApi = {
+  list: () => api.get('/docs').then(r => r.data),
+  update: (key, content) => api.patch(`/docs/${key}`, { content }).then(r => r.data),
+  versions: (key) => api.get(`/docs/${key}/versions`).then(r => r.data),
+  getVersion: (key, filename) => api.get(`/docs/${key}/versions/${encodeURIComponent(filename)}`).then(r => r.data),
+};
+
 export const commentsApi = {
   list: (taskId) => api.get(`/tasks/${taskId}/comments`).then(r => r.data),
   create: (taskId, content) => api.post(`/tasks/${taskId}/comments`, { content }).then(r => r.data),

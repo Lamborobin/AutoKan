@@ -13,13 +13,6 @@ Format: **Decision** → **Reason** → **Status**
 
 ---
 
-## SQLite over Postgres
-**Decided:** Initial architecture  
-**Reason:** Self-hosted tool — no external infrastructure, no connection pooling, no docker-compose dependency just to run the DB. Single file is trivial to back up. `better-sqlite3` is synchronous which simplifies the route handlers.  
-**Status:** Implemented. All queries are standard SQL — migration to Postgres is straightforward if multi-user scale requires it.
-
----
-
 ## Single-tenant subscription model for v1
 **Decided:** Initial architecture  
 **Reason:** One install = one workspace (`sub_default`). Eliminates multi-tenancy complexity while still structuring data in a way that can be extended. All subscription-scoped resources already carry a `subscription_id` foreign key.  
@@ -48,24 +41,10 @@ Format: **Decision** → **Reason** → **Status**
 
 ---
 
-## Zustand slices over a single store file
-**Decided:** When store.js exceeded 400 lines  
-**Reason:** A single 700-line store file made it hard to find anything and caused merge conflicts on parallel feature work. Splitting by domain (auth, board, workspace, ui) keeps each slice focused and under the 400-line soft limit.  
-**Status:** Implemented. `store/index.js` combines four slices.
-
----
-
 ## Per-board instruction files, not global
 **Decided:** Instruction file system design  
-**Reason:** Different clients have different contexts — Velour's client.md should not be visible to an agent working on another board. Scoping files to `instructions/{subscriptionId}/{projectId}/` gives each board its own isolated context.  
+**Reason:** Different boards have different contexts — one board's `client.md` should not be visible to an agent working on another. Scoping files to `instructions/{subscriptionId}/{projectId}/` gives each board its own isolated context.  
 **Status:** Implemented. Subscription-level files (shared methodology) live at `instructions/{subscriptionId}/`. Board-level files live in the `{projectId}/` subdirectory. Personal boards don't scaffold `client.md` or `project.md`.
-
----
-
-## Tester retry once before Human Action
-**Decided:** Pipeline design
-**Reason:** A single test failure is often a flaky test or a minor oversight — sending it straight to Human Action would create too much noise. One automatic retry gives the dev agent a chance to self-correct. A second failure signals a real problem that needs human input.
-**Status:** Implemented. `task.metadata.test_retry_count` tracks retries. First failure → back to In Progress. Second failure → Human Action.
 
 ---
 

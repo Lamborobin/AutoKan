@@ -3,7 +3,9 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
+  BookOpen,
 } from 'lucide-react';
+import AiContextPanel from './AiContextPanel';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
@@ -529,6 +531,14 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* CONTEXT section */}
+        <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
+          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Instruction Files</p>
+          <div className="space-y-0.5">
+            {navBtn('ai_context', 'AI Context', BookOpen)}
+          </div>
+        </div>
       </div>
 
       {/* ── Right panel ─────────────────────────────────────────────────── */}
@@ -817,6 +827,9 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* AI Context panel */}
+        {section === 'ai_context' && <AiContextPanel />}
 
         {/* Editor panel — shared by board files ('files') and subscription files ('sub_files') */}
         {(section === 'files' || section === 'sub_files') && (<>
