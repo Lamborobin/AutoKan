@@ -9,7 +9,7 @@ Format: **Decision** → **Reason** → **Status**
 ## Capability-based triggers over hardcoded agent IDs
 **Decided:** Early build  
 **Reason:** Hardcoding `if agentId === 'agent_pm'` locks the system to exactly one PM agent forever. Capabilities let any agent take any role by changing data, not code. A team can have multiple PM agents, client-specific PMs, or custom roles without touching the server.  
-**Status:** Implemented. `agentHasCapability()` in `server/src/routes/tasks.js`. Default capabilities seeded on every server start (idempotent).
+**Status:** Implemented. `agentHasCapability()` in `server/src/routes/tasks.js`. Default capabilities seeded once on first DB connection (idempotent `INSERT OR IGNORE`).
 
 ---
 
@@ -52,6 +52,20 @@ Format: **Decision** → **Reason** → **Status**
 **Decided:** Pipeline design  
 **Reason:** PM approval alone isn't enough — the human (client/product owner) needs to confirm the PM understood the brief correctly before dev starts. Two gates mean: (1) the spec is clear, and (2) the spec is correct. Either can fail independently.  
 **Status:** Implemented. `pm_approval_status` and `human_approval_status` are separate fields on tasks. Both must be `approved` before the task can leave Backlog.
+
+---
+
+## No migrations in local dev — drop and reseed instead
+**Decided:** Early development phase  
+**Reason:** Maintaining `ALTER TABLE` migrations adds friction and complexity before the schema is stable. At this stage the data model is still being shaped — a wipe and reseed is faster, safer, and keeps `db/index.js` clean. Migrations become mandatory once real user data exists.  
+**Status:** Active policy. `server/src/db/index.js` contains only `CREATE TABLE IF NOT EXISTS` — no `ALTER TABLE`, no conditional column checks. Schema changes require running `npm run db:reset` (local dev only). Documented in `docs/rules.md` → Schema changes section.
+
+---
+
+## server/src split into db/, seed/, config/
+**Decided:** Refactor during early build  
+**Reason:** The original `db/index.js` mixed three unrelated concerns: schema definition, seed data, and app constants. Separating them makes each file's purpose obvious and makes seed data editable without touching schema code.  
+**Status:** Implemented. `db/` = schema only (`CREATE TABLE`). `seed/` = default data (`seedDefaults`, `agent-templates.json`). `config/` = stable constants and app config (`constants.js`, `agent.config.json`). `getDb()` self-initialises on first call — no separate `initDb` step.
 
 ---
 
