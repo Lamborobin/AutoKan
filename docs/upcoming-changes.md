@@ -13,6 +13,7 @@ Update this file when:
 - **Docker test environment** — isolated Linux container for the Tester agent to run tests safely without touching the host machine
 - **Secrets management UI panel** — currently secrets are added manually to `server/.env`; needs a UI for humans to add/view/rotate secrets without leaving the app
 - **Webhooks / desktop notifications** — notify humans when a task lands in Human Action (blockers, sign-offs, max-retry failures)
+- **GitHub PR comment ↔ task activity sync** — when a task is linked to a PR (`task.pr_url`), inbound GitHub comments on that PR should appear as activity-log entries on the task, and in-app comments on the task should optionally post back to the PR. Implementation: GitHub webhook → `POST /api/github/webhook` → look up task by `pr_url` → insert a `task_log` entry with the commenter's GitHub username and body. Mirroring task → PR is a bool toggle on the task. Useful so reviewers who live in GitHub don't need to open the AutoKan UI to leave feedback, and so the task stays the single source of truth for activity.
 - **CTO/Reviewer agent** — optional code review step between Testing and Human Action; checks code quality before the human sees it
 - **Agent assignment UI filtering** — the API enforces that agents can only be assigned to columns they have role access for, but the UI dropdown doesn't filter yet; it shows all agents regardless
 - **Subscription-level Members panel** — Settings → Subscription → Members is a placeholder; subscription-wide member management not yet built
