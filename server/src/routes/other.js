@@ -26,6 +26,18 @@ function parseAgent(a) {
   };
 }
 
+// One perm_* capability per agent — the runner registry dispatches by
+// (capability, column), so two perm_* roles on one agent would make the
+// dispatch ambiguous. role_access_* entries can still be multiple.
+function validateOnePermPerAgent(roleIds) {
+  if (!Array.isArray(roleIds)) return null;
+  const perms = roleIds.filter(r => typeof r === 'string' && r.startsWith('perm_'));
+  if (perms.length > 1) {
+    return `An agent can have at most one perm_* capability. Got ${perms.length}: ${perms.join(', ')}. Pick one and use a separate agent for the other.`;
+  }
+  return null;
+}
+
 // Build a live map of columnId → [roleId, ...] from the roles table
 function buildColumnRoleMap(db) {
   const map = {};
@@ -73,11 +85,14 @@ agentsRouter.post('/', (req, res) => {
   const db = getDb();
   const {
     name, role, model = 'claude-sonnet-4-5', description,
-    permissions = [], prompt_file, instruction_files = [], color = '#6366f1',
-    created_from_template_id, template_system_prompt: bodyTemplatePrompt,
+    permissions = [], personality_file, instruction_files = [], color = '#6366f1',
+    created_from_template_id, system_prompt: bodySystemPrompt,
     project_id,
   } = req.body;
   if (!name || !role) return res.status(400).json({ error: 'name and role are required' });
+
+  const permErr = validateOnePermPerAgent(req.body.role_ids);
+  if (permErr) return res.status(400).json({ error: permErr });
 
   // Uniqueness is per-project (same role name is allowed on different boards)
   const existing = project_id
@@ -88,23 +103,20 @@ agentsRouter.post('/', (req, res) => {
   // Use random hex to avoid collisions across boards with the same role name
   const id = 'agent_' + require('crypto').randomBytes(4).toString('hex');
 
-  // is_template = 1 only when the source template has a behaviour prompt (not just because the user typed one manually)
+  // is_template = 1 when the source template has a personality the agent inherits.
+  // The agent's own system_prompt is whatever the user typed (or null = inherit from template at runtime).
   let is_template_flag = 0;
-  let template_system_prompt_val = bodyTemplatePrompt || null;
   if (created_from_template_id) {
-    const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(created_from_template_id);
-    if (tpl?.template_system_prompt) {
-      is_template_flag = 1;
-      if (!template_system_prompt_val) template_system_prompt_val = tpl.template_system_prompt;
-    }
+    const tpl = db.prepare('SELECT template_system_prompt FROM agent_templates WHERE id = ?').get(created_from_template_id);
+    if (tpl?.template_system_prompt) is_template_flag = 1;
   }
 
   const role_ids_val = req.body.role_ids?.length ? JSON.stringify(req.body.role_ids) : JSON.stringify(['role_any']);
 
   db.prepare(`
-    INSERT INTO agents (id, name, role, model, description, permissions, prompt_file, instruction_files, color, created_from_template_id, is_template, template_system_prompt, role_ids, project_id)
+    INSERT INTO agents (id, name, role, model, description, permissions, personality_file, instruction_files, color, created_from_template_id, is_template, system_prompt, role_ids, project_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, role, model, description, JSON.stringify(permissions), prompt_file, JSON.stringify(instruction_files), color, created_from_template_id || null, is_template_flag, template_system_prompt_val, role_ids_val, project_id || null);
+  `).run(id, name, role, model, description, JSON.stringify(permissions), personality_file, JSON.stringify(instruction_files), color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
 
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   res.status(201).json(parseAgent(agent));
@@ -123,11 +135,22 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const id = 'tpl_' + uuidv4().replace(/-/g, '').slice(0, 12);
+
+  // Snapshot the personality the new template should carry: if the agent has its
+  // own system_prompt (user-customised), use that; otherwise inherit from its
+  // source template (looked up live).
+  let snapshotPrompt = agent.system_prompt || null;
+  if (!snapshotPrompt && agent.created_from_template_id) {
+    const sourceTpl = db.prepare('SELECT template_system_prompt FROM agent_templates WHERE id = ?')
+      .get(agent.created_from_template_id);
+    snapshotPrompt = sourceTpl?.template_system_prompt || null;
+  }
+
   db.prepare(`
     INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, instruction_files, permissions, tags, source_agent_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?)
   `).run(id, name, agent.description, agent.model, agent.color, agent.role,
-    system_prompt_content, agent.template_system_prompt || null,
+    system_prompt_content, snapshotPrompt,
     agent.instruction_files, agent.permissions, agent.id);
 
   // Mark the source agent as is_template so it shows the T badge immediately
@@ -147,7 +170,13 @@ agentsRouter.patch('/:id', (req, res) => {
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  const { name, model, description, permissions, color, active, prompt_file, instruction_files, template_system_prompt, role_ids } = req.body;
+  const { name, model, description, permissions, color, active, personality_file, instruction_files, system_prompt, role_ids } = req.body;
+
+  if (role_ids !== undefined) {
+    const permErr = validateOnePermPerAgent(role_ids);
+    if (permErr) return res.status(400).json({ error: permErr });
+  }
+
   const allowed = {};
   if (name !== undefined) allowed.name = name;
   if (model !== undefined) allowed.model = model;
@@ -155,10 +184,10 @@ agentsRouter.patch('/:id', (req, res) => {
   if (permissions !== undefined) allowed.permissions = JSON.stringify(permissions);
   if (color !== undefined) allowed.color = color;
   if (active !== undefined) allowed.active = active ? 1 : 0;
-  if (prompt_file !== undefined) allowed.prompt_file = prompt_file;
+  if (personality_file !== undefined) allowed.personality_file = personality_file;
   if (instruction_files !== undefined) allowed.instruction_files = JSON.stringify(instruction_files);
-  if (Object.prototype.hasOwnProperty.call(req.body, 'template_system_prompt')) {
-    allowed.template_system_prompt = template_system_prompt ?? null;
+  if (Object.prototype.hasOwnProperty.call(req.body, 'system_prompt')) {
+    allowed.system_prompt = system_prompt ?? null;
   }
   if (role_ids !== undefined) allowed.role_ids = JSON.stringify(role_ids);
 
@@ -481,7 +510,7 @@ function getAgentReferences(db, filename, subscriptionId, projectId) {
   // Also check logical path (instructions/X.md) used by default agents
   const logicalPath = `instructions/${filename}`;
   const agents = db.prepare(
-    'SELECT id FROM agents WHERE prompt_file IN (?,?) OR instruction_files LIKE ? OR instruction_files LIKE ?'
+    'SELECT id FROM agents WHERE personality_file IN (?,?) OR instruction_files LIKE ? OR instruction_files LIKE ?'
   ).all(filePath, logicalPath, `%${filePath}%`, `%${logicalPath}%`);
   return agents.map(a => a.id);
 }

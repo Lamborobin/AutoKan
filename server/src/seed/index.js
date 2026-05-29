@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
 const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID } = require('../config/constants');
 const agentTemplates = require('./agent-templates.json');
+const runnersRegistry = require('./runners.json');
 
 /**
  * Seed all default data into a fresh database.
@@ -43,25 +44,10 @@ function seedRoles(db) {
     ['role_access_any',         'All Columns',  'Can be assigned to any column',         JSON.stringify([]),                  '#6b7280', 'column_access'],
   ].forEach(r => insert.run(...r));
 
-  // Permission roles — what kind of work the agent performs
-  [
-    ['perm_coding',           'Coding',           'Creates and modifies code',                                                       '#ec4899'],
-    ['perm_coding_tester',    'Coding Tester',    'Tests code — debugging, unit tests, integration tests',                          '#8b5cf6'],
-    ['perm_code_reader',      'Code Reader',      'Reads and understands code but cannot modify it',                                '#64748b'],
-    ['perm_architect',        'Architect',        'Designs system foundations and high-level structure',                            '#6366f1'],
-    ['perm_migrate',          'Migration',        'Handles data migrations — only affected areas, no wider code changes',           '#f59e0b'],
-    ['perm_frontend',         'Frontend',         'Frontend code changes only',                                                     '#06b6d4'],
-    ['perm_backend',          'Backend',          'Backend code changes only',                                                      '#3b82f6'],
-    ['perm_ux',               'UX',               'Frontend UX-specialised tasks only',                                             '#ec4899'],
-    ['perm_network',          'Network',          'Network testing and external commands, locally or outside the project',         '#10b981'],
-    ['perm_cloud',            'Cloud',            'Cloud environment access — checks app health, operates cloud safely',            '#0ea5e9'],
-    ['perm_security_control', 'Security Control', 'Security analysis, vulnerability scanning, .env usage review, no modifications', '#ef4444'],
-    ['perm_log_reader',       'Log Reader',       'Reads logs in the file system and cloud (when cloud is enabled)',                '#f97316'],
-    ['perm_data_analytic',    'Data Analytics',   'Extracts and analyses data from appropriate areas of the app',                   '#84cc16'],
-    ['perm_planning',         'Planning',         'Triggers the planning phase when assigned to a Backlog task',                    '#a855f7'],
-  ].forEach(([id, name, description, color]) =>
-    insert.run(id, name, description, '[]', color, 'permission')
-  );
+  // Permission roles — capabilities, sourced from runners.json registry
+  for (const cap of runnersRegistry.capabilities) {
+    insert.run(cap.id, cap.label, cap.description, '[]', cap.color, 'permission');
+  }
 }
 
 // ── Columns ───────────────────────────────────────────────────────────────────
@@ -120,7 +106,7 @@ function seedAgentTemplates(db) {
   for (const t of agentTemplates.templates) {
     insert.run(
       t.id, t.name, t.description, t.model, t.color, t.role,
-      readInstructionFile(path.basename(t.prompt_file)),
+      readInstructionFile(path.basename(t.personality_file || '')),
       t.template_system_prompt,
       JSON.stringify(t.instruction_files),
       JSON.stringify(t.permissions),
@@ -134,18 +120,22 @@ function seedAgentTemplates(db) {
 function seedAgents(db) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, prompt_file, instruction_files,
-       is_template, template_system_prompt, color, created_from_template_id, project_id, role_ids)
+      (id, name, role, model, description, permissions, personality_file, instruction_files,
+       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const t of agentTemplates.templates) {
+    // is_template = 1 whenever the template defines a personality, so the agent
+    // inherits it from agent_templates at runtime. system_prompt left null — the
+    // agent has no per-instance override until a user edits it via the UI.
+    const inheritsFromTemplate = !!t.template_system_prompt;
     insert.run(
       t.agent_id, t.name, t.role, t.model, t.description,
       JSON.stringify(t.permissions),
-      t.prompt_file,
+      t.personality_file || null,
       JSON.stringify(t.instruction_files),
-      t.role === 'pm' ? 1 : 0,
-      t.role === 'pm' ? t.template_system_prompt : null,
+      inheritsFromTemplate ? 1 : 0,
+      null,
       t.color, t.id, MY_BOARD_ID,
       JSON.stringify(t.role_ids),
     );

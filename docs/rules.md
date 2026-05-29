@@ -6,33 +6,24 @@
 
 ## Boundaries
 
-Agents only read and write within the repo root. Permitted paths: `client/`, `instructions/`, and the local API at `http://localhost:3001/api`. Nothing outside the repo root — no system files, no other users' files, no server configuration. If additional action is required outside these boundaries, call for human review.
+**AutoKan is the app.** Everything under `client/{boardName}/` is the work-in-progress of a specific board's client project (a website, a folder of files, whatever — its shape is up to that client). Agents exist to work *on the client*, not on AutoKan itself.
+
+Agents only read and write within the repo root. Permitted paths: `client/`, `instructions/`, and the local API at `http://localhost:3001/api`. Nothing outside the repo root.
 
 ### What app agents can write
 
-App agents can read any markdown file — `CLAUDE.md`, `docs/`, `README.md`, `instructions/`. The context file hierarchy guides them to what they need before starting work.
+Agents can READ any markdown file — `CLAUDE.md`, `docs/`, `README.md`, `instructions/` — to find the context they need.
 
-Write access is scoped by agent type:
-- **Dev agent** — `client/` folder only
-- **Tester agent** — test files only (`*.test.*`, `*.spec.*`, `__tests__/`, `test/`)
-- **Planning agent** (`perm_planning`) — `instructions/{subscriptionId}/{projectId}/` only (e.g. updating `client.md` with context gathered during planning)
+Agents can WRITE only within their **capability's declared scope**, defined in `server/src/seed/runners.json` (`capabilities[].write_access`). The tool layer enforces this — any write outside scope is rejected at the call site. Examples today:
+- `perm_coding` → `client/` only
+- `perm_coding_tester` → test files only (`*.test.*`, `*.spec.*`, `__tests__/`, `test/`)
+- `perm_planning` → `instructions/{subscriptionId}/{projectId}/` only (e.g. appending context to `client.md`)
 
-`CLAUDE.md` and `docs/` are never written to by app agents. These are maintained by the developer or operator only.
+### What agents NEVER touch
 
-### When docs files should be updated (developer/operator only)
+The AutoKan app itself is off-limits to all agents. That includes `server/`, `app/`, `docs/`, `CLAUDE.md`, `README.md`, `package.json`, the runner registry, the seed data, and any other configuration *above* the client/instructions scope. Only a real human (typically a superadmin) edits AutoKan's own code, templates, base instruction files, or runner registry — that's product development on AutoKan, not agent work.
 
-| File | Update when |
-|---|---|
-| `CLAUDE.md` | A new docs file is added to `docs/` |
-| `README.md` | Tech stack, quick start steps, or project structure changes |
-| `docs/rules.md` | A new hard constraint is agreed on |
-| `docs/agents.md` | Agent behavior, flows, or the instruction file system changes |
-| `docs/capabilities.md` | A capability is added, renamed, or gets a runner implemented |
-| `docs/frontend.md` | A new component pattern, threshold, or store structure is established |
-| `docs/api.md` | An API route is added, removed, or its behavior changes |
-| `docs/architecture.md` | A structural or system design decision is made |
-| `docs/decisions.md` | A significant design decision is made or reversed |
-| `docs/upcoming-changes.md` | A feature is planned, agreed on, or completed |
+When to update each docs file is indexed in `CLAUDE.md` (the master delegator), not here. Docs files do not reference each other — see CLAUDE.md for the rule.
 
 ---
 
@@ -73,6 +64,7 @@ When implementing any task, follow these in order:
 4. **Prefer the smallest change** — add to existing file → create new file → create new folder (only when ≥3 files belong in it)
 5. **Respect size thresholds** — if a file is already >600 lines and your change adds 50+ lines, extract first then add
 6. **One unit of change** — feature + its architectural cleanup go in the same commit, not a follow-up
+7. **Use capabilities + the runner registry, not hardcoded IDs** — never gate agent behavior on a specific agent ID (e.g. `if agentId === 'agent_pm'`). Runner dispatch lives in `server/src/services/agentRunner.js` and looks up `(agent.capability, task.column)` in `server/src/seed/runners.json`. To add a new behavior: add a registry entry + a prompt file + (if no existing handler fits) a handler function. One `perm_*` capability per agent is enforced server-side.
 
 ---
 

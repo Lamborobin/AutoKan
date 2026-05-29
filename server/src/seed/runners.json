@@ -1,0 +1,163 @@
+{
+  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
+
+  "capabilities": [
+    {
+      "id": "perm_planning",
+      "label": "Planner",
+      "description": "Plans tasks — clarifies requirements through Q&A before any work begins. Acts like a project manager on a software team.",
+      "color": "#a855f7",
+      "write_access": "instructions/{subscriptionId}/{projectId}/",
+      "is_coder": false
+    },
+    {
+      "id": "perm_coding",
+      "label": "Coder",
+      "description": "Implements code that satisfies an approved task. Full write access inside client/. Defaults to human action on hindrance.",
+      "color": "#ec4899",
+      "write_access": "client/",
+      "is_coder": true
+    },
+    {
+      "id": "perm_coding_tester",
+      "label": "Code Test Runner",
+      "description": "Runs the project's automated test suite and reports pass/fail. Narrow scope — escalates anything that needs non-shell verification.",
+      "color": "#8b5cf6",
+      "write_access": "*.test.*, *.spec.*, __tests__/, test/",
+      "is_coder": true
+    },
+    {
+      "id": "perm_frontend",
+      "label": "Frontend Coder",
+      "description": "Frontend-only code changes (app/ folder).",
+      "color": "#06b6d4",
+      "write_access": "app/",
+      "is_coder": true
+    },
+    {
+      "id": "perm_backend",
+      "label": "Backend Coder",
+      "description": "Backend-only code changes (server/ folder).",
+      "color": "#3b82f6",
+      "write_access": "server/",
+      "is_coder": true
+    },
+    {
+      "id": "perm_ux",
+      "label": "UX Coder",
+      "description": "Frontend UX-specialised tasks — layout, styling, interaction patterns. Scoped to app/src/.",
+      "color": "#ec4899",
+      "write_access": "app/src/",
+      "is_coder": true
+    },
+    {
+      "id": "perm_architect",
+      "label": "Architect",
+      "description": "Designs system foundations and high-level structure. Produces written proposals.",
+      "color": "#6366f1",
+      "write_access": "instructions/{subscriptionId}/{projectId}/",
+      "is_coder": false
+    },
+    {
+      "id": "perm_code_reader",
+      "label": "Code Reviewer",
+      "description": "Reads and understands code but cannot modify it. For review, audit, or observer agents.",
+      "color": "#64748b",
+      "write_access": null,
+      "is_coder": true
+    },
+    {
+      "id": "perm_migrate",
+      "label": "Migration Handler",
+      "description": "Data migrations and schema changes. Touches only migration files.",
+      "color": "#f59e0b",
+      "write_access": "*migration*, migrations/, *schema*",
+      "is_coder": true
+    },
+    {
+      "id": "perm_network",
+      "label": "Network Tester",
+      "description": "Network testing and external endpoint checks. Read-only.",
+      "color": "#10b981",
+      "write_access": null,
+      "is_coder": false
+    },
+    {
+      "id": "perm_cloud",
+      "label": "Cloud Operator",
+      "description": "Cloud environment access — health checks, deployment status, safe operational commands.",
+      "color": "#0ea5e9",
+      "write_access": null,
+      "is_coder": false
+    },
+    {
+      "id": "perm_security_control",
+      "label": "Security Reviewer",
+      "description": "Security analysis and vulnerability review. Never modifies files.",
+      "color": "#ef4444",
+      "write_access": null,
+      "is_coder": false
+    },
+    {
+      "id": "perm_log_reader",
+      "label": "Log Analyst",
+      "description": "Reads and summarises logs from the filesystem and cloud.",
+      "color": "#f97316",
+      "write_access": null,
+      "is_coder": false
+    },
+    {
+      "id": "perm_data_analytic",
+      "label": "Data Analyst",
+      "description": "Extracts and analyses data from project areas. Read-only.",
+      "color": "#84cc16",
+      "write_access": null,
+      "is_coder": false
+    }
+  ],
+
+  "runners": [
+    {
+      "id": "runner_planning_backlog",
+      "capability": "perm_planning",
+      "column": "col_backlog",
+      "personality_file": "instructions/planning.md",
+      "handler": "clarify_and_approve",
+      "tools": "clarification_tools",
+      "model_default": "claude-opus-4-5",
+      "trigger_guard": "no_pm_approval_yet",
+      "description": "PM clarifies requirements with the human through Q&A. Single-shot per turn — sleeps between human answers."
+    },
+    {
+      "id": "runner_dev_implement",
+      "capability": "perm_coding",
+      "column": "col_inprogress",
+      "personality_file": "instructions/dev-implement.md",
+      "handler": "implement_in_worktree",
+      "tools": "implementation_tools",
+      "model_default": "claude-sonnet-4-5",
+      "use_worktree": true,
+      "max_iterations": 30,
+      "on_complete": "create_pr_and_optionally_merge",
+      "on_block": { "column": "col_humanaction", "require_human_action": true },
+      "description": "Developer implements task in a git worktree, pushes feature branch, server opens a PR. Auto-merges if task.auto_complete = true."
+    },
+    {
+      "id": "runner_run_code_tests",
+      "capability": "perm_coding_tester",
+      "column": "col_testing",
+      "personality_file": "instructions/run-code-tests.md",
+      "handler": "test_with_retry",
+      "tools": "testing_tools",
+      "model_default": "claude-sonnet-4-5",
+      "use_worktree": false,
+      "max_iterations": 30,
+      "max_retries": 1,
+      "on_pass": { "column": "col_humanaction", "message": "Tests passed — ready for human sign-off" },
+      "on_fail_retry": { "column": "col_inprogress", "message": "Tests failed — sent back to In Progress" },
+      "on_fail_max_retries": { "column": "col_humanaction", "message": "Tests failed after max retries", "require_human_action": true },
+      "on_block": { "column": "col_humanaction", "require_human_action": true },
+      "description": "Runs the project's automated test suite (npm test / pytest / etc), writes missing coverage tests, reports pass/fail. Narrow scope — escalates anything not shell-validatable. Fail retries once before escalating."
+    }
+  ]
+}

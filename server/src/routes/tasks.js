@@ -2,7 +2,7 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent, requireAuth } = require('../middleware/auth');
-const { triggerPmAgent, triggerDevAgent, triggerTesterAgent } = require('../services/agentRunner');
+const { triggerRunner } = require('../services/agentRunner');
 const { broadcast } = require('../sse');
 const { sendMentionEmail } = require('../services/emailService');
 
@@ -154,8 +154,8 @@ router.post('/', requirePermission('task:create'), (req, res) => {
   res.status(201).json(fmtTask);
   broadcast('task_updated', { task: fmtTask });
 
-  // Trigger PM agent asynchronously after response is sent
-  if (pmReviewStatus === 'pending') triggerPmAgent(id);
+  // Trigger registered runner asynchronously after response is sent
+  if (pmReviewStatus === 'pending') triggerRunner(id);
 });
 
 // PATCH /tasks/:id — update task fields
@@ -224,9 +224,11 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
   db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
     .run(uuidv4(), task.id, agentId, 'updated', `Fields updated: ${Object.keys(allowed).join(', ')}`);
 
-  let triggerPm = false;
-
-  // Trigger agent only when BOTH the right capability is assigned AND the task is in the matching column
+  // Trigger registered runner if assignment changed and task is in a column
+  // where the agent's capability has a registered runner. PM-specific bookkeeping
+  // (pm_approval_status = pending) still happens here because it's a precondition
+  // the planning runner reads.
+  let shouldTrigger = false;
   if (req.body.assigned_agent_id !== undefined) {
     const newAgentId = req.body.assigned_agent_id;
     const capabilities = getAgentCapabilities(newAgentId, db);
@@ -234,15 +236,15 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'pending' WHERE id = ?`).run(task.id);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review automatically requested on assignment');
-      triggerPm = true;
+      shouldTrigger = true;
     } else if (task.column_id === 'col_inprogress' && capabilities.includes('perm_coding')) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'developer_assigned', 'Developer assigned — starting implementation');
-      triggerDevAgent(task.id);
+      shouldTrigger = true;
     } else if (task.column_id === 'col_testing' && capabilities.includes('perm_coding_tester')) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'tester_assigned', 'Tester assigned — starting test run');
-      triggerTesterAgent(task.id);
+      shouldTrigger = true;
     }
   }
 
@@ -251,7 +253,7 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
   res.json(fmtUpdated);
   broadcast('task_updated', { task: fmtUpdated });
 
-  if (triggerPm) triggerPmAgent(task.id);
+  if (shouldTrigger) triggerRunner(task.id);
 });
 
 // POST /tasks/:id/move — move task to a different column
@@ -297,17 +299,10 @@ router.post('/:id/move', requirePermission('task:move'), (req, res) => {
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
 
-  // Trigger agent if task moved into a column where the assigned agent has the matching capability
-  if (updated.assigned_agent_id) {
-    const capabilities = getAgentCapabilities(updated.assigned_agent_id, db);
-    if (column_id === 'col_backlog' && capabilities.includes('perm_planning') && !task.pm_approval_status) {
-      triggerPmAgent(task.id);
-    } else if (column_id === 'col_inprogress' && capabilities.includes('perm_coding')) {
-      triggerDevAgent(task.id);
-    } else if (column_id === 'col_testing' && capabilities.includes('perm_coding_tester')) {
-      triggerTesterAgent(task.id);
-    }
-  }
+  // Column moves do NOT trigger runners. Runner dispatch is the responsibility of
+  // assignment events only (PATCH /tasks/:id with assigned_agent_id, or task creation
+  // with an agent already assigned). A move just relocates the task — to (re)start
+  // a runner on it, re-assign the agent from the dropdown.
 
   const fmtUpdated = fmt(updated);
   res.json(fmtUpdated);
@@ -344,7 +339,7 @@ router.post('/:id/toggle_checklist_item', requirePermission('task:update'), (req
 
   // Trigger PM to re-evaluate, but only if PM is actively reviewing and not waiting for human to answer
   if (task.pm_approval_status && task.pm_approval_status !== 'approved' && !updated.pm_pending_question) {
-    triggerPmAgent(task.id);
+    triggerRunner(task.id);
   }
 });
 
@@ -497,7 +492,7 @@ router.post('/:id/answer', requirePermission('task:update'), (req, res) => {
   broadcast('task_updated', { task: fmtUpdated });
 
   // Re-trigger PM agent to continue conversation
-  triggerPmAgent(task.id);
+  triggerRunner(task.id);
 });
 
 // POST /tasks/:id/request_pm_review — request PM review (human initiates)

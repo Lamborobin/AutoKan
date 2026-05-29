@@ -34,12 +34,11 @@ export function useAgentForm(initial = {}) {
     name: '',
     model: 'claude-sonnet-4-5',
     description: '',
-    prompt_file: '',
+    personality_file: '',
     instruction_files: [],
     color: '#6366f1',
     is_template: false,
-    template_system_prompt: '',
-    system_prompt_override: null,
+    system_prompt: '',
     created_from_template_id: null,
     role_ids: ['role_access_any'],
     ...initial,
@@ -80,7 +79,7 @@ export function useAgentForm(initial = {}) {
     setNewPrompt(p => ({ ...p, [k]: v }));
   }
 
-  async function resolvePromptFile() {
+  async function resolvePersonalityFile() {
     if (newPrompt.active && newPrompt.name.trim()) {
       const safeName = sanitizeFileName(newPrompt.name);
       if (!safeName) throw new Error('Invalid system prompt file name');
@@ -94,7 +93,7 @@ export function useAgentForm(initial = {}) {
       ])).catch(() => {});
       return result.path;
     }
-    return form.prompt_file || undefined;
+    return form.personality_file || undefined;
   }
 
   function toggleRole(roleId) {
@@ -110,7 +109,7 @@ export function useAgentForm(initial = {}) {
     form, set, generatedRole,
     availableFiles,
     newPrompt, setNewPromptField,
-    handleNameChange, toggleInstructionFile, resolvePromptFile, toggleRole,
+    handleNameChange, toggleInstructionFile, resolvePersonalityFile, toggleRole,
   };
 }
 
@@ -166,7 +165,7 @@ export function ColorField({ value, onChange }) {
   );
 }
 
-export function SystemPromptField({ promptFile, onSelectFile, availableFiles, newPrompt, setNewPromptField }) {
+export function SystemPromptField({ personalityFile, onSelectFile, availableFiles, newPrompt, setNewPromptField }) {
   const showCreate = newPrompt.active;
   const sanitized = sanitizeFileName(newPrompt.name);
   const fileExists = sanitized && availableFiles.some(f => f.name === sanitized && f.scope === 'custom');
@@ -230,7 +229,7 @@ export function SystemPromptField({ promptFile, onSelectFile, availableFiles, ne
         <div>
           {availableFiles.length > 0 ? (
             <select
-              value={promptFile}
+              value={personalityFile}
               onChange={e => onSelectFile(e.target.value)}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent"
             >
@@ -265,7 +264,7 @@ Example: "You are the Project Manager agent called Alex. You help the client and
 
 export function TemplatePromptField({ form, onChange }) {
   const [showTooltip, setShowTooltip] = useState(false);
-  const charCount = (form.template_system_prompt || '').length;
+  const charCount = (form.system_prompt || '').length;
 
   return (
     <div className="space-y-2">
@@ -289,7 +288,7 @@ export function TemplatePromptField({ form, onChange }) {
         </div>
       </div>
       <textarea
-        value={form.template_system_prompt || ''}
+        value={form.system_prompt || ''}
         onChange={e => onChange(e.target.value.slice(0, 1000))}
         maxLength={1000}
         rows={4}
@@ -418,8 +417,8 @@ export function RoleField({ selectedRoleIds, onToggle }) {
   );
 }
 
-export function ContextFilesField({ availableFiles, selectedFiles, onToggle, promptFile }) {
-  const contextOptions = availableFiles.filter(f => f.path !== promptFile);
+export function ContextFilesField({ availableFiles, selectedFiles, onToggle, personalityFile }) {
+  const contextOptions = availableFiles.filter(f => f.path !== personalityFile);
   if (contextOptions.length === 0) return null;
 
   const systemOptions = contextOptions.filter(f => f.scope === 'system');

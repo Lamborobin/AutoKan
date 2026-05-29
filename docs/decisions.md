@@ -1,82 +1,64 @@
 # Decisions
 
-A running log of architectural decisions — what was decided, why, and what the current state is. Update this file when a significant decision is made or reversed.
+This file is **information only** — a running log of decisions made between the user and the AI agent, kept for future context. It does not impose rules or constraints on agents.
 
-Format: **Decision** → **Reason** → **Status**
-
----
-
-## Capability-based triggers over hardcoded agent IDs
-**Decided:** Early build  
-**Reason:** Hardcoding `if agentId === 'agent_pm'` locks the system to exactly one PM agent forever. Capabilities let any agent take any role by changing data, not code. A team can have multiple PM agents, client-specific PMs, or custom roles without touching the server.  
-**Status:** Implemented. `agentHasCapability()` in `server/src/routes/tasks.js`. Default capabilities seeded once on first DB connection (idempotent `INSERT OR IGNORE`).
-
----
-
-## Single-tenant subscription model for v1
-**Decided:** Initial architecture  
-**Reason:** One install = one workspace (`sub_default`). Eliminates multi-tenancy complexity while still structuring data in a way that can be extended. All subscription-scoped resources already carry a `subscription_id` foreign key.  
-**Status:** Implemented. `sub_default` is the only subscription. Multi-tenancy would require auth changes but the data model already supports it.
-
----
-
-## Soft archive over hard delete for entities with dependencies
-**Decided:** During task/agent management build  
-**Reason:** Hard-deleting an agent that has tasks assigned would create orphaned task records or require cascading deletes that destroy history. Archiving preserves the full record — tasks still reference their original agent, the activity log is intact.  
-**Status:** Implemented across tasks, agents, columns, agent templates.
-
----
-
-## JWT + Google OAuth only — no username/password
-**Decided:** Auth implementation  
-**Reason:** Username/password auth requires password storage, reset flows, and brute-force protection. Google OAuth delegates all of that to Google. Simpler, more secure for a tool used by small teams.  
-**Status:** Implemented. `server/src/routes/auth.js`. JWT stored in `localStorage`, sent as `Authorization: Bearer`.
-
----
-
-## role_ids as a JSON array on agents/members, not a junction table
-**Decided:** Permissions system  
-**Reason:** The number of roles per agent is small (2–6) and roles are read on almost every request. A junction table adds a JOIN on every capability check. JSON array is simpler and fast enough for this scale.  
-**Status:** Implemented. `agents.role_ids` and `project_members.role_ids` are both `TEXT` columns storing JSON arrays. Parsed in JS.
+Update this file when a significant decision is made or reversed.
 
 ---
 
 ## Per-board instruction files, not global
-**Decided:** Instruction file system design  
-**Reason:** Different boards have different contexts — one board's `client.md` should not be visible to an agent working on another. Scoping files to `instructions/{subscriptionId}/{projectId}/` gives each board its own isolated context.  
-**Status:** Implemented. Subscription-level files (shared methodology) live at `instructions/{subscriptionId}/`. Board-level files live in the `{projectId}/` subdirectory. Personal boards don't scaffold `client.md` or `project.md`.
+**Decided:** Instruction file system design
+**Context:** Different boards have different contexts — one board's `client.md` should not bleed into an agent working on another. Scoping files to `instructions/{subscriptionId}/{projectId}/` gives each board its own isolated context. Subscription-level files hold shared methodology; board-level files hold board-specific context. Personal boards don't scaffold `client.md` or `project.md`.
 
 ---
 
-## PM gate + Human gate as two separate approval steps
-**Decided:** Pipeline design  
-**Reason:** PM approval alone isn't enough — the human (client/product owner) needs to confirm the PM understood the brief correctly before dev starts. Two gates mean: (1) the spec is clear, and (2) the spec is correct. Either can fail independently.  
-**Status:** Implemented. `pm_approval_status` and `human_approval_status` are separate fields on tasks. Both must be `approved` before the task can leave Backlog.
-
----
-
-## Human Action absorbs Human Review — single human column
-**Decided:** During doc/code audit  
-**Reason:** Two columns for "needs human" (Human Review for sign-off, Human Action for blockers) was redundant — both required the same human action: open the task and decide what's next. The distinction was carried by log entries and the task's reason field anyway. One column is simpler for the UI, simpler for agents to target, and matches how users actually triage.  
-**Status:** Implemented. `col_humanreview` removed from seed, agent.config.json, frontend constants. Tester pass now moves the task to `col_humanaction` with reason "Ready for human sign-off". The `human_review_comment` / `human_review_date` columns on `tasks` are kept — they describe the *sign-off action*, not the column.
-
----
-
-## No migrations in local dev — drop and reseed instead
-**Decided:** Early development phase  
-**Reason:** Maintaining `ALTER TABLE` migrations adds friction and complexity before the schema is stable. At this stage the data model is still being shaped — a wipe and reseed is faster, safer, and keeps `db/index.js` clean. Migrations become mandatory once real user data exists.  
-**Status:** Active policy. `server/src/db/index.js` contains only `CREATE TABLE IF NOT EXISTS` — no `ALTER TABLE`, no conditional column checks. Schema changes require running `npm run db:reset` (local dev only). Documented in `docs/rules.md` → Schema changes section.
-
----
-
-## server/src split into db/, seed/, config/
-**Decided:** Refactor during early build  
-**Reason:** The original `db/index.js` mixed three unrelated concerns: schema definition, seed data, and app constants. Separating them makes each file's purpose obvious and makes seed data editable without touching schema code.  
-**Status:** Implemented. `db/` = schema only (`CREATE TABLE`). `seed/` = default data (`seedDefaults`, `agent-templates.json`). `config/` = stable constants and app config (`constants.js`, `agent.config.json`). `getDb()` self-initialises on first call — no separate `initDb` step.
+## Google OAuth chosen for v1 auth
+**Decided:** Auth implementation
+**Context:** Google OAuth was picked for v1 simplicity — no password storage, reset flows, or brute-force handling needed. Username/password auth and additional providers (Microsoft, etc.) may be added later if requested. JWTs are stored in `localStorage` and sent as `Authorization: Bearer`.
 
 ---
 
 ## Agents call the API — they do not share memory or call each other
-**Decided:** System architecture  
-**Reason:** Direct agent-to-agent communication creates ordering dependencies and makes state hard to reason about. The DB is the single source of truth. Any agent reading the task gets the same state. Coordination happens through task state transitions, not message passing.  
-**Status:** Implemented. All agent actions go through `POST /api/tasks/:id/*` endpoints.
+**Decided:** System architecture
+**Context:** Direct agent-to-agent communication would create ordering dependencies and make state hard to reason about. The DB is the single source of truth. Any agent reading the task gets the same state. Coordination happens through task state transitions, not message passing. All agent actions go through `POST /api/tasks/:id/*` endpoints.
+
+---
+
+## Human Action absorbs Human Review — single human column
+**Decided:** During doc/code audit
+**Context:** Two columns for the same human-attention state was a design error from the original pipeline — this consolidation corrects it. Human Review (sign-off) and Human Action (blockers) both required the same response: open the task and decide what's next. One column is simpler for the UI, simpler for agents to target, and matches how users actually triage. Tester pass now moves the task to `col_humanaction` with reason "Ready for human sign-off". The `human_review_comment` / `human_review_date` columns on `tasks` are kept — they describe the *sign-off action*, not the column.
+
+---
+
+## Instruction files are personality, not mechanics
+**Decided:** Editing experience pass  
+**Context:** Instruction files — both subscription-level prompts (`planning.md`, `dev-implement.md`, `run-code-tests.md`) and board-level files (`client.md`, `project.md`) — are meant to be edited by anyone, including non-technical users adding domain context, tone, or methodology hints. They MUST NOT describe runner mechanics: tool names, git workflows, write-scope paths, retry behaviour, column transitions, PR creation, exit conditions, etc. That information already lives where the system enforces it — handler code, tool descriptions, `runners.json`. This separation is a guardrail: nothing written in an instruction file can break the runner's contract. The prompt layer only adds personality, judgment, and context on top of a mechanically-correct flow. The seeded prompts are the reference shape — voice, methodology, ethics, communication style; never which tool to call when.
+
+---
+
+## Personality files are additive, never required
+**Decided:** Robustness pass  
+**Context:** Every personality layer (capability personality_file, subscription/board instruction files, the template's personality, the agent's own system_prompt) is **optional**. The runner is self-sufficient via:
+- The handler's runtime initial prompt (task brief + workflow), built in code
+- Tool definitions with their own descriptions and JSON schemas
+- A baked-in minimal baseline in `buildSystemPrompt` that identifies the agent's capability and column when every personality layer is empty
+
+If a superadmin (or a typo) deletes `instructions/sub_default/dev-implement.md`, the next agent run logs a one-time warning (`[AgentRunner] Personality file not found: …`) and continues — the runner reaches its baseline + any other available layers (template's personality, board files, etc.) and the agent still does its job. The field was renamed from `prompt_file` to `personality_file` in `runners.json`, the DB column, the API body, and the frontend to make the additive intent explicit: this is flavour layered on top of a mechanically-correct flow, not a runtime dependency.
+
+---
+
+## No test suite for AutoKan itself
+**Decided:** Early development phase  
+**Context:** AutoKan (the app) ships without a test suite — no Jest, Vitest, Mocha, no `npm test` script, no CI test step. The seeded Code Test Runner exists for *client projects* under `client/`, not for AutoKan. Verification of AutoKan changes happens via running the app and observing behaviour (`npm run dev`), plus the smoke checks built into the refactor work. If a test suite becomes worthwhile later, this decision gets revisited.
+
+---
+
+## No migrations in local dev — drop and reseed instead
+**Decided:** Early development phase
+**Context:** Maintaining `ALTER TABLE` migrations adds friction and complexity before the schema is stable. At this stage the data model is still being shaped — a wipe and reseed is faster, safer, and keeps `db/index.js` clean. `server/src/db/index.js` contains only `CREATE TABLE IF NOT EXISTS` — no `ALTER TABLE`, no conditional column checks. Schema changes require running `npm run db:reset`. Once the app has real users, migrations become mandatory — revisit then.
+
+---
+
+## May 2026 — db/seed/config refactor
+**Decided:** Refactor pass
+**Context:** Full rewrite of `server/src/db/index.js` removed every migration and all legacy code; schema is now a single clean `CREATE TABLE` block. Default data extracted into `server/src/seed/` (`index.js` + `agent-templates.json`). Stable IDs and app config moved to `server/src/config/` (`constants.js`, `agent.config.json`). `getDb()` self-initialises on first call — no separate `initDb` step. Net change ~700 lines removed.

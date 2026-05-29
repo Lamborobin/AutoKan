@@ -44,6 +44,10 @@ npm run dev              # start frontend + backend
 ### 4. Sign in
 Open the frontend and sign in with Google. The first user is automatically made a superadmin.
 
+### 5. (Optional) Customise the default agents
+
+The three default agents (PM, Developer, Tester) are seeded from a single source: **`server/src/seed/agent-templates.json`**. Each entry defines both the template and the corresponding default agent — edit the file to change a default's name, model, description, system prompt, instruction files, permissions, or role IDs. Changes only take effect on a fresh DB — run `npm run db:reset` and restart.
+
 ---
 
 ## Project Structure

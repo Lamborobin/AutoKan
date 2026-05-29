@@ -102,6 +102,20 @@ Personal boards have `client_id = NULL` — they don't scaffold `client.md` or `
 
 ---
 
+## Capabilities & Runners
+
+Agent behavior is driven by a registry, not hardcoded dispatch.
+
+- **Capabilities** (`perm_*`) are skills an agent has. An agent has **exactly one** `perm_*` capability — server validates this on create/update.
+- **Runners** map a `(capability, column)` pair to an executable flow (prompt file, model, exit behavior). Same capability in a different column = a different runner = a different flow. Example: `perm_coding` in `col_inprogress` writes code and opens a PR; the same capability could in future have a runner in `col_humanaction` that responds to PR review comments.
+- Registry lives in `server/src/seed/runners.json` — the single source of truth.
+- Dispatch lives in `server/src/services/agentRunner.js`. On task column change or assignment change, it looks up the registered runner for `(agent.capability, task.column)` and invokes the named handler (`pm`, `dev`, `tester`, etc.).
+- Adding a new (capability × column) behavior: add a registry entry + the prompt file + (if no existing handler fits) a handler in `agentRunner.js`.
+
+Capability scope and write-access rules are defined per capability in the registry (e.g. `perm_coding` → `client/`, `perm_coding_tester` → test files only).
+
+---
+
 ## Authentication
 
 - **Humans** — Google OAuth → JWT stored in `localStorage`. All requests carry `Authorization: Bearer <token>`.

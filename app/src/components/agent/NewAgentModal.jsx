@@ -16,7 +16,7 @@ export default function NewAgentModal() {
     form, set, generatedRole,
     availableFiles,
     newPrompt, setNewPromptField,
-    handleNameChange, toggleInstructionFile, resolvePromptFile, toggleRole,
+    handleNameChange, toggleInstructionFile, resolvePersonalityFile, toggleRole,
   } = useAgentForm();
 
   const [saving, setSaving] = useState(false);
@@ -32,7 +32,7 @@ export default function NewAgentModal() {
     if (!templateId) {
       set('created_from_template_id', null);
       set('is_template', false);
-      set('template_system_prompt', '');
+      set('system_prompt', '');
       return;
     }
     const tpl = activeTemplates.find(t => t.id === templateId);
@@ -53,14 +53,16 @@ export default function NewAgentModal() {
       setNewPromptField('name', suggested);
     }
 
-    // Propagate template behaviour prompt so it shows as readonly preview
+    // is_template = true marks "this agent inherits a personality from a template".
+    // We don't copy the template's prompt onto the agent — buildSystemPrompt fetches
+    // it live at runtime via created_from_template_id. The user's system_prompt
+    // field starts empty and is their per-agent override if they choose to type one.
     if (tpl.template_system_prompt) {
       set('is_template', true);
-      set('template_system_prompt', tpl.template_system_prompt);
     } else {
       set('is_template', false);
-      set('template_system_prompt', '');
     }
+    set('system_prompt', '');
   }
 
   async function handleSubmit(e) {
@@ -69,18 +71,18 @@ export default function NewAgentModal() {
     setSaving(true);
     setError('');
     try {
-      const promptFilePath = await resolvePromptFile();
+      const personalityFilePath = await resolvePersonalityFile();
       await createAgent({
         name: form.name.trim(),
         role: generatedRole,
         model: form.model,
         description: form.description,
-        prompt_file: promptFilePath,
+        personality_file: personalityFilePath,
         instruction_files: form.instruction_files,
         color: form.color,
         permissions: ['task:read'],
         created_from_template_id: selectedTemplateId || undefined,
-        template_system_prompt: form.template_system_prompt || null,
+        system_prompt: form.system_prompt || null,
         role_ids: form.role_ids,
       });
       setShowNewAgent(false);
@@ -154,12 +156,12 @@ export default function NewAgentModal() {
 
           <TemplatePromptField
             form={form}
-            onChange={v => set('template_system_prompt', v)}
+            onChange={v => set('system_prompt', v)}
           />
 
           <SystemPromptField
-            promptFile={form.prompt_file}
-            onSelectFile={v => set('prompt_file', v)}
+            personalityFile={form.personality_file}
+            onSelectFile={v => set('personality_file', v)}
             availableFiles={availableFiles}
             newPrompt={newPrompt}
             setNewPromptField={setNewPromptField}
@@ -169,7 +171,7 @@ export default function NewAgentModal() {
             availableFiles={availableFiles}
             selectedFiles={form.instruction_files}
             onToggle={toggleInstructionFile}
-            promptFile={form.prompt_file}
+            personalityFile={form.personality_file}
           />
 
           <ColorField value={form.color} onChange={v => set('color', v)} />

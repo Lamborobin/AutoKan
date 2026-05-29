@@ -17,18 +17,17 @@ export default function EditAgentModal() {
     form, set,
     availableFiles,
     newPrompt, setNewPromptField,
-    toggleInstructionFile, resolvePromptFile, toggleRole,
+    toggleInstructionFile, resolvePersonalityFile, toggleRole,
   } = useAgentForm({
     name: agent.name,
     role: agent.role,
     model: agent.model,
     description: agent.description || '',
-    prompt_file: agent.prompt_file || '',
+    personality_file: agent.personality_file || '',
     instruction_files: agent.instruction_files || [],
     color: agent.color,
     is_template: agent.is_template || false,
-    template_system_prompt: agent.template_system_prompt || '',
-    system_prompt_override: agent.system_prompt_override ?? null,
+    system_prompt: agent.system_prompt || '',
     created_from_template_id: agent.created_from_template_id || null,
     role_ids: agent.role_ids || [],
   });
@@ -78,15 +77,15 @@ export default function EditAgentModal() {
     setError('');
     setDisplacementWarning(null);
     try {
-      const promptFilePath = await resolvePromptFile();
+      const personalityFilePath = await resolvePersonalityFile();
       const payload = {
         name: form.name.trim(),
         model: form.model,
         description: form.description,
-        prompt_file: promptFilePath,
+        personality_file: personalityFilePath,
         instruction_files: form.instruction_files,
         color: form.color,
-        template_system_prompt: form.template_system_prompt || null,
+        system_prompt: form.system_prompt || null,
         role_ids: form.role_ids,
       };
       await updateAgent(agent.id, payload);
@@ -140,7 +139,7 @@ export default function EditAgentModal() {
     try {
       // Read current prompt file content if available
       let system_prompt_content = '';
-      if (form.prompt_file) {
+      if (form.personality_file) {
         try {
           const resp = await instructionsApi.list();
           // We don't have a read endpoint — pass empty, user can edit in template manager
@@ -209,12 +208,12 @@ export default function EditAgentModal() {
 
           <TemplatePromptField
             form={form}
-            onChange={v => set('template_system_prompt', v)}
+            onChange={v => set('system_prompt', v)}
           />
 
           <SystemPromptField
-            promptFile={form.prompt_file}
-            onSelectFile={v => set('prompt_file', v)}
+            personalityFile={form.personality_file}
+            onSelectFile={v => set('personality_file', v)}
             availableFiles={availableFiles}
             newPrompt={newPrompt}
             setNewPromptField={setNewPromptField}
@@ -224,7 +223,7 @@ export default function EditAgentModal() {
             availableFiles={availableFiles}
             selectedFiles={form.instruction_files}
             onToggle={toggleInstructionFile}
-            promptFile={form.prompt_file}
+            personalityFile={form.personality_file}
           />
 
           <ColorField value={form.color} onChange={v => set('color', v)} />

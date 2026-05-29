@@ -62,13 +62,13 @@ function AgentPanel({ agent, onClose, onEdit }) {
         </div>
       )}
 
-      {agent.prompt_file && (
+      {agent.personality_file && (
         <div>
           <p className="text-[10px] font-medium text-gray-500 mb-1.5">System Prompt</p>
           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-accent/10 border border-accent/20 rounded-lg">
             <FileText size={10} className="text-accent shrink-0" />
             <span className="text-[10px] font-mono text-accent truncate">
-              {agent.prompt_file.replace(/^instructions\//, '').replace(/\.md$/, '')}
+              {agent.personality_file.replace(/^instructions\//, '').replace(/\.md$/, '')}
             </span>
           </div>
         </div>

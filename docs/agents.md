@@ -14,10 +14,6 @@ Agents are server-side processes triggered automatically by the pipeline — the
 | Developer | `agent_dev` | `perm_coding` |
 | Tester | `agent_test` | `perm_coding_tester`|
 
-### Where defaults live
-
-The three default agents are seeded from a single source — **`server/src/seed/agent-templates.json`**. Each entry defines both the template (inserted into `agent_templates`) and the corresponding default agent (inserted into `agents`). Edit that file to change a default's name, model, description, system prompt, instruction files, permissions, or role IDs. Changes only take effect on a fresh DB — run `npm run db:reset` and restart.
-
 ---
 
 ## Escalating to Human
@@ -60,35 +56,56 @@ When in doubt, escalate. A human review is cheaper than a wrong assumption.
 
 ---
 
-## Agent Instruction File System
+## Personality Layering
 
-Each agent's context is assembled from these sources before the Anthropic API is called:
+Every agent's behaviour is shaped by stacked personality layers — each layer is **additive**, **optional**, and **cannot affect runner mechanics**. The runner's flow (which tool fires when, which column the task moves to, what the agent can write) lives in code and is immutable from these layers. If every personality layer is missing, the runner falls back to a baked-in baseline and still functions.
 
-| Layer | Source | Notes |
+### The layers, ordered from most general to most specific
+
+| # | Layer | Editable by | What it's for |
+|---|---|---|---|
+| 1 | **Baked-in baseline** (in code) | Developer | Final safety net — identifies the agent's capability + column so it always has *something* if every other layer is empty |
+| 2 | **Capability personality file** (`runners[].personality_file` — e.g. `instructions/{sub}/dev-implement.md`) | Operator | General tone + methodology for *any* agent of this capability |
+| 3 | **Subscription-level context files** (in `instructions/{subscriptionId}/`) | Operator | Cross-board standards, coding conventions, things that apply workspace-wide |
+| 4 | **Board-level context files** (`client.md`, `project.md` in `instructions/{sub}/{projId}/`) | Board owner / planning agent | Board-specific domain knowledge, client priorities, board-only rules |
+| 5 | **Template personality** (`agent_templates.template_system_prompt`) | UI editor | Persona shared across all agents created from that template. Fetched live at runtime — editing the template propagates to every agent that hasn't customised — supports `[STYLE]` + `[CONSTRAINTS]` |
+| 6 | **Agent personality** (`agents.system_prompt`) | UI editor of the specific agent | Per-agent override that wins over the template's value. Leave blank to inherit from the template. |
+
+### Worked example — a single Coder agent
+
+| Layer | Example content |
+|---|---|
+| 1 — Baseline | (auto, used only if everything else is empty) "You are an agent operating in AutoKan with capability perm_coding…" |
+| 2 — Capability (`dev-implement.md`) | "You're a professional coder. Read before you change. Smallest change that satisfies the spec. Don't fake completion." |
+| 3 — Subscription (`coding-standards.md`) | "We use Clean Architecture. Never bypass the service layer." |
+| 4 — Board (`project.md` for Velour) | "When touching the cart, always ask for human verification before merging." |
+| 5 — Template (`agent_templates.template_system_prompt` for "Senior Backend Coder") | "[STYLE] direct, no hedging. [CONSTRAINTS] Never reveal business logic in PR descriptions." |
+| 6 — Agent (`agents.system_prompt` for "Camila") | "Your name is Camila. You write commit messages in Spanish." (overrides layer 5) |
+
+All six layers are concatenated into the system prompt. None of them can change which tool fires, which column a task moves to, or what files the agent can write — those are enforced at the runner/tool layer.
+
+### `[STYLE]` and `[CONSTRAINTS]`
+
+The personality text at layers 5 and 6 supports two semantic sections:
+- `[STYLE]` — tone modifier (e.g. warm vs direct). Adjusts how the agent writes.
+- `[CONSTRAINTS]` — hard rules, enforced above everything else (e.g. `Never ask about pricing`).
+
+### Default seeded mapping
+
+| Agent | personality_file | instruction_files |
 |---|---|---|
-| 1 | `template_system_prompt` (DB field) | Short identity/modifier prompt, ≤1000 chars |
-| 2 | `prompt_file` | Primary methodology file for the agent's role |
-| 3 | `instruction_files` | JSON array of additional context files |
-| 4 | `CLAUDE.md` | All agents — contains project rules and context file table |
-| 5 | `README.md` | Coder agents only (`perm_coding`, `perm_backend`, `perm_frontend`, `perm_coding_tester`) |
-
-The `template_system_prompt` supports `[STYLE]` and `[CONSTRAINTS]` sections:
-- `[STYLE]` — tone modifier (e.g. warm/direct). Adjusts how the agent writes responses.
-- `[CONSTRAINTS]` — hard rules, enforced above everything else (e.g. `Never ask about pricing`)
-
-### Default file assignments
-
-| Agent | prompt_file | instruction_files |
-|---|---|---|
-| PM | `instructions/project-manager.md` | `["instructions/client.md"]` |
-| Developer | `instructions/developer.md` | `["instructions/project.md", "instructions/client.md"]` |
-| Tester | `instructions/tester.md` | `["instructions/project.md", "instructions/client.md"]` |
+| Planner | `instructions/planning.md` | `["instructions/client.md"]` |
+| Coder | `instructions/dev-implement.md` | `["instructions/project.md", "instructions/client.md"]` |
+| Code Test Runner | `instructions/run-code-tests.md` | `["instructions/project.md", "instructions/client.md"]` |
 
 ### Path resolution
 
-Paths are stored as short references (e.g. `instructions/developer.md`) without subscription or project IDs. At runtime, `resolveInstructionPath()` expands these to the most specific file that exists on disk:
+Paths are stored as short references (e.g. `instructions/dev-implement.md`) without subscription or project IDs. At runtime, `resolveInstructionPath()` expands these to the most specific file that exists on disk:
 
 1. `instructions/{subscriptionId}/{projectId}/X.md` — board-level (most specific, overrides subscription)
 2. `instructions/{subscriptionId}/X.md` — subscription-level (shared template, applies to all boards)
 
-The subscription level holds shared methodology files. The board level holds board-specific context (`client.md`, `project.md`) and any per-board overrides.
+### Two more files always loaded
+
+- **`CLAUDE.md`** — loaded for every agent (project rules + context-files index)
+- **`README.md`** — loaded only for agents whose capability has `is_coder: true` in `runners.json` (currently `perm_coding`, `perm_coding_tester`, `perm_frontend`, `perm_backend`, `perm_ux`, `perm_architect`, `perm_code_reader`, `perm_migrate`)

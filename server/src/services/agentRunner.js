@@ -8,6 +8,52 @@ const util = require('util');
 const { getDb } = require('../db');
 const { broadcast } = require('../sse');
 const { resolveInstructionPath } = require('../utils/instructions');
+const runnersRegistry = require('../seed/runners.json');
+
+// ── Runner registry helpers ──────────────────────────────────────────────────
+// Single source of truth for (capability, column) → handler mapping lives in
+// server/src/seed/runners.json. Adding a new runner = add a registry entry +
+// (optionally) create the personality_file + (if no existing handler fits) implement one below.
+
+function findRunner(capability, columnId) {
+  return runnersRegistry.runners.find(r => r.capability === capability && r.column === columnId) || null;
+}
+
+function getAgentCapability(agent) {
+  try {
+    const roleIds = JSON.parse(agent.role_ids || '[]');
+    return roleIds.find(r => r.startsWith('perm_')) || null;
+  } catch { return null; }
+}
+
+// ── Runner runtime prompts ──────────────────────────────────────────────────
+// System-owned markdown templates live in server/src/services/runner-prompts/.
+// They hold the "## Instructions" block each handler sends alongside the task
+// brief — git workflow, exit semantics, tool usage. NOT in instructions/ because
+// they MUST NOT be user-editable; editing changes runner mechanics.
+//
+// Template syntax: {varName} placeholders. Unknown vars are left as-is so any
+// typo is visible to the operator. Missing files log a one-time warning and
+// return '' (the handler still works — the task brief alone identifies the job).
+
+const RUNNER_PROMPTS_DIR = path.join(__dirname, 'runner-prompts');
+const _runnerPromptWarned = new Set();
+function loadRunnerPrompt(name, vars = {}) {
+  const filePath = path.join(RUNNER_PROMPTS_DIR, `${name}.md`);
+  let template;
+  try {
+    template = fs.readFileSync(filePath, 'utf8');
+  } catch {
+    if (!_runnerPromptWarned.has(name)) {
+      _runnerPromptWarned.add(name);
+      console.warn(`[AgentRunner] Runner prompt not found: server/src/services/runner-prompts/${name}.md. Handler will continue without its instructions block.`);
+    }
+    return '';
+  }
+  return template.replace(/\{(\w+)\}/g, (match, key) =>
+    Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : match
+  );
+}
 
 function broadcastTask(db, taskId) {
   const t = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
@@ -60,7 +106,7 @@ function githubRequest({ path, method = 'GET', body = null }) {
   const payload = body ? JSON.stringify(body) : null;
   const headers = {
     'Authorization': `token ${token}`,
-    'User-Agent': 'AutoKan-dev-runner',
+    'User-Agent': 'AutoKan-agent-runner',
     'Accept': 'application/vnd.github.v3+json',
   };
   if (payload) {
@@ -107,7 +153,7 @@ async function mergeGithubPr(prNumber) {
 }
 
 // ---------------------------------------------------------------------------
-// Git worktree helpers — one isolated directory per developer agent task
+// Git worktree helpers — one isolated directory per implementation task
 // ---------------------------------------------------------------------------
 
 function createWorktree(taskId) {
@@ -140,8 +186,8 @@ function removeWorktree(worktreePath) {
 }
 
 // CLAUDE.md is loaded for all agents — it contains the context file table and project rules.
-// README.md is loaded only for agents with coder capabilities — it describes the codebase.
-const CODER_CAPABILITIES = ['perm_coding', 'perm_backend', 'perm_frontend', 'perm_coding_tester'];
+// README.md is loaded only for agents whose capability is_coder=true in runners.json.
+const CODER_CAPABILITIES = runnersRegistry.capabilities.filter(c => c.is_coder).map(c => c.id);
 
 // Lazy-init so dotenv has time to load before we read the key
 let _client = null;
@@ -167,8 +213,9 @@ const CHECKLIST_ITEM_SCHEMA = {
   required: ['item', 'resolved']
 };
 
-// Tools the PM agent can call
-const PM_TOOLS = [
+// Tools available to the clarify_and_approve handler — ask the human a
+// clarifying question, or approve the task once everything is resolved.
+const CLARIFICATION_TOOLS = [
   {
     name: 'ask_question',
     description: 'Send a clarifying message to the human. Lead with a one-sentence summary of what you understand is being built. Then list open questions as a numbered list — ask everything at once on first contact. On follow-up: ask at most ONE targeted question. Always provide the updated checklist with resolved items marked. Checklist items must be plain client-friendly decisions, not technical steps. If the task seems large, include a task breakdown suggestion in the message.',
@@ -200,7 +247,7 @@ const PM_TOOLS = [
         },
         acceptance_criteria: {
           type: 'string',
-          description: "Concrete, testable acceptance scenarios derived from the Done-when bullets. Write as a bullet list — each item should be independently verifiable (e.g. '• Clicking Makeup in nav opens the category page with Lips, Eyes, Face subcategories'). These will be saved as the task's acceptance criteria for the tester."
+          description: "Concrete, testable acceptance scenarios derived from the Done-when bullets. Write as a bullet list — each item should be independently verifiable (e.g. '• Clicking Makeup in nav opens the category page with Lips, Eyes, Face subcategories'). These will be saved as the task's acceptance criteria and used by whichever runner validates the work later."
         },
         priority: {
           type: 'string',
@@ -223,58 +270,160 @@ const PM_TOOLS = [
   }
 ];
 
+// Reads an instruction file. Returns '' if missing — instruction files are ADDITIVE
+// PERSONALITY, never required for the runner to function. Missing is logged once so
+// it's visible to operators, but the agent runs fine via the baked-in baseline below.
+const _warnedMissing = new Set();
 function readFile(filePath, subscriptionId, projectId) {
+  if (!filePath) return '';
   try {
     const resolved = resolveInstructionPath(filePath, subscriptionId, projectId);
     return fs.readFileSync(resolved, 'utf8');
   } catch {
+    const key = `${filePath}|${subscriptionId || ''}|${projectId || ''}`;
+    if (!_warnedMissing.has(key)) {
+      _warnedMissing.add(key);
+      console.warn(`[AgentRunner] Personality file not found: ${filePath} (sub=${subscriptionId}, proj=${projectId}). Runner will continue using the baked-in baseline + any other available context layers.`);
+    }
     return '';
   }
 }
 
+// Runner personality file basenames — these are loaded into the matching agent's
+// SYSTEM PROMPT via buildSystemPrompt, so they're excluded from the workspace
+// context scan. Otherwise every agent's context would be spammed with every other
+// capability's persona ("You're a coder" landing in PM's context, etc.).
+const RUNNER_PERSONALITY_BASENAMES = new Set(
+  runnersRegistry.runners
+    .map(r => r.personality_file)
+    .filter(Boolean)
+    .map(p => path.basename(p))
+);
+
+function readAbs(absPath) {
+  try { return fs.readFileSync(absPath, 'utf8'); }
+  catch { return ''; }
+}
+
+function safeListMd(folder, excludeBasenames = new Set()) {
+  if (!fs.existsSync(folder)) return [];
+  try {
+    return fs.readdirSync(folder, { withFileTypes: true })
+      .filter(d => d.isFile() && d.name.endsWith('.md') && !excludeBasenames.has(d.name))
+      .map(d => d.name)
+      .sort();
+  } catch { return []; }
+}
+
+// Build the context block that goes into every agent's initial user message.
+// Four sources, all optional, all dedup'd:
+//   1. Global files (CLAUDE.md always; README.md for coder capabilities)
+//   2. Workspace context — auto-scan top-level .md in instructions/{sub}/
+//      (excluding runner personality files — those go into the system prompt)
+//   3. Board context — auto-scan top-level .md in instructions/{sub}/{proj}/
+//   4. Legacy: agent.instruction_files — back-compat hook for explicit extras
+//      not already covered by the folder scans
 function buildContextBlock(agent, subscriptionId, projectId) {
-  const instructionFiles = JSON.parse(agent.instruction_files || '[]');
   const agentCapabilities = JSON.parse(agent.role_ids || '[]');
   const isCoderAgent = CODER_CAPABILITIES.some(cap => agentCapabilities.includes(cap));
-  const globalFiles = ['CLAUDE.md', ...(isCoderAgent ? ['README.md'] : [])];
-  const allContextFiles = [...globalFiles, ...instructionFiles];
   const sections = [];
+  const includedAbsPaths = new Set();
 
-  for (const filePath of allContextFiles) {
-    const content = readFile(filePath, subscriptionId, projectId);
-    if (content) {
-      const label = path.basename(filePath, '.md').toUpperCase();
-      sections.push(`## [${label}]\n${content}`);
+  function pushFromAbs(absPath, label) {
+    if (includedAbsPaths.has(absPath)) return;
+    const content = readAbs(absPath);
+    if (!content) return;
+    includedAbsPaths.add(absPath);
+    sections.push(`## [${label}]\n${content}`);
+  }
+
+  // 1. Global files
+  for (const name of ['CLAUDE.md', ...(isCoderAgent ? ['README.md'] : [])]) {
+    pushFromAbs(path.join(PROJECT_ROOT, name), name.replace('.md', '').toUpperCase());
+  }
+
+  // 2. Workspace context (subscription-level)
+  if (subscriptionId) {
+    const workspaceFolder = path.join(PROJECT_ROOT, 'instructions', subscriptionId);
+    for (const fileName of safeListMd(workspaceFolder, RUNNER_PERSONALITY_BASENAMES)) {
+      pushFromAbs(
+        path.join(workspaceFolder, fileName),
+        `WORKSPACE/${fileName.replace('.md', '').toUpperCase()}`,
+      );
     }
+  }
+
+  // 3. Board context (per-project)
+  if (subscriptionId && projectId) {
+    const boardFolder = path.join(PROJECT_ROOT, 'instructions', subscriptionId, projectId);
+    for (const fileName of safeListMd(boardFolder)) {
+      pushFromAbs(
+        path.join(boardFolder, fileName),
+        `BOARD/${fileName.replace('.md', '').toUpperCase()}`,
+      );
+    }
+  }
+
+  // 4. Legacy: explicit instruction_files (back-compat for paths outside the folders)
+  const explicitFiles = JSON.parse(agent.instruction_files || '[]');
+  for (const filePath of explicitFiles) {
+    try {
+      const resolved = resolveInstructionPath(filePath, subscriptionId, projectId);
+      if (resolved) {
+        pushFromAbs(resolved, path.basename(filePath, '.md').toUpperCase());
+      }
+    } catch { /* skip — readAbs handles missing */ }
   }
 
   return sections.join('\n\n---\n\n');
 }
 
-function buildSystemPrompt(agent, subscriptionId, projectId) {
-  const promptFileContent = readFile(agent.prompt_file || '', subscriptionId, projectId);
-
-  if (agent.is_template) {
-    // Template agents: internal behavioural prompt + role-specific prompt file
-    const internalPrompt = agent.system_prompt_override || agent.template_system_prompt || '';
-    return [internalPrompt, promptFileContent].filter(Boolean).join('\n\n---\n\n');
-  }
-
-  return promptFileContent;
+// Minimal baked-in baseline. Used when ALL personality layers are missing or empty —
+// guarantees the model always has something identifying its role. The agent's own
+// system_prompt and the template's fallback are ADDITIVE personality on top.
+function bakedBaseline(runner) {
+  const cap = runner?.capability || 'agent';
+  const col = runner?.column || 'this column';
+  return `You are an agent operating in AutoKan. Your assigned capability is "${cap}" and you have been triggered because a task landed in ${col}. Use the tools provided to do your job, escalate via request_human when uncertain, and don't fake completion. The personality and methodology guidance in your system prompt is additive context — if any of it appears missing, fall back to honest, careful default behaviour for your capability.`;
 }
 
-async function runPmAgent(taskId) {
-  const db = getDb();
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+function buildSystemPrompt(agent, runner, subscriptionId, projectId) {
+  // Personality file: runner's wins when present (defines the flow for this
+  // capability+column pair). Falls back to the agent's. Both are OPTIONAL —
+  // missing files yield '' and the baseline below ensures we still have a system prompt.
+  const personalityFile = runner?.personality_file || agent.personality_file || '';
+  const fileContent = readFile(personalityFile, subscriptionId, projectId);
 
-  if (!task) return;
+  // Per-agent personality: agent's own value wins; falls back to the template's
+  // prompt fetched fresh from agent_templates (so template edits propagate to
+  // agents that haven't customised). Gated by is_template so non-template agents
+  // don't pick up any per-agent text.
+  let templatePersonality = '';
+  if (agent.is_template && agent.created_from_template_id) {
+    const tpl = getDb().prepare('SELECT template_system_prompt FROM agent_templates WHERE id = ?')
+      .get(agent.created_from_template_id);
+    templatePersonality = tpl?.template_system_prompt || '';
+  }
+  const agentPersonality = agent.is_template
+    ? (agent.system_prompt || templatePersonality || '')
+    : '';
+
+  // Assemble: agent personality + capability personality (file). Both optional.
+  const layered = [agentPersonality, fileContent].filter(Boolean).join('\n\n---\n\n');
+
+  // If absolutely nothing came through, fall back to the baked-in baseline so the
+  // model always has SOMETHING identifying its role and stance.
+  return layered || bakedBaseline(runner);
+}
+
+async function runClarifyAndApprove(task, agent, runner) {
+  const db = getDb();
+  const taskId = task.id;
+
+  // Trigger guard from runner config (e.g. don't re-run if already approved)
   if (task.pm_approval_status === 'approved') return;
   // Don't re-run while waiting for human to answer
   if (task.pm_pending_question) return;
-
-  if (!task.assigned_agent_id) return;
-  const pmAgent = db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id);
-  if (!pmAgent) return;
 
   // Get conversation history (questions + answers only)
   const conversationLogs = db.prepare(`
@@ -283,17 +432,17 @@ async function runPmAgent(taskId) {
     ORDER BY created_at ASC
   `).all(taskId);
 
-  const pmProject = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
-  const pmSubId = pmProject?.subscription_id || null;
-  const systemPrompt = buildSystemPrompt(pmAgent, pmSubId, task.project_id);
-  const contextBlock = buildContextBlock(pmAgent, pmSubId, task.project_id);
+  const project = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  const subscriptionId = project?.subscription_id || null;
+  const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
+  const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
 
   // Build a clear picture of the task + conversation so far
   const conversationText = conversationLogs.length === 0
     ? '(No conversation yet — this is your first look at the task.)'
     : conversationLogs.map(l =>
         l.action === 'pm_question'
-          ? `PM asked: ${l.message}`
+          ? `I asked: ${l.message}`
           : `Human answered: ${l.message}`
       ).join('\n\n');
 
@@ -315,11 +464,15 @@ async function runPmAgent(taskId) {
       ].join('\n')
     : '';
 
-  const yourTurnBlock = isFinalReview
-    ? `## FINAL REVIEW\nAll checklist items are now marked as resolved (some were manually checked by the human). Do a careful sanity check:\n- Is each item genuinely confirmed by the conversation and task description?\n- Does the priority (${task.priority}) and complexity (${task.complexity}) match the scope?\n- Are there any items that appear prematurely resolved?\n\nIf everything checks out → call approve_task with a clean requirements summary.\nIf you have ONE specific concern → ask about it. Do NOT re-ask things already answered.`
+  const turnPromptName = isFinalReview
+    ? 'clarify-final-review'
     : conversationLogs.length === 0
-      ? `## YOUR TURN — FIRST CONTACT\nYour system prompt may include a [STYLE] and/or [CONSTRAINTS] section. Apply them as follows:\n- [CONSTRAINTS] — absolute hard rules, highest priority, always enforced regardless of anything else\n- [STYLE] — changes exactly one thing: whether you add a sentence or not. Direct/concise → no additions, e.g. "Before I can plan this out, I need to understand the goal: What should this task accomplish?" Warm/bubbly/chatty → same message plus one natural sentence, e.g. "Before I can plan this out, I need to understand the goal: What should this task accomplish? Happy to dig into this with you once I have a bit more context!" The structure never changes — only that one sentence appears or not.\n\nWork in two steps, in a single tool call:\n\n**Step 1 — Understand the goal**\nCan you summarize what's being built in one sentence from the description?\n- If YES → state that summary at the top of your message, then do Step 2.\n- If NO (genuinely too vague to know what they want) → your entire message is ONE question about the goal or intent. Submit an empty checklist for now. Stop here.\n\n**Step 2 — Plan the specifics**\nNow identify only the decisions genuinely missing from the description. Build the checklist from those gaps only.\n- Anything the description already states → mark resolved immediately, do NOT ask about it\n- A well-specified task → 1–3 open items\n- A vague task where intent is clear → up to 5–7 open items\n- If the task seems large (multiple distinct areas, multi-sprint scope) → include a breakdown suggestion in your message naming the proposed sub-tasks\n- If everything is already clear → call approve_task immediately\n- Otherwise → call ask_question. Lead with a one-sentence summary of what you understand is being built, then list open questions as a numbered list.\n\nCRITICAL: Only ask about things genuinely missing. If the description gives you a URL, color, or explicit behavior — it is answered. Do not invent uncertainty.`
-      : `## YOUR TURN — FOLLOW-UP\nThe human has answered. Re-evaluate the checklist and mark any newly resolved items.\n- If all items are now resolved → call approve_task immediately.\n- If items are still unresolved → ask about ALL of them in one message (numbered list). Do NOT split across multiple round trips. Do NOT re-ask anything already clearly answered.`;
+      ? 'clarify-first-contact'
+      : 'clarify-followup';
+  const yourTurnBlock = loadRunnerPrompt(turnPromptName, {
+    priority: task.priority,
+    complexity: task.complexity,
+  });
 
   const userMessage = [
     contextBlock ? `## Context Files\n${contextBlock}` : '',
@@ -340,18 +493,18 @@ async function runPmAgent(taskId) {
   let response;
   try {
     response = await getClient().messages.create({
-      model: pmAgent.model || 'claude-opus-4-5',
+      model: agent.model || runner.model_default || 'claude-opus-4-5',
       max_tokens: 1024,
       system: systemPrompt,
-      tools: PM_TOOLS,
+      tools: getToolSet(runner),
       messages: [{ role: 'user', content: userMessage }]
     });
   } catch (err) {
-    console.error(`[AgentRunner] PM agent API error for task ${taskId}:`, err.message);
+    console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
     return;
   }
 
-  // Execute whichever tool the PM chose
+  // Execute whichever tool the agent chose
   for (const block of response.content) {
     if (block.type !== 'tool_use') continue;
 
@@ -360,8 +513,8 @@ async function runPmAgent(taskId) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ?, pm_checklist = ? WHERE id = ?`)
         .run(question, JSON.stringify(checklist), taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, pmAgent.id, 'pm_question', question);
-      console.log(`[AgentRunner] PM asked question on task ${taskId}`);
+        .run(uuidv4(), taskId, agent.id, 'pm_question', question);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] asked clarifying question`);
       broadcastTask(db, taskId);
 
     } else if (block.name === 'approve_task') {
@@ -375,7 +528,7 @@ async function runPmAgent(taskId) {
       if (acceptance_criteria && !task.acceptance_criteria) {
         db.prepare(`UPDATE tasks SET acceptance_criteria = ? WHERE id = ?`).run(acceptance_criteria, taskId);
       }
-      // Set priority and complexity from PM's assessment (only if PM provided them)
+      // Set priority and complexity from the agent's assessment (only if provided)
       const validPriorities = ['low', 'medium', 'high', 'critical'];
       const validComplexities = ['low', 'medium', 'high'];
       if (priority && validPriorities.includes(priority)) {
@@ -385,8 +538,8 @@ async function runPmAgent(taskId) {
         db.prepare(`UPDATE tasks SET complexity = ? WHERE id = ?`).run(complexity, taskId);
       }
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, pmAgent.id, 'pm_reviewed', `PM approved — ${comment}`);
-      console.log(`[AgentRunner] PM approved task ${taskId}`);
+        .run(uuidv4(), taskId, agent.id, 'pm_reviewed', `Approved — ${comment}`);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] approved task`);
       broadcastTask(db, taskId);
     }
   }
@@ -398,29 +551,22 @@ async function runPmAgent(taskId) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ? WHERE id = ?`)
         .run(text, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, pmAgent.id, 'pm_question', text);
+        .run(uuidv4(), taskId, agent.id, 'pm_question', text);
       broadcastTask(db, taskId);
     }
   }
 
 }
 
-// Fire-and-forget wrapper — never blocks the HTTP request
-function triggerPmAgent(taskId) {
-  setImmediate(() => {
-    runPmAgent(taskId).catch(err =>
-      console.error(`[AgentRunner] Unhandled error for task ${taskId}:`, err)
-    );
-  });
-}
-
 // ---------------------------------------------------------------------------
-// Developer agent
+// Handler: implement_in_worktree
+// Iterative code-editing loop. Creates an isolated git worktree, lets the
+// agent edit, commit, and push a feature branch, then opens a PR on complete.
 // ---------------------------------------------------------------------------
 
 const CLIENT_DIR = path.join(PROJECT_ROOT, 'client');
 
-const DEV_TOOLS = [
+const IMPLEMENTATION_TOOLS = [
   {
     name: 'bash',
     description: 'Execute a shell command (git, gh, npm, etc.). Working directory is the repo root.',
@@ -515,7 +661,7 @@ async function runBash(command, cwd = PROJECT_ROOT) {
   }
 }
 
-function devWriteFile(relPath, content, worktreeDir) {
+function writeToClientOnly(relPath, content, worktreeDir) {
   const baseDir = worktreeDir || PROJECT_ROOT;
   const clientDir = path.join(baseDir, 'client');
   const absPath = path.join(baseDir, relPath);
@@ -539,35 +685,27 @@ function readFileFromDir(relPath, baseDir) {
   }
 }
 
-async function runDevAgent(taskId) {
+async function runImplementInWorktree(task, agent, runner) {
   const db = getDb();
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
-  if (!task) return;
-  if (task.column_id !== 'col_inprogress') return;
-
-  const devAgent = task.assigned_agent_id
-    ? db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id)
-    : null;
-  if (!devAgent) return;
-  try {
-    if (!JSON.parse(devAgent.role_ids || '[]').includes('perm_coding')) return;
-  } catch { return; }
+  const taskId = task.id;
 
   // Create an isolated git worktree for this task so the main checkout is never touched
   let worktreePath;
-  try {
-    worktreePath = createWorktree(task.id);
-  } catch (err) {
-    console.error(`[AgentRunner] Failed to create worktree for task ${taskId}:`, err.message);
-    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-      .run(uuidv4(), taskId, devAgent.id, 'note', `Worktree setup failed: ${err.message}`);
-    return;
+  if (runner.use_worktree) {
+    try {
+      worktreePath = createWorktree(task.id);
+    } catch (err) {
+      console.error(`[AgentRunner] Failed to create worktree for task ${taskId}:`, err.message);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'note', `Worktree setup failed: ${err.message}`);
+      return;
+    }
   }
 
-  const devProject = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
-  const devSubId = devProject?.subscription_id || null;
-  const systemPrompt = buildSystemPrompt(devAgent, devSubId, task.project_id);
-  const contextBlock = buildContextBlock(devAgent, devSubId, task.project_id);
+  const project = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  const subscriptionId = project?.subscription_id || null;
+  const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
+  const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
 
   const initialPrompt = [
     contextBlock ? `## Context Files\n${contextBlock}` : '',
@@ -579,37 +717,29 @@ async function runDevAgent(taskId) {
     `PM Brief: ${task.pm_review_comment || '(none — check task description)'}`,
     `Priority: ${task.priority} | Complexity: ${task.complexity}`,
     ``,
-    `## Instructions`,
-    `You are working in an isolated git worktree already checked out on branch feature/${task.id}. Do NOT run git checkout or git worktree — you are already on the correct branch.`,
-    `Work through this git workflow exactly:`,
-    `1. Implement changes inside client/ only`,
-    `2. git add -A && git commit -m "[${task.id}] ${task.title}"`,
-    `3. git push -u origin feature/${task.id}`,
-    `4. Call task_complete with a brief summary`,
-    `IMPORTANT: Do NOT merge branches. Do NOT push to master. Do NOT run gh commands. The server handles PR creation automatically when you call task_complete.`,
-    `Use task_log at each milestone (25%, 50%, 75%). If you hit a blocker you cannot resolve, push whatever you have first (git add -A && git commit -m "[${task.id}] WIP" && git push -u origin feature/${task.id}), then call request_human.`
+    loadRunnerPrompt('implement-in-worktree', { taskId: task.id, taskTitle: task.title }),
   ].filter(Boolean).join('\n');
 
   const messages = [{ role: 'user', content: initialPrompt }];
 
   let completed = false;
-  const MAX_ITERATIONS = 30;
+  const MAX_ITERATIONS = runner.max_iterations || 30;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
     let response;
     try {
       response = await getClient().messages.create({
-        model: devAgent.model || 'claude-sonnet-4-5',
+        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
         max_tokens: 4096,
         system: systemPrompt,
-        tools: DEV_TOOLS,
+        tools: getToolSet(runner),
         messages,
       });
     } catch (err) {
-      console.error(`[AgentRunner] Dev agent API error for task ${taskId}:`, err.message);
+      console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, devAgent.id, 'note', `Dev agent error: ${err.message}`);
-      removeWorktree(worktreePath);
+        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${err.message}`);
+      if (worktreePath) removeWorktree(worktreePath);
       break;
     }
 
@@ -625,7 +755,7 @@ async function runDevAgent(taskId) {
       let result;
 
       if (block.name === 'bash') {
-        console.log(`[AgentRunner][dev][${taskId}] bash: ${block.input.command}`);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] bash: ${block.input.command}`);
         result = await runBash(block.input.command, worktreePath);
 
       } else if (block.name === 'read_file') {
@@ -633,7 +763,7 @@ async function runDevAgent(taskId) {
         result = content ? { success: true, content } : { error: 'File not found' };
 
       } else if (block.name === 'write_file') {
-        result = devWriteFile(block.input.path, block.input.content, worktreePath);
+        result = writeToClientOnly(block.input.path, block.input.content, worktreePath);
 
       } else if (block.name === 'task_log') {
         const { progress, message } = block.input;
@@ -641,8 +771,8 @@ async function runDevAgent(taskId) {
           db.prepare('UPDATE tasks SET progress = ? WHERE id = ?').run(progress, taskId);
         }
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), taskId, devAgent.id, 'note', message);
-        console.log(`[AgentRunner][dev][${taskId}] log: ${message}`);
+          .run(uuidv4(), taskId, agent.id, 'note', message);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] log: ${message}`);
         broadcastTask(db, taskId);
         result = { success: true };
 
@@ -664,34 +794,34 @@ async function runDevAgent(taskId) {
           db.prepare('UPDATE tasks SET progress = 100, column_id = ?, pr_url = ?, requires_human_action = ?, human_action_reason = ? WHERE id = ?')
             .run(targetCol, pr_url, merged ? 0 : 1, reason, taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, devAgent.id, 'pr_created', `PR created and ${merged ? 'auto-merged' : 'merge failed'}: ${pr_url}`);
+            .run(uuidv4(), taskId, agent.id, 'pr_created', `PR created and ${merged ? 'auto-merged' : 'merge failed'}: ${pr_url}`);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, devAgent.id, 'moved', 'col_inprogress', targetCol, merged ? 'Auto-completed — moved to Testing' : 'Auto-merge failed — moved to Human Action');
-          console.log(`[AgentRunner][dev][${taskId}] auto-complete. merged=${merged} PR: ${pr_url}`);
+            .run(uuidv4(), taskId, agent.id, 'moved', 'col_inprogress', targetCol, merged ? 'Auto-completed — moved to Testing' : 'Auto-merge failed — moved to Human Action');
+          console.log(`[AgentRunner][${runner.id}][${taskId}] auto-complete. merged=${merged} PR: ${pr_url}`);
         } else {
           // Manual review: park in Human Action
           db.prepare('UPDATE tasks SET progress = 100, column_id = ?, pr_url = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
             .run('col_humanaction', pr_url, 'PR ready for review', taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, devAgent.id, 'pr_created', pr_url ? `PR created: ${pr_url}` : `Branch pushed — PR creation failed, create manually`);
+            .run(uuidv4(), taskId, agent.id, 'pr_created', pr_url ? `PR created: ${pr_url}` : `Branch pushed — PR creation failed, create manually`);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, devAgent.id, 'moved', 'col_inprogress', 'col_humanaction', 'Moved to Human Action — awaiting PR review');
-          console.log(`[AgentRunner][dev][${taskId}] awaiting review. PR: ${pr_url || 'creation failed'}`);
+            .run(uuidv4(), taskId, agent.id, 'moved', 'col_inprogress', 'col_humanaction', 'Moved to Human Action — awaiting PR review');
+          console.log(`[AgentRunner][${runner.id}][${taskId}] awaiting review. PR: ${pr_url || 'creation failed'}`);
         }
         broadcastTask(db, taskId);
         completed = true;
-        removeWorktree(worktreePath);
+        if (worktreePath) removeWorktree(worktreePath);
         result = { success: true, pr_url };
 
       } else if (block.name === 'request_human') {
         const { reason } = block.input;
         db.prepare('UPDATE tasks SET column_id = ? WHERE id = ?').run('col_humanaction', taskId);
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), taskId, devAgent.id, 'human_action_requested', reason);
-        console.log(`[AgentRunner][dev][${taskId}] requested human: ${reason}`);
+          .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
         broadcastTask(db, taskId);
         completed = true; // stop the loop; human must resume
-        removeWorktree(worktreePath);
+        if (worktreePath) removeWorktree(worktreePath);
         result = { success: true };
       }
 
@@ -708,17 +838,14 @@ async function runDevAgent(taskId) {
   }
 }
 
-function triggerDevAgent(taskId) {
-  setImmediate(() => {
-    runDevAgent(taskId).catch(err =>
-      console.error(`[AgentRunner] Dev unhandled error for task ${taskId}:`, err)
-    );
-  });
-}
+// ---------------------------------------------------------------------------
+// Handler: test_with_retry
+// Iterative test-validation loop. Runs the test suite, writes additional
+// tests if coverage is missing, and either passes the task forward or
+// retries once before escalating to human.
+// ---------------------------------------------------------------------------
 
-// ── Tester Agent ──────────────────────────────────────────────────────────────
-
-const TESTER_TOOLS = [
+const TESTING_TOOLS = [
   {
     name: 'bash',
     description: 'Execute a shell command to run tests (npm test, jest, vitest, etc.) or inspect the project.',
@@ -790,14 +917,17 @@ const TESTER_TOOLS = [
   }
 ];
 
-function testerWriteFile(relPath, content) {
+function writeToTestFilesOnly(relPath, content) {
   const TEST_PATTERNS = [/\.test\.[jt]sx?$/, /\.spec\.[jt]sx?$/, /__tests__\//, /[/\\]test[/\\]/];
-  const allowed = TEST_PATTERNS.some(p => p.test(relPath));
-  if (!allowed) {
-    return { error: `Write denied: tester can only write test files. Got: ${relPath}` };
+  if (!TEST_PATTERNS.some(p => p.test(relPath))) {
+    return { error: `Write denied: this runner can only write test files. Got: ${relPath}` };
+  }
+  const clientDir = path.join(PROJECT_ROOT, 'client');
+  const absPath = path.join(PROJECT_ROOT, relPath);
+  if (!absPath.startsWith(clientDir + path.sep)) {
+    return { error: `Write denied: tests must live inside client/. Got: ${relPath}` };
   }
   try {
-    const absPath = path.join(PROJECT_ROOT, relPath);
     fs.mkdirSync(path.dirname(absPath), { recursive: true });
     fs.writeFileSync(absPath, content, 'utf8');
     return { success: true };
@@ -806,24 +936,14 @@ function testerWriteFile(relPath, content) {
   }
 }
 
-async function runTesterAgent(taskId) {
+async function runTestWithRetry(task, agent, runner) {
   const db = getDb();
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
-  if (!task) return;
-  if (task.column_id !== 'col_testing') return;
+  const taskId = task.id;
 
-  const testerAgent = task.assigned_agent_id
-    ? db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id)
-    : null;
-  if (!testerAgent) return;
-  try {
-    if (!JSON.parse(testerAgent.role_ids || '[]').includes('perm_coding_tester')) return;
-  } catch { return; }
-
-  const testProject = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
-  const testSubId = testProject?.subscription_id || null;
-  const systemPrompt = buildSystemPrompt(testerAgent, testSubId, task.project_id);
-  const contextBlock = buildContextBlock(testerAgent, testSubId, task.project_id);
+  const project = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  const subscriptionId = project?.subscription_id || null;
+  const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
+  const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
 
   const metadata = JSON.parse(task.metadata || '{}');
   const retryCount = metadata.test_retry_count || 0;
@@ -839,35 +959,29 @@ async function runTesterAgent(taskId) {
     `Priority: ${task.priority} | Complexity: ${task.complexity}`,
     retryCount > 0 ? `\n⚠️ This is retry #${retryCount} — the previous test run failed.` : '',
     ``,
-    `## Instructions`,
-    `You are in the Testing column. Your job is to verify this task is complete and correct.`,
-    `1. Read the relevant source files and understand what was implemented`,
-    `2. Run the existing test suite: npm test (or the appropriate test command for this project)`,
-    `3. Write additional unit/integration tests if coverage is missing for the acceptance criteria`,
-    `4. Run tests again after writing them`,
-    `5. Call task_complete with passed=true if all tests pass, passed=false if any fail`,
-    `Use task_log at each milestone. If you hit a blocker you cannot resolve, call request_human.`
+    loadRunnerPrompt('test-with-retry'),
   ].filter(Boolean).join('\n');
 
   const messages = [{ role: 'user', content: initialPrompt }];
 
   let completed = false;
-  const MAX_ITERATIONS = 30;
+  const MAX_ITERATIONS = runner.max_iterations || 30;
+  const MAX_RETRIES = runner.max_retries ?? 1;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
     let response;
     try {
       response = await getClient().messages.create({
-        model: testerAgent.model || 'claude-sonnet-4-5',
+        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
         max_tokens: 4096,
         system: systemPrompt,
-        tools: TESTER_TOOLS,
+        tools: getToolSet(runner),
         messages,
       });
     } catch (err) {
-      console.error(`[AgentRunner] Tester agent API error for task ${taskId}:`, err.message);
+      console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, testerAgent.id, 'note', `Tester agent error: ${err.message}`);
+        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${err.message}`);
       break;
     }
 
@@ -883,7 +997,7 @@ async function runTesterAgent(taskId) {
       let result;
 
       if (block.name === 'bash') {
-        console.log(`[AgentRunner][tester][${taskId}] bash: ${block.input.command}`);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] bash: ${block.input.command}`);
         result = await runBash(block.input.command, PROJECT_ROOT);
 
       } else if (block.name === 'read_file') {
@@ -891,7 +1005,7 @@ async function runTesterAgent(taskId) {
         result = content ? { success: true, content } : { error: 'File not found' };
 
       } else if (block.name === 'write_file') {
-        result = testerWriteFile(block.input.path, block.input.content);
+        result = writeToTestFilesOnly(block.input.path, block.input.content);
 
       } else if (block.name === 'task_log') {
         const { progress, message } = block.input;
@@ -899,8 +1013,8 @@ async function runTesterAgent(taskId) {
           db.prepare('UPDATE tasks SET progress = ? WHERE id = ?').run(progress, taskId);
         }
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), taskId, testerAgent.id, 'note', message);
-        console.log(`[AgentRunner][tester][${taskId}] log: ${message}`);
+          .run(uuidv4(), taskId, agent.id, 'note', message);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] log: ${message}`);
         broadcastTask(db, taskId);
         result = { success: true };
 
@@ -909,27 +1023,26 @@ async function runTesterAgent(taskId) {
         if (passed) {
           db.prepare('UPDATE tasks SET progress = 100, column_id = ? WHERE id = ?').run('col_humanaction', taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, testerAgent.id, 'tests_passed', summary);
+            .run(uuidv4(), taskId, agent.id, 'tests_passed', summary);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_humanaction', 'Tests passed — ready for human sign-off');
-          console.log(`[AgentRunner][tester][${taskId}] tests passed → Human Action (awaiting sign-off)`);
+            .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', 'Tests passed — ready for human sign-off');
+          console.log(`[AgentRunner][${runner.id}][${taskId}] tests passed → Human Action (awaiting sign-off)`);
         } else {
           const newRetryCount = retryCount + 1;
-          const MAX_RETRIES = 1;
           if (newRetryCount > MAX_RETRIES) {
             db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
               .run('col_humanaction', `Test run failed after ${newRetryCount} attempts: ${summary}`, taskId);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-              .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
-            console.log(`[AgentRunner][tester][${taskId}] max retries → Human Action`);
+              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
+            console.log(`[AgentRunner][${runner.id}][${taskId}] max retries → Human Action`);
           } else {
             const newMeta = JSON.stringify({ ...metadata, test_retry_count: newRetryCount });
             db.prepare('UPDATE tasks SET column_id = ?, metadata = ? WHERE id = ?').run('col_inprogress', newMeta, taskId);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-              .run(uuidv4(), taskId, testerAgent.id, 'tests_failed', `Tests failed (retry ${newRetryCount}/${MAX_RETRIES}): ${summary}`);
+              .run(uuidv4(), taskId, agent.id, 'tests_failed', `Tests failed (retry ${newRetryCount}/${MAX_RETRIES}): ${summary}`);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-              .run(uuidv4(), taskId, testerAgent.id, 'moved', 'col_testing', 'col_inprogress', 'Tests failed — sent back to In Progress');
-            console.log(`[AgentRunner][tester][${taskId}] tests failed → In Progress (retry ${newRetryCount})`);
+              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_inprogress', 'Tests failed — sent back to In Progress');
+            console.log(`[AgentRunner][${runner.id}][${taskId}] tests failed → In Progress (retry ${newRetryCount})`);
           }
         }
         broadcastTask(db, taskId);
@@ -941,8 +1054,8 @@ async function runTesterAgent(taskId) {
         db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
           .run('col_humanaction', reason, taskId);
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-          .run(uuidv4(), taskId, testerAgent.id, 'human_action_requested', reason);
-        console.log(`[AgentRunner][tester][${taskId}] requested human: ${reason}`);
+          .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
         broadcastTask(db, taskId);
         completed = true;
         result = { success: true };
@@ -961,12 +1074,68 @@ async function runTesterAgent(taskId) {
   }
 }
 
-function triggerTesterAgent(taskId) {
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+// Single entry point — looks up the matching runner by (capability, column)
+// and invokes the named handler. Adding a new runner is purely a registry edit
+// when an existing handler fits; otherwise add a new handler below and
+// reference its name in the runner's `handler` field.
+
+// Named tool sets — runners reference these by name in runners.json (`tools` field).
+// The arrays themselves stay in code (each is a list of Anthropic tool objects with
+// names, descriptions, and JSON schemas — too rich for JSON config).
+const TOOL_SETS = {
+  clarification_tools: CLARIFICATION_TOOLS,
+  implementation_tools: IMPLEMENTATION_TOOLS,
+  testing_tools: TESTING_TOOLS,
+};
+
+function getToolSet(runner) {
+  const set = TOOL_SETS[runner.tools];
+  if (!set) {
+    throw new Error(`[AgentRunner] Unknown tool set "${runner.tools}" for runner ${runner.id}`);
+  }
+  return set;
+}
+
+const HANDLERS = {
+  clarify_and_approve: runClarifyAndApprove,
+  implement_in_worktree: runImplementInWorktree,
+  test_with_retry: runTestWithRetry,
+};
+
+async function dispatch(taskId) {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+  if (!task || !task.assigned_agent_id) return;
+
+  const agent = db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id);
+  if (!agent) return;
+
+  const capability = getAgentCapability(agent);
+  if (!capability) return;
+
+  const runner = findRunner(capability, task.column_id);
+  if (!runner) return;
+
+  // Optional named trigger guards (skip dispatch under specific conditions)
+  if (runner.trigger_guard === 'no_pm_approval_yet' && task.pm_approval_status === 'approved') return;
+
+  const handler = HANDLERS[runner.handler];
+  if (!handler) {
+    console.warn(`[AgentRunner] No handler registered for "${runner.handler}" (runner ${runner.id})`);
+    return;
+  }
+
+  await handler(task, agent, runner);
+}
+
+// Fire-and-forget — never blocks the HTTP request.
+function triggerRunner(taskId) {
   setImmediate(() => {
-    runTesterAgent(taskId).catch(err =>
-      console.error(`[AgentRunner] Tester unhandled error for task ${taskId}:`, err)
+    dispatch(taskId).catch(err =>
+      console.error(`[AgentRunner] dispatch error for task ${taskId}:`, err)
     );
   });
 }
 
-module.exports = { triggerPmAgent, triggerDevAgent, triggerTesterAgent };
+module.exports = { triggerRunner };

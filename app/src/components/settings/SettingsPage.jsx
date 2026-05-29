@@ -3,9 +3,10 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen,
+  BookOpen, Info,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
+import InfoModal from './InfoModal';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
@@ -53,6 +54,7 @@ export default function SettingsPage() {
 
   const [section, setSection]         = useState('files');
   const [connRefreshKey, setConnRefreshKey] = useState(0);
+  const [openInfoKey, setOpenInfoKey]       = useState(null); // 'board' | 'workspace' | 'ai_context' | null
 
   // Redirect away from Connections if we're on a personal board
   useEffect(() => {
@@ -287,19 +289,31 @@ export default function SettingsPage() {
   }
 
   // ── Nav helpers ─────────────────────────────────────────────────────────
-  function navBtn(id, label, Icon, badge) {
+  function navBtn(id, label, Icon, badge, infoKey) {
     const active = section === id;
     return (
       <button
         key={id}
         onClick={() => setSection(id)}
-        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors ${
+        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors group ${
           active ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
       >
         <Icon size={12} />
-        {label}
+        <span className="flex-1 text-left truncate">{label}</span>
         {badge}
+        {infoKey && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={e => { e.stopPropagation(); setOpenInfoKey(infoKey); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setOpenInfoKey(infoKey); } }}
+            title="What is this?"
+            className="p-0.5 rounded text-gray-600 hover:text-accent hover:bg-surface-3 transition-colors opacity-60 group-hover:opacity-100"
+          >
+            <Info size={11} />
+          </span>
+        )}
       </button>
     );
   }
@@ -331,7 +345,7 @@ export default function SettingsPage() {
         <div className="px-2 pt-3 pb-1 shrink-0">
           <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
           <div className="space-y-0.5">
-            {navBtn('files', 'Instruction Files', FileText)}
+            {navBtn('files', 'Board Context', FileText, null, 'board')}
           </div>
         </div>
 
@@ -435,7 +449,7 @@ export default function SettingsPage() {
             <div className="space-y-0.5">
               {navBtn('sub_overview', 'Overview', Settings2)}
               {navBtn('sub_clients',  'Clients',  Building2)}
-              {navBtn('sub_files',    'Instruction Files', FileText)}
+              {navBtn('sub_files',    'Workspace Context', FileText, null, 'workspace')}
             </div>
           </div>
         )}
@@ -532,11 +546,11 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* CONTEXT section */}
+        {/* SYSTEM section */}
         <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
-          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Instruction Files</p>
+          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">System</p>
           <div className="space-y-0.5">
-            {navBtn('ai_context', 'AI Context', BookOpen)}
+            {navBtn('ai_context', 'AI Context', BookOpen, null, 'ai_context')}
           </div>
         </div>
       </div>
@@ -903,6 +917,9 @@ export default function SettingsPage() {
           )}
         </>)}
       </div>
+
+      {/* Section info modal (Board Context / Workspace Context / AI Context explainer) */}
+      <InfoModal openKey={openInfoKey} onClose={() => setOpenInfoKey(null)} />
 
       {/* ── Action errors ───────────────────────────────────────────────── */}
       {actionError && (

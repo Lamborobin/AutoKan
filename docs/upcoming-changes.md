@@ -4,7 +4,7 @@ Features that are planned or partially designed but not yet implemented. Read th
 
 Update this file when:
 - A new feature is planned (add it here)
-- A planned feature gets built (move it to `decisions.md` with its decision rationale, remove from here)
+- A planned feature gets built — remove it from this file once it ships
 
 ---
 
@@ -21,3 +21,4 @@ Update this file when:
 - **Language picker** — UI language switching is designed (English default, user-selected language overrides) but the picker component and i18n system aren't built yet
 - **PM agent writes to client.md** — during the planning phase, the PM agent should append any new context gathered (client preferences, constraints, agreed decisions) to the board's `instructions/{subId}/{projectId}/client.md` file. This keeps the instruction file up to date automatically. A toggle in Settings to enable/disable this behavior is planned; default should be enabled.
 - **Human capability scoping** — members follow the same `role_ids` / `perm_*` / `role_access_*` system as agents. Column access and capability filtering for human members is not yet enforced in the UI or API.
+- **Specialised test runners** — the seeded Code Test Runner is intentionally narrow (automated test suite only). Future capabilities and runners for the other testing modes that don't fit shell execution: `perm_test_migration` (verify data state after a migration), `perm_test_e2e` (full-stack end-to-end against a live env), `perm_test_infra` (verify environment / config health), `perm_test_regression` (targeted regression checks for a specific bug fix). Each gets its own capability entry + runner config + prompt file when built.
