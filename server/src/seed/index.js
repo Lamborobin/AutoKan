@@ -8,7 +8,15 @@ const runnersRegistry = require('./runners.json');
 
 /**
  * Seed all default data into a fresh database.
- * Every statement uses INSERT OR IGNORE — safe to call on every server start.
+ *
+ * RULES FOR EDITING THIS FILE:
+ * 1. Every insert uses INSERT OR IGNORE — `seedDefaults` runs on every
+ *    server start (via getDb's first-call init) and must stay idempotent.
+ * 2. NEVER use unconditional UPDATE on rows the user can edit through the UI
+ *    (template_system_prompt, system_prompt, instruction_files, etc.). Use
+ *    `WHERE ... IS NULL` guards so customisations survive restarts.
+ * 3. Schema changes belong in `server/src/db/index.js`, not here — and they
+ *    require a user-initiated `npm run db:reset` (see docs/rules.md → DB).
  */
 function seedDefaults(db) {
   seedSubscription(db);

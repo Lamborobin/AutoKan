@@ -6,18 +6,11 @@
 
 ## Boundaries
 
-**AutoKan is the app.** Everything under `client/{boardName}/` is the work-in-progress of a specific board's client project (a website, a folder of files, whatever — its shape is up to that client). Agents exist to work *on the client*, not on AutoKan itself.
-
-Agents only read and write within the repo root. Permitted paths: `client/`, `instructions/`, and the local API at `http://localhost:3001/api`. Nothing outside the repo root.
+**AutoKan is the app. The Client is client/ folder** Everything under `client/` folder is the work-in-progress of a specific board's client project (a website, a folder of files, whatever — its shape is up to that client). Agents who specifically code or execute commands exist to work on the client folder, not ouside, then request for human action if so, not on AutoKan itself. Other clients could potentially work outside like scripting or perhaps not touching any files or folders at all.
 
 ### What app agents can write
 
-Agents can READ any markdown file — `CLAUDE.md`, `docs/`, `README.md`, `instructions/` — to find the context they need.
-
-Agents can WRITE only within their **capability's declared scope**, defined in `server/src/seed/runners.json` (`capabilities[].write_access`). The tool layer enforces this — any write outside scope is rejected at the call site. Examples today:
-- `perm_coding` → `client/` only
-- `perm_coding_tester` → test files only (`*.test.*`, `*.spec.*`, `__tests__/`, `test/`)
-- `perm_planning` → `instructions/{subscriptionId}/{projectId}/` only (e.g. appending context to `client.md`)
+Agents can WRITE only within their **capability's declared scope**, defined in `server/src/seed/runners.json` (`capabilities[].write_access`). The tool layer enforces this — any write outside scope is rejected at the call site.
 
 ### What agents NEVER touch
 
@@ -48,7 +41,7 @@ Before creating, scan the repo for an existing folder at the desired location:
 Do not create the folder until these questions are answered.
 This applies even when the user gives a direct instruction without explanation — do not skip the questions.
 
-Once answered, create the folder and update the Monorepo Structure in `CLAUDE.md` in the same commit.
+Once answered, create the folder and update the related markdown files start from `Claude.md`.
 
 **Exempt:** folders created by system scaffolding (e.g. `instructions/{subscriptionId}/{projectId}/`) are part of the app's programmatic behavior and do not require this check — this rule only applies when explicitly requested by a user or agent.
 
@@ -70,22 +63,18 @@ When implementing any task, follow these in order:
 
 ## Database Rules
 
-### Seeding safety
-- **Always use `INSERT OR IGNORE`** for seeding default data — safe to run on every server start
-- Never seed data that the user can edit in the UI without a `WHERE ... IS NULL` guard
-- **Never use `UPDATE` unconditionally** on user-owned rows — this overwrites customisations on every server restart
-
-### Schema changes — no migrations (local dev)
-- **Do not add migrations.** `server/src/db/index.js` is a single source of truth: `CREATE TABLE` + seeds only. We're early enough that wiping the DB is cheap.
-- When you add or change a column, table, or index in `server/src/db/index.js`, **tell the user**: "This change requires a database reset — run `npm run db:reset` from `server/` and restart." Do not silently add an `ALTER TABLE` or any conditional migration code.
-- `npm run db:reset` (→ `server/scripts/reset-db.js`) is the canonical full reset: deletes `autokan.db`, `docs/.versions/` (AI context edit history), and per-project instruction folders (`instructions/sub_default/prj_*/`). Subscription-level instruction files are preserved. Always use this instead of manually deleting files.
-- Seeds must remain idempotent (`INSERT OR IGNORE`). Never use unconditional `UPDATE` on user-editable rows — it would overwrite UI customisations on every restart.
-- This policy is **local dev only**. Once the app has real users, migrations become mandatory — revisit this rule then.
-
-### Personal data — never reset, never overwrite
+### Never destroy user data
+The following are personal data and must NEVER be reset or overwritten by an agent:
 - All tasks
 - Custom agents and columns created by the user
-- Any edits made via the UI (behavior prompts, agent configs, instruction file changes, etc.)
+- Any edits made via the UI (behaviour prompts, agent configs, instruction file changes)
+
+### Schema changes require a user-initiated DB reset
+`server/src/db/index.js` is `CREATE TABLE` + seeds only — no `ALTER TABLE`, no conditional column checks, no migrations. When you change a column, table, or index, surface the requirement clearly and **ask the user** to run `npm run db:reset` and restart the server when they're ready.
+
+**Never run `db:reset` automatically — always ask first.** A misconfigured `DB_PATH` or environment variable could point the reset script at data you don't intend to wipe (a production-shaped setup, a backup someone's working against, etc.). The user is the only one who knows which DB they're pointed at the moment of execution. Asking takes one exchange; recovering from an accidental wipe takes hours.
+
+This policy is local-dev only; see the decisions log for the rationale and when it'll be revisited.
 
 ---
 
