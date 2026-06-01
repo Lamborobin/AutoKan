@@ -316,13 +316,13 @@ function safeListMd(folder, excludeBasenames = new Set()) {
 }
 
 // Build the context block that goes into every agent's initial user message.
-// Four sources, all optional, all dedup'd:
+// Sources, all optional, all dedup'd:
 //   1. Global files (CLAUDE.md always; README.md for coder capabilities)
-//   2. Workspace context — auto-scan top-level .md in instructions/{sub}/
+//   2. Capability docs — docs/ files mapped to the agent's capability via
+//      context_docs in runners.json (every app agent gets docs/rules.md)
+//   3. Workspace context — auto-scan top-level .md in instructions/{sub}/
 //      (excluding runner personality files — those go into the system prompt)
-//   3. Board context — auto-scan top-level .md in instructions/{sub}/{proj}/
-//   4. Legacy: agent.instruction_files — back-compat hook for explicit extras
-//      not already covered by the folder scans
+//   4. Board context — auto-scan top-level .md in instructions/{sub}/{proj}/
 function buildContextBlock(agent, subscriptionId, projectId) {
   const agentCapabilities = JSON.parse(agent.role_ids || '[]');
   const isCoderAgent = CODER_CAPABILITIES.some(cap => agentCapabilities.includes(cap));
@@ -342,7 +342,14 @@ function buildContextBlock(agent, subscriptionId, projectId) {
     pushFromAbs(path.join(PROJECT_ROOT, name), name.replace('.md', '').toUpperCase());
   }
 
-  // 2. Workspace context (subscription-level)
+  // 2. Capability docs mapped in runners.json (context_docs) — e.g. docs/rules.md
+  const capability = getAgentCapability(agent);
+  const capDef = capability ? runnersRegistry.capabilities.find(c => c.id === capability) : null;
+  for (const docPath of (capDef?.context_docs || [])) {
+    pushFromAbs(path.join(PROJECT_ROOT, docPath), path.basename(docPath, '.md').toUpperCase());
+  }
+
+  // 3. Workspace context (subscription-level)
   if (subscriptionId) {
     const workspaceFolder = path.join(PROJECT_ROOT, 'instructions', subscriptionId);
     for (const fileName of safeListMd(workspaceFolder, RUNNER_PERSONALITY_BASENAMES)) {
@@ -353,7 +360,7 @@ function buildContextBlock(agent, subscriptionId, projectId) {
     }
   }
 
-  // 3. Board context (per-project)
+  // 4. Board context (per-project)
   if (subscriptionId && projectId) {
     const boardFolder = path.join(PROJECT_ROOT, 'instructions', subscriptionId, projectId);
     for (const fileName of safeListMd(boardFolder)) {
@@ -362,17 +369,6 @@ function buildContextBlock(agent, subscriptionId, projectId) {
         `BOARD/${fileName.replace('.md', '').toUpperCase()}`,
       );
     }
-  }
-
-  // 4. Legacy: explicit instruction_files (back-compat for paths outside the folders)
-  const explicitFiles = JSON.parse(agent.instruction_files || '[]');
-  for (const filePath of explicitFiles) {
-    try {
-      const resolved = resolveInstructionPath(filePath, subscriptionId, projectId);
-      if (resolved) {
-        pushFromAbs(resolved, path.basename(filePath, '.md').toUpperCase());
-      }
-    } catch { /* skip — readAbs handles missing */ }
   }
 
   return sections.join('\n\n---\n\n');
@@ -394,19 +390,18 @@ function buildSystemPrompt(agent, runner, subscriptionId, projectId) {
   const personalityFile = runner?.personality_file || agent.personality_file || '';
   const fileContent = readFile(personalityFile, subscriptionId, projectId);
 
-  // Per-agent personality: agent's own value wins; falls back to the template's
-  // prompt fetched fresh from agent_templates (so template edits propagate to
-  // agents that haven't customised). Gated by is_template so non-template agents
-  // don't pick up any per-agent text.
+  // Per-agent personality (layer 6): the agent's own system_prompt always applies
+  // when set. Template personality (layer 5) is fetched fresh from agent_templates
+  // (so template edits propagate) and used as the fallback for agents created from
+  // a template that haven't customised. No dependency on is_template — a from-scratch
+  // agent's own system_prompt is honoured too.
   let templatePersonality = '';
-  if (agent.is_template && agent.created_from_template_id) {
+  if (agent.created_from_template_id) {
     const tpl = getDb().prepare('SELECT template_system_prompt FROM agent_templates WHERE id = ?')
       .get(agent.created_from_template_id);
     templatePersonality = tpl?.template_system_prompt || '';
   }
-  const agentPersonality = agent.is_template
-    ? (agent.system_prompt || templatePersonality || '')
-    : '';
+  const agentPersonality = agent.system_prompt || templatePersonality || '';
 
   // Assemble: agent personality + capability personality (file). Both optional.
   const layered = [agentPersonality, fileContent].filter(Boolean).join('\n\n---\n\n');

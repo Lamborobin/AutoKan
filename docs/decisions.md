@@ -20,13 +20,13 @@ Update this file when a significant decision is made or reversed.
 
 ## Agents call the API — they do not share memory or call each other
 **Decided:** System architecture
-**Context:** Direct agent-to-agent communication would create ordering dependencies and make state hard to reason about. The DB is the single source of truth. Any agent reading the task gets the same state. Coordination happens through task state transitions, not message passing. All agent actions go through `POST /api/tasks/:id/*` endpoints.
+**Context:** Direct agent-to-agent communication would create ordering dependencies and make state hard to reason about. The DB is the single source of truth. Any agent reading the task gets the same state. Coordination happens through task state transitions, not message passing — agent actions land in the DB as task-state changes (applied by the runner), never as direct calls between agents.
 
 ---
 
 ## Human Action absorbs Human Review — single human column
 **Decided:** During doc/code audit
-**Context:** Two columns for the same human-attention state was a design error from the original pipeline — this consolidation corrects it. Human Review (sign-off) and Human Action (blockers) both required the same response: open the task and decide what's next. One column is simpler for the UI, simpler for agents to target, and matches how users actually triage. Tester pass now moves the task to `col_humanaction` with reason "Ready for human sign-off". The `human_review_comment` / `human_review_date` columns on `tasks` are kept — they describe the *sign-off action*, not the column.
+**Context:** The original pipeline had two separate columns for the same human-attention state — one for sign-off, one for blockers. That was a design error: both needed the same response, which is a human opening the task and deciding what's next. Merging them into one Human Action column is simpler for the UI, simpler for agents to target, and matches how people actually triage. The task's reason or log says *why* it's there — a blocker, a sign-off, or a max-retry failure.
 
 ---
 
@@ -38,18 +38,7 @@ Update this file when a significant decision is made or reversed.
 
 ## Personality files are additive, never required
 **Decided:** Robustness pass  
-**Context:** Every personality layer (capability personality_file, subscription/board instruction files, the template's personality, the agent's own system_prompt) is **optional**. The runner is self-sufficient via:
-- The handler's runtime initial prompt (task brief + workflow), built in code
-- Tool definitions with their own descriptions and JSON schemas
-- A baked-in minimal baseline in `buildSystemPrompt` that identifies the agent's capability and column when every personality layer is empty
-
-If a superadmin (or a typo) deletes `instructions/sub_default/dev-implement.md`, the next agent run logs a one-time warning (`[AgentRunner] Personality file not found: …`) and continues — the runner reaches its baseline + any other available layers (template's personality, board files, etc.) and the agent still does its job. The field was renamed from `prompt_file` to `personality_file` in `runners.json`, the DB column, the API body, and the frontend to make the additive intent explicit: this is flavour layered on top of a mechanically-correct flow, not a runtime dependency.
-
----
-
-## No test suite for AutoKan itself
-**Decided:** Early development phase  
-**Context:** AutoKan (the app) ships without a test suite — no Jest, Vitest, Mocha, no `npm test` script, no CI test step. The seeded Code Test Runner exists for *client projects* under `client/`, not for AutoKan. Verification of AutoKan changes happens via running the app and observing behaviour (`npm run dev`), plus the smoke checks built into the refactor work. If a test suite becomes worthwhile later, this decision gets revisited.
+**Context:** Every layer of an agent's personality — the capability prompt, the workspace/board context, the template's personality, the agent's own prompt — is optional. If any is missing, even deleted by mistake, the agent still runs: it falls back to a built-in baseline plus whatever layers remain. Personality is flavour on top of an already-working flow, never something the runner depends on.
 
 ---
 
@@ -59,6 +48,19 @@ If a superadmin (or a typo) deletes `instructions/sub_default/dev-implement.md`,
 
 ---
 
-## May 2026 — db/seed/config refactor
-**Decided:** Refactor pass
-**Context:** Full rewrite of `server/src/db/index.js` removed every migration and all legacy code; schema is now a single clean `CREATE TABLE` block. Default data extracted into `server/src/seed/` (`index.js` + `agent-templates.json`). Stable IDs and app config moved to `server/src/config/` (`constants.js`, `agent.config.json`). `getDb()` self-initialises on first call — no separate `initDb` step. Net change ~700 lines removed.
+## Agents work at the command level, uniform across all capabilities
+**Decided:** Agent instruction model
+**Context:** An agent works through commands — its tools — plus a short, system-owned description of its flow: what to do, and where the task goes when it's done. That's all it needs. It never talks to the API directly; the tools handle that for it. The same shape applies to every kind of agent — planner, coder, tester today, and others as they're added — so building a new one follows a familiar pattern rather than a one-off. Each agent is given only the context relevant to it (every agent gets the core rules; coders also get the README), never the app's internal reference docs. This is already proven on the agents that exist today; the rest are planned.
+
+---
+
+## No legacy / back-compat code — delete it, git is the archive
+**Decided:** Code-cleanliness principle
+**Context:** Superseded code — back-compat shims, unused DB columns, dead branches, commented-out blocks — is removed outright rather than kept "just in case." Git history preserves anything worth recovering, so carrying legacy in the live tree only adds noise and false dependencies. Applies to schema too: an unused column is dropped on the next `db:reset`, not left dangling. First application: retiring the per-agent `instruction_files` list, superseded by the folder auto-scan of `instructions/{sub}/{proj}/`.
+
+---
+
+## Ownership & distribution — proprietary, company-owned
+**Decided:** Distribution model
+**Context:** AutoKan is developed under employment, so under a standard IP-assignment / work-for-hire arrangement the **employer owns the IP** (working assumption — confirm against the employment agreement and any company open-source/external-release policy). It is therefore proprietary, all-rights-reserved software — not an open-source project the author can license independently. Distribution is on the company's terms: the B2B model discussed (per-client installs, or a planned hosted variant). This repo doubles as the official demo, seeded with the default agents, their templates, and one sample client (Velour) so the full flow runs out of the box. Any public license or open-sourcing would require company approval; absent a `LICENSE` file the code is all-rights-reserved by default.
+

@@ -49,7 +49,7 @@ Everything else you need as an app agent (board context, workspace context, capa
 | `docs/frontend.md` | A new component pattern, threshold, or store structure is established | Descriptive patterns with examples, rules, patterns, decisions only related to frontend or src folder |
 | `docs/api.md` | An API route is added, removed, or its behavior changes | Structured reference — tables of method / endpoint / description. Minimal prose. |
 | `docs/architecture.md` | A structural or system design decision is made | Descriptive narrative + diagrams. "The system does X by Y." |
-| `docs/decisions.md` | A significant design decision is made or reversed | Past-tense, ADR-style ("we decided X because Y"). Informational only — no rules, no how-to, no logic. |
+| `docs/decisions.md` | A significant design decision is made or reversed | Past-tense, ADR-style ("we decided X because Y"). Plain-English and high-level — the *why*, not the implementation (that lives in the reference docs). Informational only — no rules, no how-to, no logic. |
 | `docs/upcoming-changes.md` | A feature is planned, agreed on, or completed | Future-tense bullets. One line per planned change. |
 
 **What is this project**: Autonomous AI agent task orchestration system — a kanban board where AI agents (PM, Developer, Tester) work through tasks autonomously with or without human involvement.

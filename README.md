@@ -81,6 +81,15 @@ See `docs/architecture.md` for the full tree.
 
 ---
 
+## Demo & distribution
+
+This repository doubles as the **official demo** — a fully-functional install seeded with the default agents (PM, Developer, Tester), their templates, and one sample client, **Velour**, so the whole pipeline runs out of the box. A cloud-hosted variant is planned but not yet implemented.
+
+AutoKan is **proprietary software** — all rights reserved by the owning company. It is distributed on the company's terms (e.g. per-client installs or a hosted offering); it is not open-source, and may not be copied, redistributed, or resold without authorization.
+
+---
+
 ## Documentation
 
-`CLAUDE.md` (at the repo root) is the canonical index of every context file in `docs/`, with a "Read when…" column that tells agents and developers when to load each one. Start there.
+For agent specific information, refers back to `CLAUDE.md` as the entry point.
+Documentation both used by humans and AI mainly refer to md files within docs folder.

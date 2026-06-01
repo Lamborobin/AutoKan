@@ -20,7 +20,6 @@ function parseAgent(a) {
   return {
     ...a,
     permissions: JSON.parse(a.permissions || '[]'),
-    instruction_files: JSON.parse(a.instruction_files || '[]'),
     role_ids: JSON.parse(a.role_ids || '[]'),
     is_template: a.is_template === 1,
   };
@@ -56,7 +55,6 @@ function buildColumnRoleMap(db) {
 function parseTemplate(t) {
   return {
     ...t,
-    instruction_files: JSON.parse(t.instruction_files || '[]'),
     permissions: JSON.parse(t.permissions || '[]'),
     tags: JSON.parse(t.tags || '[]'),
   };
@@ -85,7 +83,7 @@ agentsRouter.post('/', (req, res) => {
   const db = getDb();
   const {
     name, role, model = 'claude-sonnet-4-5', description,
-    permissions = [], personality_file, instruction_files = [], color = '#6366f1',
+    permissions = [], personality_file, color = '#6366f1',
     created_from_template_id, system_prompt: bodySystemPrompt,
     project_id,
   } = req.body;
@@ -114,9 +112,9 @@ agentsRouter.post('/', (req, res) => {
   const role_ids_val = req.body.role_ids?.length ? JSON.stringify(req.body.role_ids) : JSON.stringify(['role_any']);
 
   db.prepare(`
-    INSERT INTO agents (id, name, role, model, description, permissions, personality_file, instruction_files, color, created_from_template_id, is_template, system_prompt, role_ids, project_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, role, model, description, JSON.stringify(permissions), personality_file, JSON.stringify(instruction_files), color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
+    INSERT INTO agents (id, name, role, model, description, permissions, personality_file, color, created_from_template_id, is_template, system_prompt, role_ids, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, role, model, description, JSON.stringify(permissions), personality_file, color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
 
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   res.status(201).json(parseAgent(agent));
@@ -147,11 +145,11 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
   }
 
   db.prepare(`
-    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, instruction_files, permissions, tags, source_agent_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?)
+    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, permissions, tags, source_agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?)
   `).run(id, name, agent.description, agent.model, agent.color, agent.role,
     system_prompt_content, snapshotPrompt,
-    agent.instruction_files, agent.permissions, agent.id);
+    agent.permissions, agent.id);
 
   // Mark the source agent as is_template so it shows the T badge immediately
   db.prepare(`UPDATE agents SET is_template = 1 WHERE id = ?`).run(req.params.id);
@@ -170,7 +168,7 @@ agentsRouter.patch('/:id', (req, res) => {
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  const { name, model, description, permissions, color, active, personality_file, instruction_files, system_prompt, role_ids } = req.body;
+  const { name, model, description, permissions, color, active, personality_file, system_prompt, role_ids } = req.body;
 
   if (role_ids !== undefined) {
     const permErr = validateOnePermPerAgent(role_ids);
@@ -185,7 +183,6 @@ agentsRouter.patch('/:id', (req, res) => {
   if (color !== undefined) allowed.color = color;
   if (active !== undefined) allowed.active = active ? 1 : 0;
   if (personality_file !== undefined) allowed.personality_file = personality_file;
-  if (instruction_files !== undefined) allowed.instruction_files = JSON.stringify(instruction_files);
   if (Object.prototype.hasOwnProperty.call(req.body, 'system_prompt')) {
     allowed.system_prompt = system_prompt ?? null;
   }
@@ -510,8 +507,8 @@ function getAgentReferences(db, filename, subscriptionId, projectId) {
   // Also check logical path (instructions/X.md) used by default agents
   const logicalPath = `instructions/${filename}`;
   const agents = db.prepare(
-    'SELECT id FROM agents WHERE personality_file IN (?,?) OR instruction_files LIKE ? OR instruction_files LIKE ?'
-  ).all(filePath, logicalPath, `%${filePath}%`, `%${logicalPath}%`);
+    'SELECT id FROM agents WHERE personality_file IN (?,?)'
+  ).all(filePath, logicalPath);
   return agents.map(a => a.id);
 }
 
@@ -706,17 +703,17 @@ agentTemplatesRouter.post('/', (req, res) => {
   const {
     name, description, model = 'claude-sonnet-4-5', color = '#6366f1',
     suggested_role, system_prompt_content = '', template_system_prompt,
-    instruction_files = [], permissions = [], tags = [],
+    permissions = [], tags = [],
   } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const id = 'tpl_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, instruction_files, permissions, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, permissions, tags)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, name, description, model, color, suggested_role, system_prompt_content,
     template_system_prompt || null,
-    JSON.stringify(instruction_files), JSON.stringify(permissions), JSON.stringify(tags));
+    JSON.stringify(permissions), JSON.stringify(tags));
 
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(id);
   res.status(201).json(parseTemplate(tpl));
@@ -731,7 +728,7 @@ agentTemplatesRouter.patch('/:id', (req, res) => {
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(req.params.id);
   if (!tpl) return res.status(404).json({ error: 'Template not found' });
 
-  const { name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, instruction_files, permissions, tags } = req.body;
+  const { name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, permissions, tags } = req.body;
   const allowed = {};
   if (name !== undefined) allowed.name = name;
   if (description !== undefined) allowed.description = description;
@@ -742,7 +739,6 @@ agentTemplatesRouter.patch('/:id', (req, res) => {
   if (Object.prototype.hasOwnProperty.call(req.body, 'template_system_prompt')) {
     allowed.template_system_prompt = template_system_prompt ?? null;
   }
-  if (instruction_files !== undefined) allowed.instruction_files = JSON.stringify(instruction_files);
   if (permissions !== undefined) allowed.permissions = JSON.stringify(permissions);
   if (tags !== undefined) allowed.tags = JSON.stringify(tags);
 

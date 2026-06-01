@@ -1,20 +1,20 @@
 # Rules
 
-**Always read this file before starting any task.** These are hard constraints — they apply regardless of what is being built or changed. If a user requests a change to these rules, update this file accordingly.
+**Always read this file before starting any task.** These are the hard constraints for working in this repo — they apply regardless of what is being built or changed. They describe how AutoKan and the client projects under `client/` work together: what an app agent may do, and how AutoKan itself is built. If a user requests a change to these rules, update this file accordingly.
 
 ---
 
 ## Boundaries
 
-**AutoKan is the app. The Client is client/ folder** Everything under `client/` folder is the work-in-progress of a specific board's client project (a website, a folder of files, whatever — its shape is up to that client). Agents who specifically code or execute commands exist to work on the client folder, not ouside, then request for human action if so, not on AutoKan itself. Other clients could potentially work outside like scripting or perhaps not touching any files or folders at all.
+**AutoKan is the app. The Client is the `client/` folder.** Everything under `client/` is the work-in-progress of a specific board's client project (a website, a folder of files, whatever — its shape is up to that client). Agents who code or execute commands exist to work on the client folder, not outside it; if they need something outside it, they request human action — they do not touch AutoKan itself. Other clients could work outside that (e.g. scripting) or not touch any files at all.
 
 ### What app agents can write
 
-Agents can WRITE only within their **capability's declared scope**, defined in `server/src/seed/runners.json` (`capabilities[].write_access`). The tool layer enforces this — any write outside scope is rejected at the call site.
+App agents can WRITE only within their **capability's declared scope** — documented per capability in `server/src/seed/runners.json` (`write_access`). The write tool guards this at the call site: the Coder can only write inside `client/`, the Tester only test files there, and anything outside scope is rejected. Each new write-capable capability adds its own guard the same way.
 
-### What agents NEVER touch
+### What app agents NEVER touch
 
-The AutoKan app itself is off-limits to all agents. That includes `server/`, `app/`, `docs/`, `CLAUDE.md`, `README.md`, `package.json`, the runner registry, the seed data, and any other configuration *above* the client/instructions scope. Only a real human (typically a superadmin) edits AutoKan's own code, templates, base instruction files, or runner registry — that's product development on AutoKan, not agent work.
+The AutoKan app itself is off-limits to **every app agent — not just coders**. A Planner writing to `instructions/` and a Coder working in `client/` are equally barred from it. That includes `server/`, `app/`, `docs/`, `CLAUDE.md`, `README.md`, `package.json`, the runner registry, the seed data, and any other configuration *above* the client/instructions scope. Editing AutoKan's own code, templates, base instruction files, or runner registry is product development on AutoKan — done by humans and the dev-assistant working with them, never by an app agent.
 
 When to update each docs file is indexed in `CLAUDE.md` (the master delegator), not here. Docs files do not reference each other — see CLAUDE.md for the rule.
 
@@ -41,7 +41,7 @@ Before creating, scan the repo for an existing folder at the desired location:
 Do not create the folder until these questions are answered.
 This applies even when the user gives a direct instruction without explanation — do not skip the questions.
 
-Once answered, create the folder and update the related markdown files start from `Claude.md`.
+Once answered, create the folder and update the related markdown files starting from `CLAUDE.md`.
 
 **Exempt:** folders created by system scaffolding (e.g. `instructions/{subscriptionId}/{projectId}/`) are part of the app's programmatic behavior and do not require this check — this rule only applies when explicitly requested by a user or agent.
 
@@ -52,12 +52,13 @@ Once answered, create the folder and update the related markdown files start fro
 When implementing any task, follow these in order:
 
 1. **Read before touching** — read the full file before editing; never edit by filename alone
-2. **Check for existing utilities** — search `store/`, `api/`, `hooks/`, and shared components before writing a new helper
+2. **Check for existing utilities** — search `store/`, `api/`, and shared components before writing a new helper
 3. **Match the local pattern** — naming, error handling, data fetching style (`api.get(...).then(r => r.data)`)
 4. **Prefer the smallest change** — add to existing file → create new file → create new folder (only when ≥3 files belong in it)
 5. **Respect size thresholds** — if a file is already >600 lines and your change adds 50+ lines, extract first then add
 6. **One unit of change** — feature + its architectural cleanup go in the same commit, not a follow-up
 7. **Use capabilities + the runner registry, not hardcoded IDs** — never gate agent behavior on a specific agent ID (e.g. `if agentId === 'agent_pm'`). Runner dispatch lives in `server/src/services/agentRunner.js` and looks up `(agent.capability, task.column)` in `server/src/seed/runners.json`. To add a new behavior: add a registry entry + a prompt file + (if no existing handler fits) a handler function. One `perm_*` capability per agent is enforced server-side.
+8. **No legacy or dead code** — when you supersede a mechanism, delete the old path; don't leave back-compat shims, unused DB columns, or commented-out blocks "just in case." Git history is the archive for anything removed. (An unused column gets dropped on the next `db:reset`, not left dangling.)
 
 ---
 
@@ -105,6 +106,8 @@ This policy is local-dev only; see the decisions log for the rationale and when 
 - Always show both Archive and Delete options
 - If DELETE returns `409 { has_dependencies: true }`, show the error and nudge toward archive
 - Archived items fetched on `load()` with `include_archived=true` so they can be restored
+
+---
 
 ## Agent header rule
 Agents identify to the API via HTTP header: `X-Agent-Id: <agent_id>`

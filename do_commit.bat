@@ -23,7 +23,7 @@ git commit -m "feat: GitHub PR integration, auto_complete support, MarkdownText 
 - Refine agent configs and prompts (pm.md, developer.md, tester.md)
 - Update server routes (tasks, other) and agentRunner service
 - Update frontend components: Sidebar, TaskCard, TaskDetail, TemplatesModal,
-  SettingsModal, NewTaskModal, AgentForm, EditAgentModal, NewAgentModal
+  NewTaskModal, AgentForm, EditAgentModal, NewAgentModal
 - Add new instruction template (my_new_template.md)
 - Update README, CLAUDE.md, and agents/context.md documentation
 - Update package dependencies across app, server, and root"

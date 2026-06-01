@@ -82,7 +82,9 @@ Every agent's behaviour is shaped by stacked personality layers — each layer i
 | 5 — Template (`agent_templates.template_system_prompt` for "Senior Backend Coder") | "[STYLE] direct, no hedging. [CONSTRAINTS] Never reveal business logic in PR descriptions." |
 | 6 — Agent (`agents.system_prompt` for "Camila") | "Your name is Camila. You write commit messages in Spanish." (overrides layer 5) |
 
-All six layers are concatenated into the system prompt. None of them can change which tool fires, which column a task moves to, or what files the agent can write — those are enforced at the runner/tool layer.
+These layers, plus the always-loaded files below, are assembled **once** into the agent's starting context when a run begins — the personality layers (1, 2, 5, 6) form the system prompt; the context files (layers 3 & 4, plus CLAUDE.md / README) are injected as the agent's initial message. Where each piece lands is just SDK placement — conceptually it is **one bundle**: everything the agent knows for that run. From there the agent works the task within that single session, on that context alone — it does not re-read instruction or doc files mid-run.
+
+None of these layers can change which tool fires, which column a task moves to, or what files the agent can write — those are enforced at the runner/tool layer.
 
 ### `[STYLE]` and `[CONSTRAINTS]`
 
@@ -90,22 +92,19 @@ The personality text at layers 5 and 6 supports two semantic sections:
 - `[STYLE]` — tone modifier (e.g. warm vs direct). Adjusts how the agent writes.
 - `[CONSTRAINTS]` — hard rules, enforced above everything else (e.g. `Never ask about pricing`).
 
-### Default seeded mapping
+### What each agent loads as context
 
-| Agent | personality_file | instruction_files |
-|---|---|---|
-| Planner | `instructions/planning.md` | `["instructions/client.md"]` |
-| Coder | `instructions/dev-implement.md` | `["instructions/project.md", "instructions/client.md"]` |
-| Code Test Runner | `instructions/run-code-tests.md` | `["instructions/project.md", "instructions/client.md"]` |
+Assembled once into the agent's starting context bundle (see the layering note above), all dedup'd:
+
+- **Capability personality** — the runner's `personality_file` (e.g. `dev-implement.md`), resolved to the most specific version that exists.
+- **Capability docs** — `docs/` files mapped to the agent's capability via `context_docs` in `runners.json`. Every app agent gets `docs/rules.md`; AutoKan-internal docs (`api.md`, `frontend.md`, …) map to no capability on purpose.
+- **Subscription files** — every top-level `.md` in `instructions/{sub}/` (excluding runner personality files, already in the system prompt).
+- **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring.
+- **Always** — `CLAUDE.md` for every agent; `README.md` additionally for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
 
 ### Path resolution
 
-Paths are stored as short references (e.g. `instructions/dev-implement.md`) without subscription or project IDs. At runtime, `resolveInstructionPath()` expands these to the most specific file that exists on disk:
+The `personality_file` is stored as a short reference (e.g. `instructions/dev-implement.md`) without subscription or project IDs. At runtime, `resolveInstructionPath()` expands it to the most specific file that exists on disk:
 
 1. `instructions/{subscriptionId}/{projectId}/X.md` — board-level (most specific, overrides subscription)
-2. `instructions/{subscriptionId}/X.md` — subscription-level (shared template, applies to all boards)
-
-### Two more files always loaded
-
-- **`CLAUDE.md`** — loaded for every agent (project rules + context-files index)
-- **`README.md`** — loaded only for agents whose capability has `is_coder: true` in `runners.json` (currently `perm_coding`, `perm_coding_tester`, `perm_frontend`, `perm_backend`, `perm_ux`, `perm_architect`, `perm_code_reader`, `perm_migrate`)
+2. `instructions/{subscriptionId}/X.md` — subscription-level (shared, applies to all boards)

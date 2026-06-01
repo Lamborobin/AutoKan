@@ -1,5 +1,5 @@
 {
-  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
+  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. context_docs is the static map of which docs/ files get bundled into an agent's starting context for that capability (every app agent gets docs/rules.md today; AutoKan-internal docs like api.md/frontend.md map to no capability on purpose). README.md is added on top for is_coder capabilities. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
 
   "capabilities": [
     {
@@ -8,6 +8,7 @@
       "description": "Plans tasks — clarifies requirements through Q&A before any work begins. Acts like a project manager on a software team.",
       "color": "#a855f7",
       "write_access": "instructions/{subscriptionId}/{projectId}/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     },
     {
@@ -16,6 +17,7 @@
       "description": "Implements code that satisfies an approved task. Full write access inside client/. Defaults to human action on hindrance.",
       "color": "#ec4899",
       "write_access": "client/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -24,6 +26,7 @@
       "description": "Runs the project's automated test suite and reports pass/fail. Narrow scope — escalates anything that needs non-shell verification.",
       "color": "#8b5cf6",
       "write_access": "*.test.*, *.spec.*, __tests__/, test/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -32,6 +35,7 @@
       "description": "Frontend-only code changes (app/ folder).",
       "color": "#06b6d4",
       "write_access": "app/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -40,6 +44,7 @@
       "description": "Backend-only code changes (server/ folder).",
       "color": "#3b82f6",
       "write_access": "server/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -48,6 +53,7 @@
       "description": "Frontend UX-specialised tasks — layout, styling, interaction patterns. Scoped to app/src/.",
       "color": "#ec4899",
       "write_access": "app/src/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -56,6 +62,7 @@
       "description": "Designs system foundations and high-level structure. Produces written proposals.",
       "color": "#6366f1",
       "write_access": "instructions/{subscriptionId}/{projectId}/",
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     },
     {
@@ -64,6 +71,7 @@
       "description": "Reads and understands code but cannot modify it. For review, audit, or observer agents.",
       "color": "#64748b",
       "write_access": null,
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -72,6 +80,7 @@
       "description": "Data migrations and schema changes. Touches only migration files.",
       "color": "#f59e0b",
       "write_access": "*migration*, migrations/, *schema*",
+      "context_docs": ["docs/rules.md"],
       "is_coder": true
     },
     {
@@ -80,6 +89,7 @@
       "description": "Network testing and external endpoint checks. Read-only.",
       "color": "#10b981",
       "write_access": null,
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     },
     {
@@ -88,6 +98,7 @@
       "description": "Cloud environment access — health checks, deployment status, safe operational commands.",
       "color": "#0ea5e9",
       "write_access": null,
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     },
     {
@@ -96,6 +107,7 @@
       "description": "Security analysis and vulnerability review. Never modifies files.",
       "color": "#ef4444",
       "write_access": null,
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     },
     {
@@ -104,6 +116,7 @@
       "description": "Reads and summarises logs from the filesystem and cloud.",
       "color": "#f97316",
       "write_access": null,
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     },
     {
@@ -112,6 +125,7 @@
       "description": "Extracts and analyses data from project areas. Read-only.",
       "color": "#84cc16",
       "write_access": null,
+      "context_docs": ["docs/rules.md"],
       "is_coder": false
     }
   ],

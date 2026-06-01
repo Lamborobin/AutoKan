@@ -10,7 +10,7 @@
     "install:all": "npm install && cd server && npm install && cd ../app && npm install",
     "build": "cd app && npm run build",
     "db:reset": "cd server && node scripts/reset-db.js",
-    "test": "echo \"AutoKan has no test suite by design — see the decisions log for the rationale. Client projects under client/ run their own tests independently.\" && exit 0"
+    "test": "echo \"AutoKan has no test suite yet — client projects under client/ run their own tests independently.\" && exit 0"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

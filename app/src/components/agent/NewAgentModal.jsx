@@ -5,7 +5,7 @@ import { instructionsApi } from '../../api';
 import {
   useAgentForm,
   NameField, ModelField, ColorField,
-  SystemPromptField, ContextFilesField, TemplatePromptField, RoleField, MODELS,
+  SystemPromptField, TemplatePromptField, RoleField, MODELS,
 } from './AgentForm';
 
 export default function NewAgentModal() {
@@ -16,7 +16,7 @@ export default function NewAgentModal() {
     form, set, generatedRole,
     availableFiles,
     newPrompt, setNewPromptField,
-    handleNameChange, toggleInstructionFile, resolvePersonalityFile, toggleRole,
+    handleNameChange, resolvePersonalityFile, toggleRole,
   } = useAgentForm();
 
   const [saving, setSaving] = useState(false);
@@ -43,7 +43,6 @@ export default function NewAgentModal() {
     set('model', tpl.model);
     set('color', tpl.color);
     set('description', tpl.description || '');
-    set('instruction_files', tpl.instruction_files || []);
 
     // Pre-populate system prompt content in the "Create new" inline editor
     if (tpl.system_prompt_content) {
@@ -78,7 +77,6 @@ export default function NewAgentModal() {
         model: form.model,
         description: form.description,
         personality_file: personalityFilePath,
-        instruction_files: form.instruction_files,
         color: form.color,
         permissions: ['task:read'],
         created_from_template_id: selectedTemplateId || undefined,
@@ -165,13 +163,6 @@ export default function NewAgentModal() {
             availableFiles={availableFiles}
             newPrompt={newPrompt}
             setNewPromptField={setNewPromptField}
-          />
-
-          <ContextFilesField
-            availableFiles={availableFiles}
-            selectedFiles={form.instruction_files}
-            onToggle={toggleInstructionFile}
-            personalityFile={form.personality_file}
           />
 
           <ColorField value={form.color} onChange={v => set('color', v)} />

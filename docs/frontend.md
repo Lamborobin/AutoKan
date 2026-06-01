@@ -4,20 +4,29 @@ Read this file when working on any file under `app/src/`.
 
 ---
 
-## Component Structure
+## `app/src/` structure
 
-Feature subdirectories under `app/src/components/`:
+```
+app/src/
+├── api/index.js            # Axios client — one named export group per resource (tasksApi, agentsApi, …)
+├── store/                  # Zustand — slices combined in index.js
+│   ├── index.js
+│   ├── authSlice.js
+│   ├── boardSlice.js
+│   ├── workspaceSlice.js
+│   └── uiSlice.js
+├── constants/              # columns.js, agents.js, tasks.js
+└── components/
+    ├── Sidebar.jsx         # (root) board sidebar + agent panel
+    ├── LoginPage.jsx       # (root)
+    ├── agent/              # AgentForm, NewAgentModal, EditAgentModal, TemplatesModal
+    ├── board/              # Column, TaskCard
+    ├── task/               # TaskDetail, TaskComments, NewTaskModal
+    ├── settings/           # SettingsPage, AiContextPanel, InfoModal, contextInfo, BoardRepoSettings
+    └── shared/             # BoardsModal, InviteModal, MembersModal, ArchivedTasksModal, MarkdownText
+```
 
-| Directory | Contents |
-|---|---|
-| `agent/` | AgentForm, EditAgentModal, NewAgentModal, TemplatesModal |
-| `board/` | Column, TaskCard, BoardRepoSettings, SettingsModal |
-| `settings/` | SettingsPage, ArchivedTasksModal |
-| `shared/` | BoardsModal, InviteModal, MembersModal, NewTaskModal, MarkdownText, TaskComments |
-| `task/` | TaskDetail |
-| (root) | Sidebar.jsx, LoginPage.jsx |
-
-Feature subdirectories are created **on demand** — only when 3+ related files exist. See the Folder Creation Rule in `CLAUDE.md`.
+Feature subdirectories are created **on demand** — only when 3+ related files exist (see the Folder Creation Rule in `CLAUDE.md`).
 
 ## File Size Thresholds
 | Lines | Action |
@@ -59,27 +68,32 @@ Split at 400 lines — when splitting, one file per resource group, re-export fr
 | File | Contents |
 |---|---|
 | `columns.js` | `COL_BACKLOG`, `COL_INPROGRESS`, etc. |
-| `agents.js` | Default agent IDs |
+| `agents.js` | Default agent IDs, `MODELS`, `COLORS` |
 | `tasks.js` | Priority/complexity enums |
 
 ---
 
 ## Settings Page
 
-Single full-page view. Left nav + right panel layout.
-Component: `app/src/components/settings/SettingsPage.jsx`
-
-### Left nav sections
+Single full-page view (`app/src/components/settings/SettingsPage.jsx`) — left nav + right panel. The left nav has three groups:
 
 **Board** (per-board):
-- **Instruction Files** — file list renders inline in the left panel; two subsections: System (read-only, lock icon, affects all boards) and Custom (this board only, archive/delete, auto-save 1.5s debounce). Personal boards (no `client_id`) hide `client.md` and `project.md`.
-- **Connections** — board ↔ client folder/repo link. Hidden on personal boards.
+- **Board Context** — lists this board's instruction files; create / archive / delete, with auto-save on a 1.5s debounce. `client.md` and `project.md` are hidden on personal boards (no `client_id`).
+- **Connections** — board ↔ client folder/repo link (client boards only).
 
 **Subscription** (superadmin only):
-- Clients, Team, Boards, Members, Superadmins
+- **Overview** — workspace name + subscription ID.
+- **Clients** — manage client entities.
+- **Workspace Context** — subscription-level instruction files shared by all boards (same editor as Board Context).
+- **Team**, **Boards**, **Members** (placeholder), **Superadmins**.
+
+**System**:
+- **AI Context** — edits the governance docs surfaced from `agent.config.json`'s `ai_context` groups (component: `AiContextPanel`); edits are versioned server-side.
+
+The right-panel **instruction-file editor** is shared by Board Context and Workspace Context: auto-saves (1.5s debounce), archived files are read-only, and a delete that would orphan an agent reference returns `409` → the UI nudges toward archive. An `InfoModal` gives a per-section "what is this?" explainer.
 
 ### Connections panel (`ConnectionsPanel`)
-Links a board to a client folder.
+Defined inline in `SettingsPage.jsx`. Links a board to a client folder.
 
 **Two modes:**
 | Mode | What it does |

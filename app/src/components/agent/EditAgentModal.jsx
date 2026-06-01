@@ -5,7 +5,7 @@ import { COLUMN } from '../../constants/columns';
 import {
   useAgentForm,
   NameField, ModelField, ColorField,
-  SystemPromptField, ContextFilesField, TemplatePromptField, RoleField,
+  SystemPromptField, TemplatePromptField, RoleField,
 } from './AgentForm';
 import { instructionsApi } from '../../api';
 
@@ -17,14 +17,13 @@ export default function EditAgentModal() {
     form, set,
     availableFiles,
     newPrompt, setNewPromptField,
-    toggleInstructionFile, resolvePersonalityFile, toggleRole,
+    resolvePersonalityFile, toggleRole,
   } = useAgentForm({
     name: agent.name,
     role: agent.role,
     model: agent.model,
     description: agent.description || '',
     personality_file: agent.personality_file || '',
-    instruction_files: agent.instruction_files || [],
     color: agent.color,
     is_template: agent.is_template || false,
     system_prompt: agent.system_prompt || '',
@@ -83,7 +82,6 @@ export default function EditAgentModal() {
         model: form.model,
         description: form.description,
         personality_file: personalityFilePath,
-        instruction_files: form.instruction_files,
         color: form.color,
         system_prompt: form.system_prompt || null,
         role_ids: form.role_ids,
@@ -219,13 +217,6 @@ export default function EditAgentModal() {
             setNewPromptField={setNewPromptField}
           />
 
-          <ContextFilesField
-            availableFiles={availableFiles}
-            selectedFiles={form.instruction_files}
-            onToggle={toggleInstructionFile}
-            personalityFile={form.personality_file}
-          />
-
           <ColorField value={form.color} onChange={v => set('color', v)} />
 
           {/* Save as template inline UI */}
@@ -241,7 +232,7 @@ export default function EditAgentModal() {
                 placeholder="Template name"
                 className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors"
               />
-              <p className="text-[10px] text-gray-600">Saves this agent's description, model, color, and context files. You can edit the system prompt content in the Templates manager.</p>
+              <p className="text-[10px] text-gray-600">Saves this agent's description, model, and color. You can edit the system prompt content in the Templates manager.</p>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowSaveAsTemplate(false)}
                   className="btn-ghost flex-1 justify-center py-1.5 text-xs">

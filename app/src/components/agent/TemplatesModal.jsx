@@ -1,21 +1,18 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight, FileText, Lock, Unlock } from 'lucide-react';
+import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight, Lock, Unlock } from 'lucide-react';
 import { useStore } from '../../store';
-import { instructionsApi } from '../../api';
 import { MODELS, COLORS } from '../../constants/agents';
-import { displayName } from './AgentForm';
 
 const EMPTY_FORM = {
   name: '', description: '', model: 'claude-sonnet-4-5', color: '#6366f1',
-  system_prompt_content: '', template_system_prompt: '', instruction_files: [], tags: '',
+  system_prompt_content: '', template_system_prompt: '', tags: '',
 };
 
-function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel, availableFiles }) {
+function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
   const [form, setForm] = useState({
     ...EMPTY_FORM,
     ...initial,
     tags: Array.isArray(initial.tags) ? initial.tags.join(', ') : (initial.tags || ''),
-    instruction_files: initial.instruction_files || [],
     template_system_prompt: initial.template_system_prompt || '',
   });
   const [editingBehaviourPrompt, setEditingBehaviourPrompt] = useState(
@@ -25,15 +22,6 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel, availableFiles }
   const [error, setError] = useState('');
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  function toggleFile(path) {
-    setForm(f => ({
-      ...f,
-      instruction_files: f.instruction_files.includes(path)
-        ? f.instruction_files.filter(p => p !== path)
-        : [...f.instruction_files, path],
-    }));
-  }
 
   async function handleSave() {
     if (!form.name.trim()) { setError('Name is required'); return; }
@@ -47,7 +35,6 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel, availableFiles }
         color: form.color,
         system_prompt_content: form.system_prompt_content,
         template_system_prompt: editingBehaviourPrompt ? (form.template_system_prompt || null) : null,
-        instruction_files: form.instruction_files,
         tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
       });
     } catch (err) {
@@ -156,33 +143,6 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel, availableFiles }
         )}
       </div>
 
-      {/* Context Files */}
-      {availableFiles.length > 0 && (
-        <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Default Context Files</label>
-          <div className="space-y-1.5 bg-surface-1 border border-border rounded-lg p-2.5">
-            {availableFiles.map(f => (
-              <label key={f.path} className="flex items-center gap-2.5 cursor-pointer group">
-                <div onClick={() => toggleFile(f.path)}
-                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-                    form.instruction_files.includes(f.path)
-                      ? 'bg-accent border-accent'
-                      : 'border-border bg-surface-3 group-hover:border-accent/50'
-                  }`}>
-                  {form.instruction_files.includes(f.path) && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
-                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </div>
-                <FileText size={10} className="text-gray-600 shrink-0" />
-                <span className="text-xs text-gray-400 group-hover:text-gray-300">{displayName(f.path)}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Tags */}
       <div>
         <label className="block text-xs font-medium text-gray-400 mb-1.5">Tags <span className="text-gray-600">(comma separated)</span></label>
@@ -213,7 +173,7 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel, availableFiles }
   );
 }
 
-function TemplateCard({ tpl, availableFiles, onEdit, onArchive, onUnarchive, onDelete }) {
+function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
   const isArchived = !!tpl.archived_at;
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -319,17 +279,6 @@ function TemplateCard({ tpl, availableFiles, onEdit, onArchive, onUnarchive, onD
           <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">archived</span>
         )}
       </div>
-
-      {tpl.instruction_files.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {tpl.instruction_files.map(f => (
-            <span key={f} className="flex items-center gap-1 text-[10px] text-gray-600 bg-surface-1 border border-border px-1.5 py-0.5 rounded">
-              <FileText size={9} />
-              {displayName(f)}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -339,11 +288,6 @@ export default function TemplatesModal() {
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [availableFiles, setAvailableFiles] = useState([]);
-
-  useEffect(() => {
-    instructionsApi.list().then(setAvailableFiles).catch(() => {});
-  }, []);
 
   const active = agentTemplates.filter(t => !t.archived_at);
   const archived = agentTemplates.filter(t => !!t.archived_at);
@@ -378,7 +322,6 @@ export default function TemplatesModal() {
           {/* Create form or button */}
           {creating ? (
             <TemplateForm
-              availableFiles={availableFiles}
               onSave={handleCreate}
               onCancel={() => setCreating(false)}
             />
@@ -402,7 +345,6 @@ export default function TemplatesModal() {
               <TemplateForm
                 key={tpl.id}
                 initial={tpl}
-                availableFiles={availableFiles}
                 onSave={handleEdit}
                 onCancel={() => setEditingId(null)}
               />
@@ -410,7 +352,6 @@ export default function TemplatesModal() {
               <TemplateCard
                 key={tpl.id}
                 tpl={tpl}
-                availableFiles={availableFiles}
                 onEdit={() => { setEditingId(tpl.id); setCreating(false); }}
                 onArchive={() => archiveTemplate(tpl.id)}
                 onUnarchive={() => unarchiveTemplate(tpl.id)}
@@ -435,7 +376,6 @@ export default function TemplatesModal() {
                     <TemplateCard
                       key={tpl.id}
                       tpl={tpl}
-                      availableFiles={availableFiles}
                       onEdit={() => {}}
                       onArchive={() => {}}
                       onUnarchive={() => unarchiveTemplate(tpl.id)}

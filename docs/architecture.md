@@ -13,9 +13,9 @@ AutoKan/
 ├── docs/                    # Extended documentation — read on demand via CLAUDE.md
 ├── instructions/            # Instruction files — scoped by subscription and board
 │   └── {subscriptionId}/    # e.g. sub_default/
-│       ├── project-manager.md   # Shared PM methodology — all boards
-│       ├── developer.md         # Shared dev instructions — all boards
-│       ├── tester.md            # Shared test instructions — all boards
+│       ├── planning.md          # Shared planner methodology — all boards
+│       ├── dev-implement.md     # Shared coder methodology — all boards
+│       ├── run-code-tests.md    # Shared tester methodology — all boards
 │       ├── archived/
 │       └── {projectId}/         # Per-board context (auto-scaffolded on board creation)
 │           ├── client.md        # Client boards only
@@ -23,19 +23,14 @@ AutoKan/
 │           └── archived/
 ├── server/
 │   └── src/
-│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (models, pipeline, AI context groups)
+│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (AI Context panel groups)
 │       ├── db/              # Schema only — CREATE TABLE definitions, calls seed/ on init
 │       ├── middleware/      # JWT verification, isSuperAdmin, agent header passthrough
 │       ├── routes/          # One file per resource group (tasks, agents, projects, members…)
-│       ├── seed/            # Default data — index.js (seedDefaults), agent-templates.json (PM/Dev/Test templates)
-│       ├── services/        # agentRunner.js (AI triggers), emailService.js (notifications)
-│       └── utils/           # instructions.js (scaffold/manage instruction file structure)
-├── app/
-│   └── src/
-│       ├── api/             # Axios client — one export group per resource
-│       ├── store/           # Zustand slices: auth, board, workspace, ui
-│       ├── constants/       # Column IDs, agent IDs, enums
-│       └── components/      # Feature subdirs: agent/, board/, settings/, shared/, task/
+│       ├── seed/            # Default data — index.js (seedDefaults), runners.json (capability + runner registry), agent-templates.json (PM/Dev/Test templates)
+│       ├── services/        # agentRunner.js (AI triggers), runner-prompts/ (system-owned flow prompts), emailService.js (notifications)
+│       └── utils/           # ids.js (ID generators), instructions.js (scaffold/manage instruction file structure)
+├── app/                     # React + Vite frontend — app/src holds api/, store/, constants/, components/
 ├── data/                    # SQLite DB (auto-created, gitignored)
 ├── package.json             # Root workspace scripts
 └── README.md
@@ -53,7 +48,7 @@ Human / Agent
      ▼
 REST API (Express)          ← single source of truth for all state changes
      │
-     ├── SQLite DB           ← tasks, agents, columns, members, instructions
+     ├── SQLite DB           ← tasks, agents, columns, members, projects, roles
      ├── instructions/       ← markdown files agents read as context
      └── client/{name}/      ← the actual client repo agents work inside
 ```
@@ -109,10 +104,10 @@ Agent behavior is driven by a registry, not hardcoded dispatch.
 - **Capabilities** (`perm_*`) are skills an agent has. An agent has **exactly one** `perm_*` capability — server validates this on create/update.
 - **Runners** map a `(capability, column)` pair to an executable flow (prompt file, model, exit behavior). Same capability in a different column = a different runner = a different flow. Example: `perm_coding` in `col_inprogress` writes code and opens a PR; the same capability could in future have a runner in `col_humanaction` that responds to PR review comments.
 - Registry lives in `server/src/seed/runners.json` — the single source of truth.
-- Dispatch lives in `server/src/services/agentRunner.js`. On task column change or assignment change, it looks up the registered runner for `(agent.capability, task.column)` and invokes the named handler (`pm`, `dev`, `tester`, etc.).
+- Dispatch lives in `server/src/services/agentRunner.js`. On task column change or assignment change, it looks up the registered runner for `(agent.capability, task.column)` and invokes the named handler (`clarify_and_approve`, `implement_in_worktree`, `test_with_retry`, …).
 - Adding a new (capability × column) behavior: add a registry entry + the prompt file + (if no existing handler fits) a handler in `agentRunner.js`.
 
-Capability scope and write-access rules are defined per capability in the registry (e.g. `perm_coding` → `client/`, `perm_coding_tester` → test files only).
+Each capability in the registry also declares its write-access scope (e.g. `perm_coding` → `client/`, `perm_coding_tester` → test files only), whether it's a coder (`is_coder`), and which `docs/` files load into its agents' context (`context_docs` — every app agent gets `docs/rules.md`).
 
 ---
 
@@ -133,9 +128,9 @@ Capability scope and write-access rules are defined per capability in the regist
 4.  Human answers → pm_approval_status = 'approved'
 5.  Human gives sign-off → human_approval_status = 'approved' → task unlocked
 6.  Human moves task to In Progress → dev agent triggered
-7.  Dev agent creates git worktree → implements → commits to feature/<taskId> → opens PR
-8.  Task moves to Testing → tester agent triggered
-9.  Tester runs checks → passes (Human Action: "Ready for sign-off") or fails (retry → In Progress or Human Action)
-10. Human reviews PR → approves → task moves to Done
+7.  Server creates an isolated git worktree on feature/<taskId> → dev agent implements, commits, pushes the feature branch (never master — merges and non-feature pushes are blocked) → calls task_complete → server opens a PR
+8.  If task.auto_complete → server merges the PR to master and moves the task to Testing automatically; otherwise the task moves to Human Action ("PR ready for review") for a human to review and merge
+9.  Testing → tester agent triggered: pass → Human Action ("Ready for sign-off"); fail → retry (In Progress), then Human Action after max retries
+10. Human signs off / merges the PR in Human Action → moves the task onward to Done
 ```
 

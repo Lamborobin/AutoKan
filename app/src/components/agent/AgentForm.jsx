@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Info } from 'lucide-react';
+import { Plus, Info } from 'lucide-react';
 import { instructionsApi } from '../../api';
 import { useStore } from '../../store';
 import { MODELS, COLORS } from '../../constants/agents';
@@ -35,7 +35,6 @@ export function useAgentForm(initial = {}) {
     model: 'claude-sonnet-4-5',
     description: '',
     personality_file: '',
-    instruction_files: [],
     color: '#6366f1',
     is_template: false,
     system_prompt: '',
@@ -65,15 +64,6 @@ export function useAgentForm(initial = {}) {
   }
 
   function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
-
-  function toggleInstructionFile(filePath) {
-    setForm(f => ({
-      ...f,
-      instruction_files: f.instruction_files.includes(filePath)
-        ? f.instruction_files.filter(p => p !== filePath)
-        : [...f.instruction_files, filePath],
-    }));
-  }
 
   function setNewPromptField(k, v) {
     setNewPrompt(p => ({ ...p, [k]: v }));
@@ -109,7 +99,7 @@ export function useAgentForm(initial = {}) {
     form, set, generatedRole,
     availableFiles,
     newPrompt, setNewPromptField,
-    handleNameChange, toggleInstructionFile, resolvePersonalityFile, toggleRole,
+    handleNameChange, resolvePersonalityFile, toggleRole,
   };
 }
 
@@ -417,63 +407,3 @@ export function RoleField({ selectedRoleIds, onToggle }) {
   );
 }
 
-export function ContextFilesField({ availableFiles, selectedFiles, onToggle, personalityFile }) {
-  const contextOptions = availableFiles.filter(f => f.path !== personalityFile);
-  if (contextOptions.length === 0) return null;
-
-  const systemOptions = contextOptions.filter(f => f.scope === 'system');
-  const customOptions = contextOptions.filter(f => f.scope === 'custom');
-
-  function FileCheckbox({ f }) {
-    return (
-      <label key={f.path} className="flex items-center gap-2.5 cursor-pointer group">
-        <div
-          onClick={() => onToggle(f.path)}
-          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-            selectedFiles.includes(f.path)
-              ? 'bg-accent border-accent'
-              : 'border-border bg-surface-1 group-hover:border-accent/50'
-          }`}
-        >
-          {selectedFiles.includes(f.path) && (
-            <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12">
-              <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          )}
-        </div>
-        <FileText size={11} className="text-gray-600 shrink-0" />
-        <span className="text-xs text-gray-400 group-hover:text-gray-300">{displayName(f.path)}</span>
-      </label>
-    );
-  }
-
-  return (
-    <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1">Context Files</label>
-      <p className="text-[10px] text-gray-600 mb-2">
-        Loaded as additional context. <span className="font-mono">CLAUDE.md</span> and <span className="font-mono">README.md</span> are always included.
-      </p>
-      <div className="bg-surface-3 border border-border rounded-lg p-3 space-y-3">
-        {systemOptions.length > 0 && (
-          <div>
-            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-1.5">System</p>
-            <div className="space-y-1.5">
-              {systemOptions.map(f => <FileCheckbox key={f.path} f={f} />)}
-            </div>
-          </div>
-        )}
-        {systemOptions.length > 0 && customOptions.length > 0 && (
-          <div className="border-t border-border" />
-        )}
-        {customOptions.length > 0 && (
-          <div>
-            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-1.5">Custom</p>
-            <div className="space-y-1.5">
-              {customOptions.map(f => <FileCheckbox key={f.path} f={f} />)}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}

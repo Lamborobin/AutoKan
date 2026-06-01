@@ -11,7 +11,6 @@ import { COLUMN } from '../constants/columns';
 
 function AgentPanel({ agent, onClose, onEdit }) {
   const { roles } = useStore();
-  const instructionFiles = agent.instruction_files || [];
   const agentRoles = (agent.role_ids || [])
     .map(id => roles.find(r => r.id === id))
     .filter(Boolean);
@@ -70,22 +69,6 @@ function AgentPanel({ agent, onClose, onEdit }) {
             <span className="text-[10px] font-mono text-accent truncate">
               {agent.personality_file.replace(/^instructions\//, '').replace(/\.md$/, '')}
             </span>
-          </div>
-        </div>
-      )}
-
-      {instructionFiles.length > 0 && (
-        <div>
-          <p className="text-[10px] font-medium text-gray-500 mb-1.5">Context Files</p>
-          <div className="space-y-1">
-            {instructionFiles.map(f => (
-              <div key={f} className="flex items-center gap-1.5 px-2 py-1.5 bg-surface-1 border border-border rounded-lg">
-                <FileText size={10} className="text-gray-600 shrink-0" />
-                <span className="text-[10px] font-mono text-gray-500 truncate">
-                  {f.replace(/^instructions\//, '').replace(/\.md$/, '')}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
       )}

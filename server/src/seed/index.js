@@ -13,7 +13,7 @@ const runnersRegistry = require('./runners.json');
  * 1. Every insert uses INSERT OR IGNORE — `seedDefaults` runs on every
  *    server start (via getDb's first-call init) and must stay idempotent.
  * 2. NEVER use unconditional UPDATE on rows the user can edit through the UI
- *    (template_system_prompt, system_prompt, instruction_files, etc.). Use
+ *    (template_system_prompt, system_prompt, etc.). Use
  *    `WHERE ... IS NULL` guards so customisations survive restarts.
  * 3. Schema changes belong in `server/src/db/index.js`, not here — and they
  *    require a user-initiated `npm run db:reset` (see docs/rules.md → DB).
@@ -108,15 +108,14 @@ function seedAgentTemplates(db) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agent_templates
       (id, name, description, model, color, suggested_role, system_prompt_content,
-       template_system_prompt, instruction_files, permissions, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       template_system_prompt, permissions, tags)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const t of agentTemplates.templates) {
     insert.run(
       t.id, t.name, t.description, t.model, t.color, t.role,
       readInstructionFile(path.basename(t.personality_file || '')),
       t.template_system_prompt,
-      JSON.stringify(t.instruction_files),
       JSON.stringify(t.permissions),
       JSON.stringify(t.tags || []),
     );
@@ -128,20 +127,19 @@ function seedAgentTemplates(db) {
 function seedAgents(db) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file, instruction_files,
+      (id, name, role, model, description, permissions, personality_file,
        is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const t of agentTemplates.templates) {
-    // is_template = 1 whenever the template defines a personality, so the agent
-    // inherits it from agent_templates at runtime. system_prompt left null — the
-    // agent has no per-instance override until a user edits it via the UI.
+    // is_template = 1 whenever the template defines a personality (it also drives
+    // the template "T" badge in the UI). system_prompt left null — the agent has
+    // no per-instance override until a user edits it via the UI.
     const inheritsFromTemplate = !!t.template_system_prompt;
     insert.run(
       t.agent_id, t.name, t.role, t.model, t.description,
       JSON.stringify(t.permissions),
       t.personality_file || null,
-      JSON.stringify(t.instruction_files),
       inheritsFromTemplate ? 1 : 0,
       null,
       t.color, t.id, MY_BOARD_ID,
