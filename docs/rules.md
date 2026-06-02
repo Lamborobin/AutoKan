@@ -75,7 +75,7 @@ The following are personal data and must NEVER be reset or overwritten by an age
 
 **Never run `db:reset` automatically — always ask first.** A misconfigured `DB_PATH` or environment variable could point the reset script at data you don't intend to wipe (a production-shaped setup, a backup someone's working against, etc.). The user is the only one who knows which DB they're pointed at the moment of execution. Asking takes one exchange; recovering from an accidental wipe takes hours.
 
-This policy is local-dev only; see the decisions log for the rationale and when it'll be revisited.
+This policy is local-dev only, and will be revisited once the app has real users.
 
 ---
 

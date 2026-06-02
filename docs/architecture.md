@@ -107,7 +107,7 @@ Agent behavior is driven by a registry, not hardcoded dispatch.
 - Dispatch lives in `server/src/services/agentRunner.js`. On task column change or assignment change, it looks up the registered runner for `(agent.capability, task.column)` and invokes the named handler (`clarify_and_approve`, `implement_in_worktree`, `test_with_retry`, …).
 - Adding a new (capability × column) behavior: add a registry entry + the prompt file + (if no existing handler fits) a handler in `agentRunner.js`.
 
-Each capability in the registry also declares its write-access scope (e.g. `perm_coding` → `client/`, `perm_coding_tester` → test files only), whether it's a coder (`is_coder`), and which `docs/` files load into its agents' context (`context_docs` — every app agent gets `docs/rules.md`).
+Each capability in the registry also declares its write-access scope (e.g. `perm_coding` → `client/`, `perm_coding_tester` → test files only), whether it's a coder (`is_coder`), and which `docs/` files load into its agents' context (`context_docs`).
 
 ---
 

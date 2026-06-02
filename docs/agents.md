@@ -97,7 +97,7 @@ The personality text at layers 5 and 6 supports two semantic sections:
 Assembled once into the agent's starting context bundle (see the layering note above), all dedup'd:
 
 - **Capability personality** — the runner's `personality_file` (e.g. `dev-implement.md`), resolved to the most specific version that exists.
-- **Capability docs** — `docs/` files mapped to the agent's capability via `context_docs` in `runners.json`. Every app agent gets `docs/rules.md`; AutoKan-internal docs (`api.md`, `frontend.md`, …) map to no capability on purpose.
+- **Capability docs** — the `docs/` files mapped to the agent's capability, picked up from `context_docs` in `runners.json` (the registry holds the mapping — not listed here).
 - **Subscription files** — every top-level `.md` in `instructions/{sub}/` (excluding runner personality files, already in the system prompt).
 - **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring.
 - **Always** — `CLAUDE.md` for every agent; `README.md` additionally for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).

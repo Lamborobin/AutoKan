@@ -77,11 +77,11 @@ function seedColumns(db) {
 // ── Projects & test client ────────────────────────────────────────────────────
 
 function seedProjects(db) {
-  // Demo client project
+  // Demo client project — pre-connected to the seeded client/Velour folder
   db.prepare(`
-    INSERT OR IGNORE INTO projects (id, name, description, client_name, color, emoji, subscription_id)
-    VALUES (?, 'Public Website', ?, ?, '#6366f1', '⚡', ?)
-  `).run(TEST_CLIENT_ID, `Development of the public website of ${TEST_CLIENT_NAME}`, TEST_CLIENT_NAME, DEFAULT_SUB_ID);
+    INSERT OR IGNORE INTO projects (id, name, description, client_name, client_path, color, emoji, subscription_id)
+    VALUES (?, 'Public Website', ?, ?, ?, '#6366f1', '⚡', ?)
+  `).run(TEST_CLIENT_ID, `Development of the public website of ${TEST_CLIENT_NAME}`, TEST_CLIENT_NAME, `client/${TEST_CLIENT_NAME}`, DEFAULT_SUB_ID);
 
   // Default personal board (claimed by first user who logs in)
   db.prepare(`
@@ -150,11 +150,44 @@ function seedAgents(db) {
 
 // ── Instruction folder scaffolding ────────────────────────────────────────────
 
+// Demo content for the seeded board's context files. New boards scaffold with
+// blank placeholders instead — this richer text is demo-only (Velour).
+const SEED_CLIENT_MD = `# Client Context — ${TEST_CLIENT_NAME}
+
+${TEST_CLIENT_NAME} is the sample client that ships with AutoKan so the full flow works out of the box. Treat it as a small fashion / lifestyle brand that wants a clean, fast public website.
+
+Priorities
+- Modern, minimal design with strong product imagery
+- Fast load times and a good mobile experience
+- Accessible: readable contrast, keyboard navigation
+
+Tone
+- Polished and understated — let the products speak.
+
+> Demo content. Replace it with the real client's context, or clear it for a fresh board.
+`;
+
+const SEED_PROJECT_MD = `# Project Context — Public Website
+
+The public-facing website for ${TEST_CLIENT_NAME}, worked on in client/${TEST_CLIENT_NAME}/.
+
+Scope
+- Marketing pages (home, about, contact) and a product showcase
+- Reusable, well-structured components
+- Small, reviewable changes
+
+Conventions
+- Match the existing structure and styling already in client/${TEST_CLIENT_NAME}/
+- Confirm anything ambiguous before a large change
+
+> Demo content. Replace it with the real project's context, or clear it for a fresh board.
+`;
+
 function scaffoldInstructionFolders() {
   try { scaffoldSubscriptionInstructions(DEFAULT_SUB_ID); }
   catch (e) { console.warn('Could not scaffold subscription instructions:', e.message); }
 
-  try { scaffoldProjectInstructions(TEST_CLIENT_ID, DEFAULT_SUB_ID); }
+  try { scaffoldProjectInstructions(TEST_CLIENT_ID, DEFAULT_SUB_ID, SEED_CLIENT_MD, SEED_PROJECT_MD); }
   catch (e) { console.warn(`Could not scaffold instructions for ${TEST_CLIENT_ID}:`, e.message); }
 
   try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, null, null, true); }
