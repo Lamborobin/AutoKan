@@ -938,7 +938,7 @@ export default function TaskDetail() {
               >
                 <option value="">Unassigned</option>
                 {agents.filter(a => a.active).map(a => (
-                  <option key={a.id} value={a.id}>{a.name} ({a.role})</option>
+                  <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>
             </div>

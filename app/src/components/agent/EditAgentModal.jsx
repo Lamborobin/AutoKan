@@ -144,7 +144,6 @@ export default function EditAgentModal() {
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface-2 z-10">
           <div>
             <h2 className="text-base font-semibold text-gray-100">Edit Agent</h2>
-            <p className="text-[10px] font-mono text-gray-600 mt-0.5">role: {agent.role}</p>
           </div>
           <button onClick={close} className="btn-ghost p-1.5 rounded-lg">
             <X size={16} />

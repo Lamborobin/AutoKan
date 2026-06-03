@@ -3,12 +3,14 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info,
+  BookOpen, Info, Search, Mail, UserPlus,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
 import InfoModal from './InfoModal';
+import TeamsPanel from './TeamsPanel';
+import BoardsPanel from './BoardsPanel';
 import { useStore } from '../../store';
-import { instructionsApi, projectsApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
+import { instructionsApi, projectsApi, invitesApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
 
 // ─── Main component ─────────────────────────────────────────────────────────
@@ -28,9 +30,14 @@ export default function SettingsPage() {
     unarchiveSubscriptionInstructionFile,
     deleteSubscriptionInstructionFile,
     setCurrentPage,
+    setCurrentProject,
     currentProjectId,
     projects,
+    createProject,
     updateProject,
+    archiveProject,
+    unarchiveProject,
+    deleteProject,
     loadProjects,
     isSuperAdmin,
     subscription,
@@ -40,6 +47,7 @@ export default function SettingsPage() {
     addSuperAdmin,
     removeSuperAdmin,
     user,
+    users,
     clients,
     loadClients,
     createClient,
@@ -47,6 +55,8 @@ export default function SettingsPage() {
     archiveClient,
     teams,
     loadTeams,
+    createTeam,
+    deleteTeam,
   } = useStore();
 
   const currentProject = projects.find(p => p.id === currentProjectId);
@@ -339,6 +349,18 @@ export default function SettingsPage() {
             <ArrowLeft size={10} /> Back to board
           </button>
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Settings</p>
+          {currentProject && (
+            <button
+              onClick={() => setCurrentPage('board')}
+              className="flex items-center gap-1.5 mt-2 w-full text-left group"
+              title="Go to board"
+            >
+              <span className="text-sm shrink-0">{currentProject.emoji || '📋'}</span>
+              <span className="text-xs font-medium text-gray-300 truncate group-hover:text-accent transition-colors">
+                {currentProject.name}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* BOARD section */}
@@ -731,45 +753,35 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Team panel */}
+        {/* Teams panel */}
         {section === 'sub_team' && isSuperAdmin && (
-          <div className="flex-1 overflow-y-auto px-8 py-8">
-            <div className="max-w-lg">
-              <h2 className="text-sm font-semibold text-gray-200 mb-6">Team</h2>
-              {teams.length === 0 ? (
-                <p className="text-sm text-gray-600">No teams yet.</p>
-              ) : (
-                <div className="space-y-1">
-                  {teams.map(t => (
-                    <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold bg-accent/15 text-accent border border-accent/20">
-                        {t.name[0].toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-200 truncate">{t.name}</p>
-                        {t.description && <p className="text-xs text-gray-500 truncate">{t.description}</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <TeamsPanel
+            teams={teams}
+            loadTeams={loadTeams}
+            createTeam={createTeam}
+            deleteTeam={deleteTeam}
+            users={users}
+          />
         )}
 
         {/* Boards panel */}
         {section === 'sub_boards' && isSuperAdmin && (
-          <BoardsPanel projects={projects} />
+          <BoardsPanel
+            projects={projects}
+            clients={clients}
+            currentProjectId={currentProjectId}
+            createProject={createProject}
+            updateProject={updateProject}
+            archiveProject={archiveProject}
+            unarchiveProject={unarchiveProject}
+            deleteProject={deleteProject}
+            onSwitchBoard={(id) => { setCurrentProject(id); setCurrentPage('board'); }}
+          />
         )}
 
         {/* Members panel */}
         {section === 'sub_members' && isSuperAdmin && (
-          <div className="flex-1 overflow-y-auto px-8 py-8">
-            <div className="max-w-lg">
-              <h2 className="text-sm font-semibold text-gray-200 mb-6">Members</h2>
-              <p className="text-sm text-gray-600">Subscription-level member management coming soon.</p>
-            </div>
-          </div>
+          <MembersPanel users={users} subscriptionAdmins={subscriptionAdmins} currentUser={user} />
         )}
 
         {/* Superadmins panel */}
@@ -962,60 +974,187 @@ export default function SettingsPage() {
   );
 }
 
-// ─── Boards panel ────────────────────────────────────────────────────────────
-function BoardsPanel({ projects }) {
-  const active   = projects.filter(p => !p.archived_at);
-  const archived = projects.filter(p => p.archived_at);
-  const [showArchived, setShowArchived] = useState(false);
+// ─── Members panel ───────────────────────────────────────────────────────────
+function memberHashColor(email) {
+  let hash = 0;
+  for (let i = 0; i < email.length; i++) hash = email.charCodeAt(i) + ((hash << 5) - hash);
+  const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6'];
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function MembersPanel({ users, subscriptionAdmins, currentUser }) {
+  const [filter, setFilter]         = useState('');
+  const [invites, setInvites]       = useState([]);
+  const [loadingInvites, setLoadingInvites] = useState(true);
+  const [inviteEmail, setInviteEmail]   = useState('');
+  const [inviting, setInviting]         = useState(false);
+  const [inviteError, setInviteError]   = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
+  const [removingInvite, setRemovingInvite] = useState(null);
+
+  useEffect(() => {
+    invitesApi.list()
+      .then(setInvites)
+      .catch(() => {})
+      .finally(() => setLoadingInvites(false));
+  }, []);
+
+  const superAdminEmails = new Set(
+    (subscriptionAdmins || []).map(a => a.email?.toLowerCase()).filter(Boolean)
+  );
+
+  const q = filter.trim().toLowerCase();
+  const filteredUsers = q
+    ? users.filter(u => {
+        const name = `${u.first_name || ''} ${u.last_name || ''}`.trim().toLowerCase();
+        return name.includes(q) || u.email.toLowerCase().includes(q);
+      })
+    : users;
+
+  async function handleInvite(e) {
+    e.preventDefault();
+    const email = inviteEmail.trim().toLowerCase();
+    if (!email) return;
+    setInviting(true); setInviteError(''); setInviteSuccess('');
+    try {
+      const result = await invitesApi.send(email);
+      setInvites(prev => [...prev, result]);
+      setInviteEmail('');
+      setInviteSuccess(`Invite sent to ${email}`);
+      setTimeout(() => setInviteSuccess(''), 3000);
+    } catch (err) {
+      setInviteError(err.response?.data?.error || 'Failed to send invite');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function handleCancelInvite(inviteId) {
+    setRemovingInvite(inviteId);
+    try {
+      await invitesApi.remove(inviteId);
+      setInvites(prev => prev.filter(i => i.id !== inviteId));
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to cancel invite');
+    } finally {
+      setRemovingInvite(null);
+    }
+  }
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-8">
       <div className="max-w-lg">
-        <h2 className="text-sm font-semibold text-gray-200 mb-6">Boards</h2>
-        <div className="space-y-1 mb-4">
-          {active.map(p => (
-            <div key={p.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-base"
-                style={{ background: (p.color || '#6366f1') + '20', border: `1px solid ${(p.color || '#6366f1')}30` }}>
-                {p.emoji || '📋'}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-200 truncate">{p.name}</p>
-                {p.client_name && <p className="text-xs text-gray-500 truncate">{p.client_name}</p>}
-              </div>
-              {p.client_path && (
-                <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${
-                  p.path_exists
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                }`}>
-                  {p.path_exists ? 'connected' : 'missing'}
-                </span>
-              )}
-            </div>
-          ))}
-          {active.length === 0 && <p className="text-sm text-gray-600">No active boards.</p>}
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-semibold text-gray-200">Members</h2>
+          <span className="text-xs text-gray-500 font-mono">{users.length}</span>
+        </div>
+        <p className="text-xs text-gray-500 mb-6">All users in this workspace.</p>
+
+        {/* Filter */}
+        <div className="relative mb-4">
+          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+          <input
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="Filter by name or email…"
+            className="w-full bg-surface-2 border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+          />
         </div>
 
-        {archived.length > 0 && (
-          <button
-            onClick={() => setShowArchived(v => !v)}
-            className="flex items-center gap-1.5 text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
-          >
-            {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-            Archived ({archived.length})
-          </button>
-        )}
-        {showArchived && (
-          <div className="mt-2 space-y-1">
-            {archived.map(p => (
-              <div key={p.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 opacity-50">
-                <span className="text-base">{p.emoji || '📋'}</span>
-                <p className="text-sm text-gray-400 truncate">{p.name}</p>
+        {/* User list */}
+        <div className="space-y-1 mb-6">
+          {filteredUsers.length === 0 ? (
+            <p className="text-sm text-gray-600 text-center py-4">{filter ? 'No matching members' : 'No members yet'}</p>
+          ) : filteredUsers.map(u => {
+            const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+            const isSelf = u.id === currentUser?.id;
+            const isAdmin = superAdminEmails.has(u.email.toLowerCase());
+            const color = memberHashColor(u.email);
+            return (
+              <div key={u.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2">
+                {u.picture ? (
+                  <img src={u.picture} className="w-7 h-7 rounded-full ring-1 ring-border shrink-0" alt="" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                    style={{ background: color + '20', color, border: `1px solid ${color}30` }}>
+                    {(name?.[0] || u.email[0]).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-sm font-medium text-gray-200 truncate">{name || u.email}</p>
+                    {isSelf && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
+                    )}
+                    {isAdmin && (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
+                        <Crown size={8} /> Super
+                      </span>
+                    )}
+                  </div>
+                  {name && <p className="text-xs text-gray-500 truncate">{u.email}</p>}
+                </div>
               </div>
-            ))}
+            );
+          })}
+        </div>
+
+        {/* Pending invites */}
+        {!loadingInvites && invites.length > 0 && (
+          <div className="mb-6">
+            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">
+              Pending invites ({invites.length})
+            </p>
+            <div className="space-y-1">
+              {invites.map(inv => (
+                <div key={inv.id} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-surface-2 group">
+                  <div className="w-7 h-7 rounded-full bg-surface-3 border border-border flex items-center justify-center shrink-0">
+                    <Mail size={12} className="text-gray-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-300 truncate">{inv.email}</p>
+                    <p className="text-xs text-gray-600">Invite pending</p>
+                  </div>
+                  <button
+                    onClick={() => handleCancelInvite(inv.id)}
+                    disabled={removingInvite === inv.id}
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
+                    title="Cancel invite"
+                  >
+                    <X size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
+
+        {/* Invite form */}
+        <div>
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Invite member</p>
+          <form onSubmit={handleInvite} className="flex gap-2">
+            <div className="relative flex-1">
+              <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              <input
+                value={inviteEmail}
+                onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
+                placeholder="someone@example.com"
+                type="email"
+                className="w-full bg-surface-2 border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={inviting || !inviteEmail.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
+            >
+              <UserPlus size={13} />
+              {inviting ? '…' : 'Invite'}
+            </button>
+          </form>
+          {inviteError   && <p className="text-xs text-red-400 mt-1.5">{inviteError}</p>}
+          {inviteSuccess && <p className="text-xs text-green-400 mt-1.5">{inviteSuccess}</p>}
+        </div>
       </div>
     </div>
   );

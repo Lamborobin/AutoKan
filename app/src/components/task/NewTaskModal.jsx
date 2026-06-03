@@ -104,7 +104,7 @@ export default function NewTaskModal() {
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
               <option value="">Unassigned</option>
               {agents.filter(a => a.active).map(a => (
-                <option key={a.id} value={a.id}>{a.name} ({a.role})</option>
+                <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
           </div>

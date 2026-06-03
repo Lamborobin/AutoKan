@@ -109,6 +109,11 @@ export const createWorkspaceSlice = (set, get) => ({
     }
   },
 
+  async unarchiveProject(id) {
+    await projectsApi.unarchive(id);
+    set(s => ({ projects: s.projects.map(p => p.id === id ? { ...p, archived_at: null } : p) }));
+  },
+
   async deleteProject(id) {
     await projectsApi.delete(id);
     set(s => ({ projects: s.projects.filter(p => p.id !== id) }));
