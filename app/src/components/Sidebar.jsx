@@ -8,12 +8,16 @@ import BoardsModal from './shared/BoardsModal';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
 import { COLUMN } from '../constants/columns';
+import { MODELS } from '../constants/agents';
 
 function AgentPanel({ agent, onClose, onEdit }) {
   const { roles } = useStore();
   const agentRoles = (agent.role_ids || [])
     .map(id => roles.find(r => r.id === id))
     .filter(Boolean);
+  const columnRoles = agentRoles.filter(r => r.type === 'column_access');
+  const capabilityRoles = agentRoles.filter(r => r.type === 'permission');
+  const modelLabel = MODELS.find(m => m.value === agent.model)?.shortLabel || agent.model;
 
   return (
     <div className="mt-1 mb-2 mx-1 bg-surface-3 border border-border rounded-xl p-3 space-y-3">
@@ -35,9 +39,9 @@ function AgentPanel({ agent, onClose, onEdit }) {
         </div>
       </div>
 
-      {agent.is_template && (
+      {agent.created_from_template_id && (
         <span className="self-start text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
-          Template
+          From template
         </span>
       )}
 
@@ -47,17 +51,34 @@ function AgentPanel({ agent, onClose, onEdit }) {
 
       <div className="flex items-center gap-1.5">
         <Cpu size={10} className="text-gray-600 shrink-0" />
-        <span className="text-[10px] font-mono text-gray-600">{agent.model}</span>
+        <span className="text-[10px] font-mono text-gray-600">{modelLabel}</span>
       </div>
 
-      {agentRoles.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {agentRoles.map(role => (
-            <span key={role.id} className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
-              style={{ color: role.color, borderColor: role.color + '40', background: role.color + '18' }}>
-              {role.name}
-            </span>
-          ))}
+      {capabilityRoles.length > 0 && (
+        <div>
+          <p className="text-[10px] font-medium text-gray-500 mb-1">Capability</p>
+          <div className="flex flex-wrap gap-1">
+            {capabilityRoles.map(role => (
+              <span key={role.id} className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
+                style={{ color: role.color, borderColor: role.color + '40', background: role.color + '18' }}>
+                {role.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {columnRoles.length > 0 && (
+        <div>
+          <p className="text-[10px] font-medium text-gray-500 mb-1">Column access</p>
+          <div className="flex flex-wrap gap-1">
+            {columnRoles.map(role => (
+              <span key={role.id} className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
+                style={{ color: role.color, borderColor: role.color + '40', background: role.color + '18' }}>
+                {role.name}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -73,17 +94,6 @@ function AgentPanel({ agent, onClose, onEdit }) {
         </div>
       )}
 
-      <div>
-        <p className="text-[10px] font-medium text-gray-500 mb-1.5">Always loaded (global)</p>
-        <div className="space-y-1">
-          {['CLAUDE.md', 'README.md'].map(f => (
-            <div key={f} className="flex items-center gap-1.5 px-2 py-1.5 bg-surface-1 border border-border rounded-lg opacity-50">
-              <FileText size={10} className="text-gray-600 shrink-0" />
-              <span className="text-[10px] font-mono text-gray-600 truncate">{f}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
@@ -110,7 +120,7 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
             <p className="text-sm font-medium text-gray-300 truncate">{agent.name}</p>
             {showTemplateBadge && (
               <span
-                title={originTemplate ? `From template: ${originTemplate.name}${templateArchived ? ' (archived)' : ''}` : 'Template agent'}
+                title={originTemplate ? `Created from template: ${originTemplate.name}${templateArchived ? ' (archived)' : ''}` : 'Created from a template'}
                 className={`shrink-0 text-[8px] font-medium px-1 py-px rounded uppercase tracking-wide leading-none ${
                   templateArchived
                     ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
@@ -120,7 +130,6 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-600 truncate">{agent.role}</p>
         </div>
       </button>
     </div>

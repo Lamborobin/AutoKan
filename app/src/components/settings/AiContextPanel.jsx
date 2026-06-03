@@ -147,7 +147,7 @@ function VersionHistoryModal({ docKey, docLabel, onRestore, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-modal-backdrop="static">
       <div className="bg-surface-1 border border-border rounded-2xl shadow-2xl flex overflow-hidden"
         style={{ width: 780, height: 520 }}>
 
@@ -461,7 +461,7 @@ export default function AiContextPanel() {
 
       {/* ── Save confirmation modal ───────────────────────────────────────── */}
       {showConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-modal-backdrop="static">
           <div className="bg-surface-1 border border-border rounded-2xl w-96 shadow-2xl p-6 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-full bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">

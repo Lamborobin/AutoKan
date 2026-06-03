@@ -1,3 +1,11 @@
+import { DEFAULT_AGENT_MODEL, MODELS } from '../constants/agents';
+
+const DEFAULT_AGENT_MODEL_STORAGE_KEY = 'fa_default_agent_model';
+
+function normalizeAgentModel(value) {
+  return MODELS.some(model => model.value === value) ? value : DEFAULT_AGENT_MODEL;
+}
+
 export const createUiSlice = (set) => ({
   // ── State ─────────────────────────────────────────────────────
   selectedTask: null,
@@ -8,6 +16,7 @@ export const createUiSlice = (set) => ({
   editingAgent: null,
   currentPage: 'board',
   theme: localStorage.getItem('theme') || 'dark',
+  defaultAgentModel: normalizeAgentModel(localStorage.getItem(DEFAULT_AGENT_MODEL_STORAGE_KEY)),
   isDraggingAgent: false,
 
   // ── Actions ───────────────────────────────────────────────────
@@ -19,6 +28,11 @@ export const createUiSlice = (set) => ({
   setEditingAgent: (agent) => set({ editingAgent: agent }),
   setCurrentPage: (page) => set({ currentPage: page }),
   setDraggingAgent: (v) => set({ isDraggingAgent: v }),
+  setDefaultAgentModel(model) {
+    const defaultAgentModel = normalizeAgentModel(model);
+    localStorage.setItem(DEFAULT_AGENT_MODEL_STORAGE_KEY, defaultAgentModel);
+    set({ defaultAgentModel });
+  },
 
   setTheme(theme) {
     localStorage.setItem('theme', theme);

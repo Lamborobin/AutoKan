@@ -107,17 +107,15 @@ function seedProjects(db) {
 function seedAgentTemplates(db) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agent_templates
-      (id, name, description, model, color, suggested_role, system_prompt_content,
-       template_system_prompt, permissions, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, name, description, model, color, suggested_role,
+       template_system_prompt, permissions)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const t of agentTemplates.templates) {
     insert.run(
       t.id, t.name, t.description, t.model, t.color, t.role,
-      readInstructionFile(path.basename(t.personality_file || '')),
       t.template_system_prompt,
       JSON.stringify(t.permissions),
-      JSON.stringify(t.tags || []),
     );
   }
 }
@@ -150,57 +148,23 @@ function seedAgents(db) {
 
 // ── Instruction folder scaffolding ────────────────────────────────────────────
 
-// Demo content for the seeded board's context files. New boards scaffold with
-// blank placeholders instead — this richer text is demo-only (Velour).
-const SEED_CLIENT_MD = `# Client Context — ${TEST_CLIENT_NAME}
-
-${TEST_CLIENT_NAME} is the sample client that ships with AutoKan so the full flow works out of the box. Treat it as a small fashion / lifestyle brand that wants a clean, fast public website.
-
-Priorities
-- Modern, minimal design with strong product imagery
-- Fast load times and a good mobile experience
-- Accessible: readable contrast, keyboard navigation
-
-Tone
-- Polished and understated — let the products speak.
-
-> Demo content. Replace it with the real client's context, or clear it for a fresh board.
-`;
-
-const SEED_PROJECT_MD = `# Project Context — Public Website
-
-The public-facing website for ${TEST_CLIENT_NAME}, worked on in client/${TEST_CLIENT_NAME}/.
-
-Scope
-- Marketing pages (home, about, contact) and a product showcase
-- Reusable, well-structured components
-- Small, reviewable changes
-
-Conventions
-- Match the existing structure and styling already in client/${TEST_CLIENT_NAME}/
-- Confirm anything ambiguous before a large change
-
-> Demo content. Replace it with the real project's context, or clear it for a fresh board.
-`;
+// Demo content for the seeded board's context files — kept as editable markdown
+// in this folder (demo-client.md / demo-project.md) and read at seed time. New
+// boards scaffold blank placeholders instead; this richer text is demo-only.
+function readSeedDoc(filename) {
+  try { return fs.readFileSync(path.join(__dirname, filename), 'utf8'); }
+  catch { return null; }
+}
 
 function scaffoldInstructionFolders() {
   try { scaffoldSubscriptionInstructions(DEFAULT_SUB_ID); }
   catch (e) { console.warn('Could not scaffold subscription instructions:', e.message); }
 
-  try { scaffoldProjectInstructions(TEST_CLIENT_ID, DEFAULT_SUB_ID, SEED_CLIENT_MD, SEED_PROJECT_MD); }
+  try { scaffoldProjectInstructions(TEST_CLIENT_ID, DEFAULT_SUB_ID, readSeedDoc('demo-client.md'), readSeedDoc('demo-project.md')); }
   catch (e) { console.warn(`Could not scaffold instructions for ${TEST_CLIENT_ID}:`, e.message); }
 
   try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, null, null, true); }
   catch (e) { console.warn('Could not scaffold My Board instructions:', e.message); }
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function readInstructionFile(filename) {
-  const subPath  = path.join(__dirname, '../../../../instructions', DEFAULT_SUB_ID, filename);
-  const rootPath = path.join(__dirname, '../../../../instructions', filename);
-  try { return fs.readFileSync(subPath, 'utf8'); } catch { /* fall through */ }
-  try { return fs.readFileSync(rootPath, 'utf8'); } catch { return ''; }
 }
 
 module.exports = { seedDefaults };

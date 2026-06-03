@@ -127,7 +127,7 @@ export default function TaskDetail() {
 
   if (!selectedTask) return null;
   if (!task) return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center" data-modal-backdrop="static">
       <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
     </div>
   );
@@ -329,9 +329,7 @@ export default function TaskDetail() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-    >
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
       <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in overflow-hidden">
 
         {/* Header — editable title */}
@@ -947,7 +945,7 @@ export default function TaskDetail() {
 
             {/* Unsaved changes prompt — shown when user tries to open agent editor */}
             {pendingEditAgent && (
-              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" data-modal-backdrop="static">
                 <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
                   <div>
                     <h3 className="text-sm font-semibold text-gray-200">Unsaved changes</h3>

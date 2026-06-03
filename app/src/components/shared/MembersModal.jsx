@@ -41,7 +41,7 @@ export default function MembersModal({ onClose }) {
   const {
     user, users, isSuperAdmin,
     boardMembers, loadBoardMembers, addBoardMember, removeBoardMember, updateBoardMemberRoles,
-    teams, loadTeams, createTeam,
+    teams, loadTeams, createTeam, deleteTeam,
     roles,
     subscriptionAdmins,
   } = useStore();
@@ -72,6 +72,7 @@ export default function MembersModal({ onClose }) {
   const [newTeamName, setNewTeamName] = useState('');
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [showNewTeamForm, setShowNewTeamForm] = useState(false);
+  const [confirmDeleteTeam, setConfirmDeleteTeam] = useState(null);
 
   useEffect(() => { loadBoardMembers(); loadTeams(); }, []);
 
@@ -220,8 +221,23 @@ export default function MembersModal({ onClose }) {
     }
   }
 
+  // Empty team → delete immediately. Team with members → confirm, then archive.
+  async function handleDeleteTeam(team) {
+    if (team.member_count > 0 && confirmDeleteTeam !== team.id) {
+      setConfirmDeleteTeam(team.id);
+      return;
+    }
+    try {
+      await deleteTeam(team.id);
+    } catch (e) {
+      alert(e.response?.data?.error || 'Failed to delete team');
+    } finally {
+      setConfirmDeleteTeam(null);
+    }
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-modal-backdrop="static">
       <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[85vh] flex flex-col">
 
         {/* Header */}
@@ -480,20 +496,34 @@ export default function MembersModal({ onClose }) {
                 return (
                   <div key={team.id} className="border border-border rounded-xl overflow-hidden">
                     {/* Team header */}
-                    <button
-                      onClick={() => handleExpandTeam(team.id)}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-surface-3/50 transition-colors text-left"
-                    >
-                      <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
-                        style={{ background: team.color + '20', border: `1px solid ${team.color}40` }}>
-                        <span className="text-[10px] font-bold" style={{ color: team.color }}>{team.name[0]}</span>
-                      </div>
-                      <span className="text-sm font-medium text-gray-200 flex-1 truncate">{team.name}</span>
-                      <span className="text-xs text-gray-600 mr-2">{team.member_count} member{team.member_count !== 1 ? 's' : ''}</span>
-                      {expandedTeam === team.id
-                        ? <ChevronDown size={13} className="text-gray-500 shrink-0" />
-                        : <ChevronRight size={13} className="text-gray-500 shrink-0" />}
-                    </button>
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => handleExpandTeam(team.id)}
+                        className="flex-1 min-w-0 flex items-center gap-2 px-3 py-2.5 hover:bg-surface-3/50 transition-colors text-left"
+                      >
+                        <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                          style={{ background: team.color + '20', border: `1px solid ${team.color}40` }}>
+                          <span className="text-[10px] font-bold" style={{ color: team.color }}>{team.name[0]}</span>
+                        </div>
+                        <span className="text-sm font-medium text-gray-200 flex-1 truncate">{team.name}</span>
+                        <span className="text-xs text-gray-600">{team.member_count} member{team.member_count !== 1 ? 's' : ''}</span>
+                        {expandedTeam === team.id
+                          ? <ChevronDown size={13} className="text-gray-500 shrink-0" />
+                          : <ChevronRight size={13} className="text-gray-500 shrink-0" />}
+                      </button>
+                      {confirmDeleteTeam === team.id ? (
+                        <div className="flex items-center gap-1 px-2 shrink-0">
+                          <span className="text-[10px] text-amber-400 whitespace-nowrap">Archive ({team.member_count})?</span>
+                          <button onClick={() => handleDeleteTeam(team)} className="px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10 rounded transition-colors">Yes</button>
+                          <button onClick={() => setConfirmDeleteTeam(null)} className="px-1.5 py-0.5 text-[10px] text-gray-600 hover:text-gray-400 rounded transition-colors">No</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => handleDeleteTeam(team)} title={team.member_count > 0 ? 'Archive team (has members)' : 'Delete team'}
+                          className="p-2 mr-1 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0">
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
 
                     {/* Team members (expanded) */}
                     {expandedTeam === team.id && (

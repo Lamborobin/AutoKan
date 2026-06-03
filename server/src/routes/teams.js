@@ -43,11 +43,19 @@ router.patch('/:id', requireAuth, (req, res) => {
   res.json(db.prepare('SELECT * FROM teams WHERE id = ?').get(req.params.id));
 });
 
-// DELETE /api/teams/:id
+// DELETE /api/teams/:id — archive if it has members (preserve), hard-delete if empty
 router.delete('/:id', requireAuth, (req, res) => {
   const db = getDb();
+  const team = db.prepare('SELECT id FROM teams WHERE id = ?').get(req.params.id);
+  if (!team) return res.status(404).json({ error: 'Team not found' });
+
+  const memberCount = db.prepare('SELECT COUNT(*) AS c FROM team_members WHERE team_id = ?').get(req.params.id).c;
+  if (memberCount > 0) {
+    db.prepare('UPDATE teams SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+    return res.json({ archived: true });
+  }
   db.prepare('DELETE FROM teams WHERE id = ?').run(req.params.id);
-  res.json({ ok: true });
+  res.json({ deleted: true });
 });
 
 // GET /api/teams/:id/members

@@ -1,23 +1,19 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight, Lock, Unlock } from 'lucide-react';
+import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight } from 'lucide-react';
 import { useStore } from '../../store';
 import { MODELS, COLORS } from '../../constants/agents';
 
 const EMPTY_FORM = {
   name: '', description: '', model: 'claude-sonnet-4-5', color: '#6366f1',
-  system_prompt_content: '', template_system_prompt: '', tags: '',
+  template_system_prompt: '',
 };
 
 function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
   const [form, setForm] = useState({
     ...EMPTY_FORM,
     ...initial,
-    tags: Array.isArray(initial.tags) ? initial.tags.join(', ') : (initial.tags || ''),
     template_system_prompt: initial.template_system_prompt || '',
   });
-  const [editingBehaviourPrompt, setEditingBehaviourPrompt] = useState(
-    !!(initial.template_system_prompt)
-  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,9 +29,7 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
         description: form.description.trim() || undefined,
         model: form.model,
         color: form.color,
-        system_prompt_content: form.system_prompt_content,
-        template_system_prompt: editingBehaviourPrompt ? (form.template_system_prompt || null) : null,
-        tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        template_system_prompt: form.template_system_prompt.trim() || null,
       });
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to save');
@@ -91,66 +85,21 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
         </div>
       </div>
 
-      {/* System Prompt Content */}
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">System Prompt Content</label>
-        <p className="text-[10px] text-gray-600 mb-1.5">Markdown content that will prefill the system prompt when creating an agent from this template.</p>
-        <textarea
-          value={form.system_prompt_content}
-          onChange={e => set('system_prompt_content', e.target.value)}
-          placeholder={`# ${form.name || 'Agent Role'}\n\nYou are a...`}
-          rows={6}
-          className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-xs font-mono text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
-        />
-      </div>
-
-      {/* Template Behaviour Prompt */}
+      {/* Template Behaviour Prompt — optional, always editable */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <label className="text-xs font-medium text-gray-400">Template Behaviour Prompt</label>
-            <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
-              optional
-            </span>
-          </div>
-          {editingBehaviourPrompt ? (
-            <button type="button" onClick={() => { setEditingBehaviourPrompt(false); set('template_system_prompt', ''); }}
-              className="text-[10px] flex items-center gap-1 text-gray-600 hover:text-gray-400 transition-colors">
-              <Lock size={10} />
-              Remove
-            </button>
-          ) : (
-            <button type="button" onClick={() => setEditingBehaviourPrompt(true)}
-              className="text-[10px] flex items-center gap-1 text-gray-600 hover:text-accent transition-colors">
-              <Unlock size={10} />
-              Add behaviour prompt
-            </button>
-          )}
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-400">Behaviour Prompt</label>
+          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
+            optional
+          </span>
         </div>
-        {editingBehaviourPrompt ? (
-          <>
-            <p className="text-[10px] text-gray-600">A behavioral framework injected into agents created from this template (combined with the system prompt). Agents created from this template will show both prompts and a <span className="font-mono">T</span> badge.</p>
-            <textarea
-              value={form.template_system_prompt}
-              onChange={e => set('template_system_prompt', e.target.value)}
-              placeholder={`You are a ${form.name || 'specialist'}...\n\n**How you work:**\n- ...`}
-              rows={8}
-              className="w-full bg-surface-1 border border-accent/30 rounded-xl px-3 py-2.5 text-[11px] font-mono text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
-            />
-          </>
-        ) : (
-          <p className="text-[10px] text-gray-600 italic">No behaviour prompt. Agents created from this template will use only the system prompt.</p>
-        )}
-      </div>
-
-      {/* Tags */}
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Tags <span className="text-gray-600">(comma separated)</span></label>
-        <input
-          value={form.tags}
-          onChange={e => set('tags', e.target.value)}
-          placeholder="Planning, Management"
-          className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors"
+        <p className="text-[10px] text-gray-600">A behavioural framework injected into agents created from this template. Leave empty to skip.</p>
+        <textarea
+          value={form.template_system_prompt}
+          onChange={e => set('template_system_prompt', e.target.value)}
+          placeholder={`You are a ${form.name || 'specialist'}...\n\n**How you work:**\n- ...`}
+          rows={8}
+          className="w-full bg-surface-1 border border-border rounded-xl px-3 py-2.5 text-[11px] font-mono text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
         />
       </div>
 
@@ -265,16 +214,8 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
 
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-[10px] font-mono text-gray-600 bg-surface-1 border border-border px-2 py-0.5 rounded-md">
-          {MODELS.find(m => m.value === tpl.model)?.label.split(' — ')[0] || tpl.model}
+          {MODELS.find(m => m.value === tpl.model)?.shortLabel || tpl.model}
         </span>
-        {tpl.template_system_prompt && (
-          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
-            T · behaviour
-          </span>
-        )}
-        {tpl.tags.map(tag => (
-          <span key={tag} className="text-[10px] text-accent bg-accent/10 border border-accent/20 px-2 py-0.5 rounded-full">{tag}</span>
-        ))}
         {isArchived && (
           <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">archived</span>
         )}
@@ -303,9 +244,8 @@ export default function TemplatesModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-         onClick={e => e.target === e.currentTarget && setShowTemplates(false)}>
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col animate-slide-in">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
+      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
           <div>

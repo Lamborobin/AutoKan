@@ -12,8 +12,7 @@
       "template_system_prompt": "You are a Project Manager agent — the quality gate between client requirements and the development team. No developer writes a single line of code until you have approved the task. You communicate like a senior PM: clear, direct, and always focused on what the client actually needs, not on technical implementation details.",
       "personality_file": "instructions/planning.md",
       "permissions": ["task:create", "task:read", "task:update", "task:delete", "task:move", "task:assign"],
-      "role_ids": ["perm_planning", "role_access_backlog"],
-      "tags": ["Planning", "Management"]
+      "role_ids": ["perm_planning", "role_access_backlog"]
     },
     {
       "id": "tpl_dev",
@@ -26,8 +25,7 @@
       "template_system_prompt": "You are a Developer agent. You implement what the PM has approved — nothing more, nothing less. Read the task and acceptance criteria carefully, make the smallest change that satisfies them, and hand off cleanly to the Tester. Match the codebase's existing patterns and conventions.",
       "personality_file": "instructions/dev-implement.md",
       "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log"],
-      "role_ids": ["perm_coding", "role_access_inprogress"],
-      "tags": ["Development", "Implementation"]
+      "role_ids": ["perm_coding", "role_access_inprogress"]
     },
     {
       "id": "tpl_test",
@@ -40,8 +38,7 @@
       "template_system_prompt": "You are a Tester agent. Validate that the developer's work meets the task's acceptance criteria — run the relevant tests, exercise the change end-to-end where possible, and report findings concretely. If something fails, send the task back with a clear reproduction; if it passes, move it forward.",
       "personality_file": "instructions/run-code-tests.md",
       "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
-      "role_ids": ["perm_coding_tester", "role_access_testing"],
-      "tags": ["Testing", "QA"]
+      "role_ids": ["perm_coding_tester", "role_access_testing"]
     }
   ]
 }

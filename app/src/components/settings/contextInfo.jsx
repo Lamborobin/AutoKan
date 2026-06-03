@@ -12,42 +12,42 @@ const LAYERS = [
   {
     key: 'code',
     label: 'Code mechanics',
-    sub: 'events, tools, commands, dispatches, DB models, API routes... not editable by users but developers',
+    sub: 'How the system actually works — fixed, set by developers. Not editable here.',
     Icon: ShieldCheck,
     tone: 'immutable',
   },
   {
     key: 'runner',
     label: 'Runner prompts',
-    sub: 'server/src/services/runner-prompts/ — also not user-editable, but more flexible than code. For platform-level system instructions and reasoning context that the AI can pull on demand.',
+    sub: 'Built-in instructions for how agents carry out their work. System-owned, not user-editable.',
     Icon: Layers,
     tone: 'system',
   },
   {
     key: 'ai_context',
     label: 'AI Context',
-    sub: 'system-wide AI rules · docs/ — editable by superadmins, focused on more technical parts, more about how the AI should reason about the system and its own patterns',
+    sub: 'System-wide rules the AI follows on every board. Edited by admins.',
     Icon: BookOpen,
     tone: 'system',
   },
   {
     key: 'workspace',
     label: 'Workspace Context',
-    sub: 'workspace-wide personality · instructions/{sub}/ — additive personality/instructions cross workspace such as way of working for this client. Key details about the client etc. that applies to every board in the workspace',
+    sub: 'Shared by every board in this workspace — who the client is, how your team likes to work.',
     Icon: FolderTree,
     tone: 'personality/rules/domain-specific',
   },
   {
     key: 'board',
     label: 'Board Context',
-    sub: 'this board\'s personality · instructions/{sub}/{board}/ - personality and/or  specific to this board. For example, if this board is about a ecommerce webshop, you can add instructions about how to approach cart-related tasks, client preferences around the cart, test in Safari browser, etc.',
+    sub: 'For this board only — its domain, priorities, and board-specific preferences.',
     Icon: FileText,
     tone: 'personality/rules/domain-specific',
   },
   {
     key: 'agent',
     label: 'Template + Agent personality',
-    sub: 'the specific agent have specific areas of expertice focuses something that narrows it down or adds a personality trait from other agents for better distinction.',
+    sub: 'An individual agent\'s personality and area of focus.',
     Icon: Sparkles,
     tone: 'personality/specialization',
   },
@@ -106,20 +106,13 @@ export const CONTEXT_INFO = {
     body: (
       <>
         <p>
-          Sits at the most specific personality layer (above per-agent persona, below
-          workspace and system layers). Use this for board-specific rules, client
-          priorities, domain terminology — anything that should only apply to agents
-          running on this board.
+          Notes that apply to <span className="text-gray-300 font-medium">this board only</span> — its domain,
+          the client's priorities, and any preferences for how work here should be done. Agents read these
+          when planning and working on tasks on this board.
         </p>
         <p className="text-gray-500 italic">
-          Examples: "When working on the cart, always ask a human to confirm, before changing payment logic." ·
+          Examples: "When working on the cart, always ask a human before changing payment logic." ·
           "The client prefers concise commit messages." · "Always test in Safari."
-        </p>
-        <p>
-          <span className="text-gray-300 font-medium">Storage:</span>{' '}
-          <code className="text-[11px] bg-surface-0 px-1.5 py-0.5 rounded font-mono">
-            instructions/&#123;subscription&#125;/&#123;boardId&#125;/
-          </code>
         </p>
       </>
     ),
@@ -131,16 +124,14 @@ export const CONTEXT_INFO = {
     highlight: 'workspace',
     body: (
       <>
+        <p>
+          Notes shared by <span className="text-gray-300 font-medium">every board in this workspace</span> —
+          things like who the client is and how your team likes to work. Useful when the same guidance should
+          apply everywhere instead of repeating it on each board.
+        </p>
         <p className="text-gray-500 italic">
           Examples: "We use Clean Architecture — don't bypass the service layer." ·
           "Always ask before modifying database schemas." · "Prefer TypeScript for new files."
-        </p>
-        <p>
-          <span className="text-gray-300 font-medium">Storage:</span>{' '}
-          <code className="text-[11px] bg-surface-0 px-1.5 py-0.5 rounded font-mono">
-            instructions/&#123;subscription&#125;/
-          </code>
-          . Additive personality — missing files don't break agents.
         </p>
       </>
     ),

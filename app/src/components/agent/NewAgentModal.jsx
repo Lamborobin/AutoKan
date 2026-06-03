@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { X, Plus, LayoutTemplate } from 'lucide-react';
 import { useStore } from '../../store';
-import { instructionsApi } from '../../api';
 import {
-  useAgentForm,
+  useAgentForm, agentRolesValid,
   NameField, ModelField, ColorField,
-  SystemPromptField, TemplatePromptField, RoleField, MODELS,
+  TemplatePromptField, RoleField,
 } from './AgentForm';
 
 export default function NewAgentModal() {
@@ -14,9 +13,7 @@ export default function NewAgentModal() {
 
   const {
     form, set, generatedRole,
-    availableFiles,
-    newPrompt, setNewPromptField,
-    handleNameChange, resolvePersonalityFile, toggleRole,
+    handleNameChange, toggleRole,
   } = useAgentForm();
 
   const [saving, setSaving] = useState(false);
@@ -25,7 +22,7 @@ export default function NewAgentModal() {
   const activeTemplates = agentTemplates.filter(t => !t.archived_at);
 
   const roleConflict = generatedRole ? agents.some(a => a.role === generatedRole) : false;
-  const canSubmit = form.name.trim() && generatedRole && !roleConflict;
+  const canSubmit = form.name.trim() && generatedRole && !roleConflict && agentRolesValid(form.role_ids);
 
   function applyTemplate(templateId) {
     setSelectedTemplateId(templateId);
@@ -43,14 +40,6 @@ export default function NewAgentModal() {
     set('model', tpl.model);
     set('color', tpl.color);
     set('description', tpl.description || '');
-
-    // Pre-populate system prompt content in the "Create new" inline editor
-    if (tpl.system_prompt_content) {
-      setNewPromptField('active', true);
-      setNewPromptField('content', tpl.system_prompt_content);
-      const suggested = tpl.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/, '').slice(0, 60);
-      setNewPromptField('name', suggested);
-    }
 
     // is_template = true marks "this agent inherits a personality from a template".
     // We don't copy the template's prompt onto the agent — buildSystemPrompt fetches
@@ -70,13 +59,11 @@ export default function NewAgentModal() {
     setSaving(true);
     setError('');
     try {
-      const personalityFilePath = await resolvePersonalityFile();
       await createAgent({
         name: form.name.trim(),
         role: generatedRole,
         model: form.model,
         description: form.description,
-        personality_file: personalityFilePath,
         color: form.color,
         permissions: ['task:read'],
         created_from_template_id: selectedTemplateId || undefined,
@@ -92,8 +79,7 @@ export default function NewAgentModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-         onClick={e => e.target === e.currentTarget && setShowNewAgent(false)}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
       <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface-2 z-10">
           <h2 className="text-base font-semibold text-gray-100">New Agent</h2>
@@ -119,24 +105,15 @@ export default function NewAgentModal() {
               >
                 <option value="">— none —</option>
                 {activeTemplates.map(tpl => (
-                  <option key={tpl.id} value={tpl.id}>
-                    {tpl.name}{tpl.tags.length > 0 ? ` · ${tpl.tags.join(', ')}` : ''}
-                  </option>
+                  <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
                 ))}
               </select>
-              {selectedTemplateId && (() => {
-                const tpl = activeTemplates.find(t => t.id === selectedTemplateId);
-                return tpl?.description ? (
-                  <p className="text-[11px] text-gray-500 leading-relaxed">{tpl.description}</p>
-                ) : null;
-              })()}
             </div>
           )}
 
           <NameField
             value={form.name}
             onChange={handleNameChange}
-            generatedRole={generatedRole}
             roleConflict={roleConflict}
           />
 
@@ -155,14 +132,6 @@ export default function NewAgentModal() {
           <TemplatePromptField
             form={form}
             onChange={v => set('system_prompt', v)}
-          />
-
-          <SystemPromptField
-            personalityFile={form.personality_file}
-            onSelectFile={v => set('personality_file', v)}
-            availableFiles={availableFiles}
-            newPrompt={newPrompt}
-            setNewPromptField={setNewPromptField}
           />
 
           <ColorField value={form.color} onChange={v => set('color', v)} />

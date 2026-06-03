@@ -3,27 +3,22 @@ import { X, Save, Trash2, Archive, LayoutTemplate, Check, AlertCircle } from 'lu
 import { useStore } from '../../store';
 import { COLUMN } from '../../constants/columns';
 import {
-  useAgentForm,
-  NameField, ModelField, ColorField,
-  SystemPromptField, TemplatePromptField, RoleField,
+  useAgentForm, agentRolesValid,
+  ModelField, ColorField,
+  TemplatePromptField, RoleField,
 } from './AgentForm';
-import { instructionsApi } from '../../api';
 
 export default function EditAgentModal() {
   const { editingAgent, updateAgent, deleteAgent, archiveAgent, saveAgentAsTemplate, agentTemplates, setEditingAgent, tasks, roles, columns } = useStore();
   const agent = editingAgent;
 
   const {
-    form, set,
-    availableFiles,
-    newPrompt, setNewPromptField,
-    resolvePersonalityFile, toggleRole,
+    form, set, toggleRole,
   } = useAgentForm({
     name: agent.name,
     role: agent.role,
     model: agent.model,
     description: agent.description || '',
-    personality_file: agent.personality_file || '',
     color: agent.color,
     is_template: agent.is_template || false,
     system_prompt: agent.system_prompt || '',
@@ -76,12 +71,10 @@ export default function EditAgentModal() {
     setError('');
     setDisplacementWarning(null);
     try {
-      const personalityFilePath = await resolvePersonalityFile();
       const payload = {
         name: form.name.trim(),
         model: form.model,
         description: form.description,
-        personality_file: personalityFilePath,
         color: form.color,
         system_prompt: form.system_prompt || null,
         role_ids: form.role_ids,
@@ -97,7 +90,7 @@ export default function EditAgentModal() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || !agentRolesValid(form.role_ids)) return;
 
     // Check if column access roles were reduced → tasks may be displaced
     const displaced = getDisplacedTasks(form.role_ids);
@@ -135,16 +128,7 @@ export default function EditAgentModal() {
     if (!templateName.trim()) return;
     setSavingAsTemplate(true);
     try {
-      // Read current prompt file content if available
-      let system_prompt_content = '';
-      if (form.personality_file) {
-        try {
-          const resp = await instructionsApi.list();
-          // We don't have a read endpoint — pass empty, user can edit in template manager
-          system_prompt_content = '';
-        } catch {}
-      }
-      await saveAgentAsTemplate(agent.id, { name: templateName.trim(), system_prompt_content });
+      await saveAgentAsTemplate(agent.id, { name: templateName.trim() });
       setTemplateSaved(true);
       setShowSaveAsTemplate(false);
     } catch (err) {
@@ -155,8 +139,7 @@ export default function EditAgentModal() {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-         onClick={e => e.target === e.currentTarget && close()}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
       <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface-2 z-10">
           <div>
@@ -207,14 +190,6 @@ export default function EditAgentModal() {
           <TemplatePromptField
             form={form}
             onChange={v => set('system_prompt', v)}
-          />
-
-          <SystemPromptField
-            personalityFile={form.personality_file}
-            onSelectFile={v => set('personality_file', v)}
-            availableFiles={availableFiles}
-            newPrompt={newPrompt}
-            setNewPromptField={setNewPromptField}
           />
 
           <ColorField value={form.color} onChange={v => set('color', v)} />
@@ -342,7 +317,7 @@ export default function EditAgentModal() {
             <button type="button" onClick={close} className="btn-ghost flex-1 justify-center py-2">
               Cancel
             </button>
-            <button type="submit" disabled={saving || !form.name.trim()}
+            <button type="submit" disabled={saving || !form.name.trim() || !agentRolesValid(form.role_ids)}
               className="btn-primary flex-1 justify-center py-2 disabled:opacity-40">
               <Save size={14} />
               {saving ? 'Saving...' : 'Save'}

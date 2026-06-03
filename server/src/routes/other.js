@@ -28,12 +28,15 @@ function parseAgent(a) {
 // One perm_* capability per agent — the runner registry dispatches by
 // (capability, column), so two perm_* roles on one agent would make the
 // dispatch ambiguous. role_access_* entries can still be multiple.
-function validateOnePermPerAgent(roleIds) {
+function validateAgentRoles(roleIds) {
   if (!Array.isArray(roleIds)) return null;
   const perms = roleIds.filter(r => typeof r === 'string' && r.startsWith('perm_'));
+  if (perms.length === 0) return 'An agent needs exactly one capability — none selected.';
   if (perms.length > 1) {
-    return `An agent can have at most one perm_* capability. Got ${perms.length}: ${perms.join(', ')}. Pick one and use a separate agent for the other.`;
+    return `An agent can have only one capability. Got ${perms.length}: ${perms.join(', ')}. Pick one and use a separate agent for the other.`;
   }
+  const cols = roleIds.filter(r => typeof r === 'string' && r.startsWith('role_access_'));
+  if (cols.length === 0) return 'An agent needs at least one column (or All Columns).';
   return null;
 }
 
@@ -56,7 +59,6 @@ function parseTemplate(t) {
   return {
     ...t,
     permissions: JSON.parse(t.permissions || '[]'),
-    tags: JSON.parse(t.tags || '[]'),
   };
 }
 
@@ -89,7 +91,7 @@ agentsRouter.post('/', (req, res) => {
   } = req.body;
   if (!name || !role) return res.status(400).json({ error: 'name and role are required' });
 
-  const permErr = validateOnePermPerAgent(req.body.role_ids);
+  const permErr = validateAgentRoles(req.body.role_ids || []);
   if (permErr) return res.status(400).json({ error: permErr });
 
   // Uniqueness is per-project (same role name is allowed on different boards)
@@ -129,7 +131,7 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(req.params.id);
   if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-  const { name, system_prompt_content = '' } = req.body;
+  const { name } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const id = 'tpl_' + uuidv4().replace(/-/g, '').slice(0, 12);
@@ -145,10 +147,10 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
   }
 
   db.prepare(`
-    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, permissions, tags, source_agent_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', ?)
+    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, template_system_prompt, permissions, source_agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, name, agent.description, agent.model, agent.color, agent.role,
-    system_prompt_content, snapshotPrompt,
+    snapshotPrompt,
     agent.permissions, agent.id);
 
   // Mark the source agent as is_template so it shows the T badge immediately
@@ -171,7 +173,7 @@ agentsRouter.patch('/:id', (req, res) => {
   const { name, model, description, permissions, color, active, personality_file, system_prompt, role_ids } = req.body;
 
   if (role_ids !== undefined) {
-    const permErr = validateOnePermPerAgent(role_ids);
+    const permErr = validateAgentRoles(role_ids);
     if (permErr) return res.status(400).json({ error: permErr });
   }
 
@@ -702,18 +704,17 @@ agentTemplatesRouter.post('/', (req, res) => {
   const db = getDb();
   const {
     name, description, model = 'claude-sonnet-4-5', color = '#6366f1',
-    suggested_role, system_prompt_content = '', template_system_prompt,
-    permissions = [], tags = [],
+    suggested_role, template_system_prompt, permissions = [],
   } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const id = 'tpl_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, permissions, tags)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, description, model, color, suggested_role, system_prompt_content,
+    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, template_system_prompt, permissions)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, description, model, color, suggested_role,
     template_system_prompt || null,
-    JSON.stringify(permissions), JSON.stringify(tags));
+    JSON.stringify(permissions));
 
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(id);
   res.status(201).json(parseTemplate(tpl));
@@ -728,19 +729,17 @@ agentTemplatesRouter.patch('/:id', (req, res) => {
   const tpl = db.prepare('SELECT * FROM agent_templates WHERE id = ?').get(req.params.id);
   if (!tpl) return res.status(404).json({ error: 'Template not found' });
 
-  const { name, description, model, color, suggested_role, system_prompt_content, template_system_prompt, permissions, tags } = req.body;
+  const { name, description, model, color, suggested_role, template_system_prompt, permissions } = req.body;
   const allowed = {};
   if (name !== undefined) allowed.name = name;
   if (description !== undefined) allowed.description = description;
   if (model !== undefined) allowed.model = model;
   if (color !== undefined) allowed.color = color;
   if (suggested_role !== undefined) allowed.suggested_role = suggested_role;
-  if (system_prompt_content !== undefined) allowed.system_prompt_content = system_prompt_content;
   if (Object.prototype.hasOwnProperty.call(req.body, 'template_system_prompt')) {
     allowed.template_system_prompt = template_system_prompt ?? null;
   }
   if (permissions !== undefined) allowed.permissions = JSON.stringify(permissions);
-  if (tags !== undefined) allowed.tags = JSON.stringify(tags);
 
   if (Object.keys(allowed).length === 0) return res.status(400).json({ error: 'Nothing to update' });
 

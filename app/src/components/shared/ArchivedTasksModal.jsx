@@ -36,8 +36,7 @@ export default function ArchivedTasksModal({ onClose }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
-      onClick={e => e.target === e.currentTarget && onClose()}
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static"
     >
       <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-xl max-h-[80vh] flex flex-col animate-slide-in">
         {/* Header */}

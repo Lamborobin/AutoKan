@@ -446,7 +446,8 @@ export const createBoardSlice = (set, get) => ({
   },
 
   async deleteTeam(id) {
-    await teamsApi.delete(id);
+    const res = await teamsApi.delete(id);
     set(s => ({ teams: s.teams.filter(t => t.id !== id) }));
+    return res;
   },
 });
