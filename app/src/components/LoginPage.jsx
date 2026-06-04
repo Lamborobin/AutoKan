@@ -57,7 +57,7 @@ export default function LoginPage({ inviteToken }) {
       </div>
 
       {/* ── Jumbo hero ── */}
-      <div className="relative z-10 flex flex-col items-start sm:items-center justify-center pt-14 pb-10 px-4 sm:px-4">
+      <div className="relative z-10 flex flex-col items-center justify-center pt-14 pb-10 px-4">
         <div className="relative flex items-center justify-center w-28 h-28 mb-5">
           <div className="absolute inset-0 rounded-full animate-spin-reverse pointer-events-none"
             style={{ border: '1px dashed rgba(99,102,241,0.28)', transform: 'scale(1.55)' }} />
@@ -166,26 +166,20 @@ export default function LoginPage({ inviteToken }) {
         </div>
 
         {/* ── Right: product preview ── */}
-        <div className="hidden lg:flex flex-1 min-h-[420px] group">
-          <div className="
-            w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden
-            relative flex items-center justify-center backdrop-blur-sm
-            transition-all duration-300
-            hover:bg-white/[0.04] hover:border-white/[0.1] hover:shadow-[0_0_50px_rgba(99,102,241,0.1)]
-          ">
-            <div className="absolute inset-0"
-              style={{ background: 'radial-gradient(ellipse at 60% 40%, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.05) 40%, transparent 70%)' }}
-            />
-            <div className="relative z-10 flex flex-col items-center gap-3 text-center px-8">
-              <div className="w-12 h-12 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-1
-                transition-all duration-300 group-hover:bg-white/[0.08] group-hover:border-white/[0.14]">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(99,102,241,0.6)" strokeWidth="1.5">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-              </div>
-              <p className="text-base font-medium text-gray-500 transition-colors duration-300 group-hover:text-gray-400">Product preview</p>
-              <p className="text-sm text-gray-600 transition-colors duration-300 group-hover:text-gray-500">GIF / video goes here</p>
-            </div>
+        <div className="hidden lg:flex flex-1 min-h-[420px]">
+          <div className="w-full border border-white/[0.06] rounded-2xl overflow-hidden relative">
+            <video
+              aria-hidden="true"
+              tabIndex={-1}
+              className="w-full h-full object-cover"
+              autoPlay
+              loop
+              playsInline
+              muted
+            >
+              <source src="https://media.w3.org/2010/05/video/movie_300.webm" type="video/webm" />
+              <source src="https://media.w3.org/2010/05/video/movie_300.mp4" type="video/mp4" />
+            </video>
           </div>
         </div>
 
