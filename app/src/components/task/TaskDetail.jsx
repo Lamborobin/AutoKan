@@ -9,7 +9,7 @@ import { PRIORITIES, COMPLEXITIES, PRIORITY_COLORS, PM_STATUS, HUMAN_STATUS, LOG
 import { COLUMN } from '../../constants/columns';
 
 export default function TaskDetail() {
-  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent } = useStore();
+  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent } = useStore();
   const [task, setTask] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -937,7 +937,13 @@ export default function TaskDetail() {
                 className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-accent disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 <option value="">Unassigned</option>
-                {agents.filter(a => a.active).map(a => (
+                {agents.filter(a => {
+                  if (!a.active) return false;
+                  const coveringRoles = roles.filter(r => r.type === 'column_access' && (r.allowed_column_ids || []).includes(task.column_id));
+                  if (coveringRoles.length === 0) return true;
+                  const roleIds = a.role_ids || [];
+                  return roleIds.includes('role_access_any') || coveringRoles.some(r => roleIds.includes(r.id));
+                }).map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
               </select>

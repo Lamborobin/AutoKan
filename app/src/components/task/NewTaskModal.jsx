@@ -5,7 +5,7 @@ import { PRIORITIES, COMPLEXITIES, PRIORITY, COMPLEXITY } from '../../constants/
 import { COLUMN } from '../../constants/columns';
 
 export default function NewTaskModal() {
-  const { agents, createTask, setShowNewTask } = useStore();
+  const { agents, roles, createTask, setShowNewTask } = useStore();
   const defaultPlanningAgent = agents.find(a => a.active !== 0 && Array.isArray(a.role_ids) && a.role_ids.includes('perm_planning'));
   const [form, setForm] = useState({
     title: '', description: '', priority: PRIORITY.MEDIUM, complexity: COMPLEXITY.MEDIUM,
@@ -103,7 +103,13 @@ export default function NewTaskModal() {
             <select value={form.assigned_agent_id} onChange={e => set('assigned_agent_id', e.target.value)}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
               <option value="">Unassigned</option>
-              {agents.filter(a => a.active).map(a => (
+              {agents.filter(a => {
+                if (!a.active) return false;
+                const coveringRoles = roles.filter(r => r.type === 'column_access' && (r.allowed_column_ids || []).includes(COLUMN.BACKLOG));
+                if (coveringRoles.length === 0) return true;
+                const roleIds = a.role_ids || [];
+                return roleIds.includes('role_access_any') || coveringRoles.some(r => roleIds.includes(r.id));
+              }).map(a => (
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>

@@ -78,25 +78,18 @@ export default function LoginPage({ inviteToken }) {
               }}
             />
 
-            {/* Orbiting dot 1 — CW */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ transform: 'scale(1.28)' }}>
+            {/* Orbiting dot 1 — CW, on the dashed ring */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="animate-orbit-dot">
                 <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_6px_2px_rgba(99,102,241,0.8)]" />
               </div>
             </div>
 
-            {/* Orbiting dot 2 — CCW, larger orbit */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ transform: 'scale(1.55)' }}>
-              <div className="animate-orbit-dot-rev" style={{ animationDelay: '-4s' }}>
-                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 shadow-[0_0_5px_2px_rgba(139,92,246,0.7)]" />
-              </div>
-            </div>
-
-            {/* The hero image — floats gently */}
+            {/* The hero image — glow breathes */}
             <img
               src={heroImg}
               alt="AutoKan"
-              className="w-full h-full object-contain animate-float relative z-10 drop-shadow-[0_0_24px_rgba(99,102,241,0.5)]"
+              className="w-full h-full object-contain animate-logo-glow relative z-10"
             />
           </div>
 

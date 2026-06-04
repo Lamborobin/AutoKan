@@ -28,10 +28,9 @@ export default {
         'spin-slow':      'spinSlow 16s linear infinite',
         'spin-reverse':   'spinReverse 22s linear infinite',
         'pulse-glow':     'pulseGlow 3.5s ease-in-out infinite',
-        'float':          'float 5s ease-in-out infinite',
-        'shimmer':        'shimmer 4s linear infinite',
+        'logo-glow':      'logoGlow 3s ease-in-out infinite',
+        'shimmer':        'shimmer 20s linear infinite',
         'orbit-dot':      'orbitDot 8s linear infinite',
-        'orbit-dot-rev':  'orbitDotRev 12s linear infinite',
       },
       keyframes: {
         slideIn:      { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
@@ -42,21 +41,17 @@ export default {
           '0%, 100%': { opacity: '0.35', transform: 'scale(0.92)' },
           '50%':      { opacity: '0.65', transform: 'scale(1.08)' },
         },
-        float: {
-          '0%, 100%': { transform: 'translateY(0px)' },
-          '50%':      { transform: 'translateY(-10px)' },
+        logoGlow: {
+          '0%, 100%': { filter: 'drop-shadow(0 0 16px rgba(99,102,241,0.4))' },
+          '50%':      { filter: 'drop-shadow(0 0 36px rgba(139,92,246,0.75))' },
         },
         shimmer: {
           '0%':   { backgroundPosition: '-300% center' },
           '100%': { backgroundPosition: '300% center' },
         },
         orbitDot: {
-          from: { transform: 'rotate(0deg) translateX(52px) rotate(0deg)' },
-          to:   { transform: 'rotate(360deg) translateX(52px) rotate(-360deg)' },
-        },
-        orbitDotRev: {
-          from: { transform: 'rotate(0deg) translateX(70px) rotate(0deg)' },
-          to:   { transform: 'rotate(-360deg) translateX(70px) rotate(360deg)' },
+          from: { transform: 'rotate(0deg) translateX(71.5px) rotate(0deg)' },
+          to:   { transform: 'rotate(360deg) translateX(71.5px) rotate(-360deg)' },
         },
       }
     },
