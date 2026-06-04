@@ -5,6 +5,7 @@ const { requirePermission, attachAgent, requireAuth } = require('../middleware/a
 const { triggerRunner } = require('../services/agentRunner');
 const { broadcast } = require('../sse');
 const { sendMentionEmail } = require('../services/emailService');
+const { createNotification } = require('../services/notificationsService');
 
 const router = express.Router();
 
@@ -738,11 +739,26 @@ router.post('/:id/comments', requireAuth, (req, res) => {
     const commenterName = `${comment.first_name || ''} ${comment.last_name || ''}`.trim() || comment.email;
     const excerpt = content.replace(/@\[([^\]]+)\]\([^)]+\)/g, '@$1').slice(0, 200);
     for (const userId of mentionedUserIds) {
-      const mentionedUser = db.prepare('SELECT email FROM users WHERE id = ?').get(userId);
-      if (mentionedUser?.email) {
-        console.log(`[mention] Sending email to ${mentionedUser.email} for mention in "${task.title}"`);
+      if (userId === req.user.sub) continue; // don't notify yourself
+      const mentionedUser = db.prepare('SELECT email, notifications_email FROM users WHERE id = ?').get(userId);
+      if (!mentionedUser) continue;
+
+      const { delivered, deduplicated } = createNotification(
+        userId,
+        'mention',
+        `${commenterName} mentioned you in "${task.title}"`,
+        excerpt,
+        `?task=${task.id}`
+      );
+
+      if (deduplicated) {
+        console.log(`[mention] Skipped — already notified ${userId} about task ${task.id} within 5 min`);
+      } else if (delivered) {
+        console.log(`[mention] In-app notification delivered to ${userId}`);
+      } else if (mentionedUser.notifications_email && mentionedUser.email) {
+        // Email fallback: user is offline and email notifications are enabled
+        console.log(`[mention] User offline — sending email to ${mentionedUser.email}`);
         sendMentionEmail(mentionedUser.email, commenterName, task.title, excerpt, task.id)
-          .then(() => console.log(`[mention] Email sent OK to ${mentionedUser.email}`))
           .catch(err => console.error(`[mention] Email FAILED to ${mentionedUser.email}:`, err.message));
       }
     }

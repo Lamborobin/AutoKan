@@ -176,4 +176,10 @@ export const commentsApi = {
   remove: (taskId, commentId) => api.delete(`/tasks/${taskId}/comments/${commentId}`).then(r => r.data),
 };
 
+export const notificationsApi = {
+  list: () => api.get('/notifications').then(r => r.data),
+  markRead: (id) => api.patch(`/notifications/${id}/read`).then(r => r.data),
+  markAllRead: () => api.post('/notifications/read-all').then(r => r.data),
+};
+
 export default api;

@@ -28,7 +28,7 @@ export const createAuthSlice = (set, get) => ({
     try {
       const { user } = await authApi.me();
       set({ user, authLoading: false, isSuperAdmin: user.isSuperAdmin || false });
-      await Promise.all([get().loadProjects(), get().fetchUsers()]);
+      await Promise.all([get().loadProjects(), get().fetchUsers(), get().loadNotifications()]);
       await get().loadSubscription();
       await get().loadClients();
     } catch {
@@ -44,7 +44,7 @@ export const createAuthSlice = (set, get) => ({
       const { token, user } = await authApi.google(credential, inviteToken || undefined);
       localStorage.setItem('fa_token', token);
       set({ user, inviteToken: null, isSuperAdmin: user.isSuperAdmin || false });
-      await Promise.all([get().loadProjects(), get().fetchUsers()]);
+      await Promise.all([get().loadProjects(), get().fetchUsers(), get().loadNotifications()]);
       await get().loadSubscription();
       await get().loadClients();
     } catch (e) {

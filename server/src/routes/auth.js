@@ -179,7 +179,7 @@ router.get('/me', (req, res) => {
     const token = authHeader.slice(7);
     const decoded = jwt.verify(token, JWT_SECRET);
     const db = getDb();
-    const user = db.prepare('SELECT id, email, first_name, last_name, picture, company_name FROM users WHERE id = ?').get(decoded.sub);
+    const user = db.prepare('SELECT id, email, first_name, last_name, picture, company_name, notifications_inapp, notifications_email FROM users WHERE id = ?').get(decoded.sub);
     if (!user) return res.status(401).json({ error: 'User not found' });
     // Check superadmin status
     const isAdmin = db.prepare('SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1').get(user.id);
@@ -199,14 +199,24 @@ router.patch('/profile', (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     const db = getDb();
 
-    const { first_name, last_name, company_name } = req.body;
+    const { first_name, last_name, company_name, notifications_inapp, notifications_email } = req.body;
     db.prepare(`
-      UPDATE users SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name),
-      company_name = COALESCE(?, company_name), updated_at = CURRENT_TIMESTAMP
+      UPDATE users SET
+        first_name = COALESCE(?, first_name),
+        last_name = COALESCE(?, last_name),
+        company_name = COALESCE(?, company_name),
+        notifications_inapp = CASE WHEN ? IS NOT NULL THEN ? ELSE notifications_inapp END,
+        notifications_email = CASE WHEN ? IS NOT NULL THEN ? ELSE notifications_email END,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(first_name ?? null, last_name ?? null, company_name ?? null, decoded.sub);
+    `).run(
+      first_name ?? null, last_name ?? null, company_name ?? null,
+      notifications_inapp ?? null, notifications_inapp ?? null,
+      notifications_email ?? null, notifications_email ?? null,
+      decoded.sub
+    );
 
-    const user = db.prepare('SELECT id, email, first_name, last_name, picture, company_name FROM users WHERE id = ?').get(decoded.sub);
+    const user = db.prepare('SELECT id, email, first_name, last_name, picture, company_name, notifications_inapp, notifications_email FROM users WHERE id = ?').get(decoded.sub);
     res.json({ user });
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });

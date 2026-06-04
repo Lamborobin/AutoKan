@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
 import brandImg from '../assets/images/brand.png';
 import ArchivedTasksModal from './shared/ArchivedTasksModal';
 import InviteModal from './shared/InviteModal';
 import MembersModal from './shared/MembersModal';
 import BoardsModal from './shared/BoardsModal';
+import NotificationPopover from './shared/NotificationPopover';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
 import { COLUMN } from '../constants/columns';
@@ -351,7 +352,8 @@ function UserProfileModal({ onClose }) {
   const [activeSection, setActiveSection] = useState(null);
   const [company, setCompany] = useState(user?.company_name || '');
   const [saving, setSaving] = useState(false);
-  const [notifications, setNotifications] = useState(true);
+  const [notifInApp, setNotifInApp] = useState(user?.notifications_inapp !== 0);
+  const [notifEmail, setNotifEmail] = useState(user?.notifications_email !== 0);
   const [language, setLanguage] = useState('English');
 
   const displayName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.email : '';
@@ -543,14 +545,36 @@ function UserProfileModal({ onClose }) {
           <>
             <SectionHeader onBack={() => setActiveSection(null)} title="Notifications" onClose={onClose} />
             <div className="px-3 py-2">
-              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Alerts</p>
+              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Channels</p>
               <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-yellow-500/15 flex items-center justify-center shrink-0">
                   <Bell size={15} className="text-yellow-400" />
                 </div>
-                <span className="flex-1 text-sm text-gray-300">Enable notifications</span>
-                <Toggle on={notifications} onToggle={() => setNotifications(n => !n)} />
+                <span className="flex-1 text-sm text-gray-300">In-app</span>
+                <Toggle
+                  on={notifInApp}
+                  onToggle={() => {
+                    const next = !notifInApp;
+                    setNotifInApp(next);
+                    updateProfile({ notifications_inapp: next ? 1 : 0 }).catch(() => {});
+                  }}
+                />
               </div>
+              <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+                  <Globe size={15} className="text-blue-400" />
+                </div>
+                <span className="flex-1 text-sm text-gray-300">Email</span>
+                <Toggle
+                  on={notifEmail}
+                  onToggle={() => {
+                    const next = !notifEmail;
+                    setNotifEmail(next);
+                    updateProfile({ notifications_email: next ? 1 : 0 }).catch(() => {});
+                  }}
+                />
+              </div>
+              <p className="px-3 pt-3 pb-1 text-xs text-gray-600">Email sends when you're offline. In-app delivers live.</p>
             </div>
           </>
         )}
@@ -624,7 +648,7 @@ const NAV_ITEMS = [ // kept for reference; no longer rendered as dropdown
 ];
 
 export default function Sidebar() {
-  const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage, boardMembers, user, projects, currentProjectId } = useStore();
+  const { agents, tasks, archivedTasks, agentTemplates, setShowNewAgent, setShowNewTask, setShowTemplates, setEditingAgent, currentPage, setCurrentPage, boardMembers, user, projects, currentProjectId, unreadCount } = useStore();
   const currentProject = projects.find(p => p.id === currentProjectId);
   const isClientBoard = !!currentProject?.client_id;
   const [agentsOpen, setAgentsOpen] = useState(false);
@@ -633,7 +657,10 @@ export default function Sidebar() {
   const [showArchivedModal, setShowArchivedModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const bellRef = useRef(null);
   const humanActionCount = tasks.filter(t => t.column_id === COLUMN.HUMAN_ACTION).length;
+  const closeNotifications = useCallback(() => setShowNotifications(false), []);
 
   function toggleAgent(agentId) {
     setSelectedAgentId(prev => prev === agentId ? null : agentId);
@@ -643,18 +670,34 @@ export default function Sidebar() {
     <>
       <aside className="w-64 bg-surface-1 border-r border-border flex flex-col shrink-0">
         {/* Header — brand + nav */}
-        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2">
+        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2 relative">
           <div className="flex items-center justify-between">
             <img src={brandImg} alt="AutoKan" className="h-6 w-auto object-contain" />
-            <button
-              onClick={() => setCurrentPage('settings')}
-              className={`p-2 rounded-lg transition-colors ${currentPage === 'settings' ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
-              title="Settings"
-            >
-              <Settings size={18} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                ref={bellRef}
+                onClick={() => setShowNotifications(v => !v)}
+                className={`relative p-2 rounded-lg transition-colors ${showNotifications ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
+                title="Notifications"
+              >
+                <Bell size={18} />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-accent" />
+                )}
+              </button>
+              <button
+                onClick={() => setCurrentPage('settings')}
+                className={`p-2 rounded-lg transition-colors ${currentPage === 'settings' ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
+                title="Settings"
+              >
+                <Settings size={18} />
+              </button>
+            </div>
           </div>
           <ProjectSwitcher />
+          {showNotifications && (
+            <NotificationPopover anchorRef={bellRef} onClose={closeNotifications} />
+          )}
         </div>
 
         {/* Actions */}

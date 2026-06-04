@@ -391,6 +391,10 @@ export const createBoardSlice = (set, get) => ({
         get().load();
         break;
       }
+      case 'notification': {
+        get().addNotification(data);
+        break;
+      }
     }
   },
 

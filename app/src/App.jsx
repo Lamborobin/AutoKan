@@ -97,7 +97,7 @@ export default function App() {
       const handle = (e) => {
         try { applySSEEvent(e.type, JSON.parse(e.data)); } catch {}
       };
-      ['task_updated', 'task_archived', 'task_deleted', 'reload'].forEach(evt =>
+      ['task_updated', 'task_archived', 'task_deleted', 'reload', 'notification'].forEach(evt =>
         es.addEventListener(evt, handle)
       );
 

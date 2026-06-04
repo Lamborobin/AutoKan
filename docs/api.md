@@ -232,6 +232,16 @@ Backend for the secret-request flow (the management UI is not yet built). When a
 
 ---
 
+## Notifications
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | /api/notifications | List notifications for current user (newest first, max 50) |
+| PATCH | /api/notifications/:id/read | Mark one notification as read |
+| POST | /api/notifications/read-all | Mark all unread notifications as read |
+
+---
+
 ## Invites
 
 | Method | Endpoint | Description |

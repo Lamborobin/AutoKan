@@ -40,6 +40,8 @@ function applySchema(db) {
       last_name TEXT,
       picture TEXT,
       company_name TEXT,
+      notifications_inapp INTEGER DEFAULT 1,
+      notifications_email INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -276,6 +278,18 @@ function applySchema(db) {
       accepted_at DATETIME,
       added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(project_id, email)
+    );
+
+    -- ── Notifications ────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      link TEXT,
+      read_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     -- ── Triggers (updated_at) ────────────────────────────────

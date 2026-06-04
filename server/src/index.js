@@ -14,6 +14,7 @@ const { agentsRouter, columnsRouter, secretsRouter, instructionsRouter, agentTem
 const subscriptionsRouter = require('./routes/subscriptions');
 const clientsRouter = require('./routes/clients');
 const docsRouter = require('./routes/docs');
+const notificationsRouter = require('./routes/notifications');
 const { addClient } = require('./sse');
 
 const app = express();
@@ -43,9 +44,10 @@ app.use('/api/teams', teamsRouter);
 app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/docs', docsRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // SSE — real-time push to connected browsers
-app.get('/api/events', (req, res) => addClient(res));
+app.get('/api/events', (req, res) => addClient(res, req.user?.sub));
 
 // Health check
 app.get('/api/health', (req, res) => {
