@@ -31,6 +31,10 @@ export default {
         'logo-glow':      'logoGlow 3s ease-in-out infinite',
         'shimmer':        'shimmer 20s linear infinite',
         'orbit-dot':      'orbitDot 8s linear infinite',
+        'orbit-dot-sm':   'orbitDotSm 8s linear infinite',
+        'blob-1':         'blob1 24s ease-in-out infinite',
+        'blob-2':         'blob2 30s ease-in-out infinite',
+        'blob-3':         'blob3 20s ease-in-out infinite',
       },
       keyframes: {
         slideIn:      { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'translateY(0)' } },
@@ -42,16 +46,36 @@ export default {
           '50%':      { opacity: '0.65', transform: 'scale(1.08)' },
         },
         logoGlow: {
-          '0%, 100%': { filter: 'drop-shadow(0 0 16px rgba(99,102,241,0.4))' },
-          '50%':      { filter: 'drop-shadow(0 0 36px rgba(139,92,246,0.75))' },
+          '0%, 100%': { opacity: '0.45' },
+          '50%':      { opacity: '1' },
         },
         shimmer: {
           '0%':   { backgroundPosition: '-300% center' },
           '100%': { backgroundPosition: '300% center' },
         },
         orbitDot: {
-          from: { transform: 'rotate(0deg) translateX(71.5px) rotate(0deg)' },
-          to:   { transform: 'rotate(360deg) translateX(71.5px) rotate(-360deg)' },
+          from: { transform: 'rotate(0deg) translateX(55px) rotate(0deg)' },
+          to:   { transform: 'rotate(360deg) translateX(55px) rotate(-360deg)' },
+        },
+        orbitDotSm: {
+          from: { transform: 'rotate(0deg) translateX(32px) rotate(0deg)' },
+          to:   { transform: 'rotate(360deg) translateX(32px) rotate(-360deg)' },
+        },
+        blob1: {
+          '0%, 100%': { transform: 'translate(0px, 0px) scale(1)' },
+          '25%':      { transform: 'translate(70px, -90px) scale(1.06)' },
+          '50%':      { transform: 'translate(130px, 50px) scale(0.94)' },
+          '75%':      { transform: 'translate(-40px, 80px) scale(1.09)' },
+        },
+        blob2: {
+          '0%, 100%': { transform: 'translate(0px, 0px) scale(1)' },
+          '33%':      { transform: 'translate(-90px, 70px) scale(1.1)' },
+          '66%':      { transform: 'translate(80px, -60px) scale(0.91)' },
+        },
+        blob3: {
+          '0%, 100%': { transform: 'translate(0px, 0px) scale(1)' },
+          '40%':      { transform: 'translate(60px, 100px) scale(1.07)' },
+          '80%':      { transform: 'translate(-80px, -50px) scale(0.95)' },
         },
       }
     },

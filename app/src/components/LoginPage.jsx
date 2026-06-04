@@ -16,8 +16,8 @@ export default function LoginPage({ inviteToken }) {
         setInviteState({ valid: true, email: result.email });
       } else {
         const reasons = {
-          not_found: 'This invite link is invalid.',
-          expired: 'This invite link has expired. Ask for a new one.',
+          not_found:    'This invite link is invalid.',
+          expired:      'This invite link has expired. Ask for a new one.',
           already_used: 'This invite link has already been used.',
         };
         setInviteState({ error: reasons[result.reason] || 'This invite link is not valid.' });
@@ -27,155 +27,174 @@ export default function LoginPage({ inviteToken }) {
     });
   }, [inviteToken]);
 
-  const isInviteFlow = !!inviteToken;
-  const inviteValid = inviteState?.valid;
-  const inviteError = inviteState?.error;
+  // Left-align the Google button text once it renders into the DOM
+  useEffect(() => {
+    const apply = () => {
+      const btn = document.querySelector('.google-btn-wrap [role="button"]');
+      if (!btn) return false;
+      btn.style.textAlign = 'left';
+      return true;
+    };
+    if (apply()) return;
+    const observer = new MutationObserver(() => { if (apply()) observer.disconnect(); });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  const isInviteFlow  = !!inviteToken;
+  const inviteValid   = inviteState?.valid;
+  const inviteError   = inviteState?.error;
   const inviteLoading = inviteState?.loading;
 
   return (
-    <div className="min-h-screen bg-surface-0 flex flex-col items-center justify-center relative overflow-hidden px-4 py-8">
+    <div className="min-h-screen bg-[#080810] flex flex-col relative overflow-hidden">
 
-      {/* Background grid */}
-      <div className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px)',
-          backgroundSize: '40px 40px',
-        }}
-      />
-
-      {/* Large background glow blob — pulses */}
-      <div
-        className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] sm:w-[700px] sm:h-[700px] rounded-full pointer-events-none animate-pulse-glow"
-        style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, rgba(139,92,246,0.06) 40%, transparent 70%)' }}
-      />
-
-      <div className="relative z-10 flex flex-col items-center gap-8 sm:gap-10 w-full max-w-sm">
-
-        {/* ── Animated hero section ── */}
-        <div className="flex flex-col items-center gap-4">
-
-          {/* Icon + orbital rings */}
-          <div className="relative flex items-center justify-center w-28 h-28 sm:w-36 sm:h-36">
-
-            {/* Outer dashed orbit ring — spins CCW */}
-            <div
-              className="absolute inset-0 rounded-full animate-spin-reverse pointer-events-none"
-              style={{
-                border: '1px dashed rgba(99,102,241,0.25)',
-                transform: 'scale(1.55)',
-              }}
-            />
-
-            {/* Inner gradient ring — spins CW */}
-            <div
-              className="absolute inset-0 rounded-full animate-spin-slow pointer-events-none"
-              style={{
-                background: 'conic-gradient(from 0deg, rgba(99,102,241,0.6) 0%, rgba(139,92,246,0.4) 20%, transparent 50%, rgba(99,102,241,0.1) 80%, rgba(99,102,241,0.6) 100%)',
-                transform: 'scale(1.28)',
-                borderRadius: '50%',
-                mask: 'radial-gradient(transparent 88%, black 89%)',
-                WebkitMask: 'radial-gradient(transparent 88%, black 89%)',
-              }}
-            />
-
-            {/* Orbiting dot 1 — CW, on the dashed ring */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="animate-orbit-dot">
-                <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_6px_2px_rgba(99,102,241,0.8)]" />
-              </div>
-            </div>
-
-            {/* The hero image — glow breathes */}
-            <img
-              src={heroImg}
-              alt="AutoKan"
-              className="w-full h-full object-contain animate-logo-glow relative z-10"
-            />
-          </div>
-
-          {/* Title + subtitle */}
-          <div className="text-center">
-            {/* Animated shimmer title */}
-            <h1
-              className="text-2xl sm:text-3xl font-bold tracking-tight select-none animate-shimmer"
-              style={{
-                backgroundImage: 'linear-gradient(90deg, #a5b4fc 0%, #818cf8 20%, #c4b5fd 40%, #6366f1 60%, #a78bfa 80%, #a5b4fc 100%)',
-                backgroundSize: '300% auto',
-                backgroundClip: 'text',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                color: 'transparent',
-              }}
-            >
-              AutoKan
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-500 mt-1.5 tracking-wide">
-              Autonomous AI task orchestration
-            </p>
-          </div>
-        </div>
-
-        {/* ── Login card ── */}
-        <div className="w-full bg-surface-1 border border-border rounded-2xl p-6 sm:p-8 flex flex-col items-center gap-5 shadow-2xl">
-
-          {inviteLoading ? (
-            <div className="text-xs text-gray-500 py-2">Verifying invite…</div>
-          ) : inviteValid ? (
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 mb-3">
-                <span className="text-lg">🎉</span>
-              </div>
-              <h2 className="text-base font-semibold text-gray-200">You've been invited!</h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Sign in with the Google account for{' '}
-                <span className="text-gray-300 font-medium">{inviteState.email}</span>
-              </p>
-            </div>
-          ) : inviteError ? (
-            <div className="text-center w-full">
-              <h2 className="text-base font-semibold text-gray-200">Sign in to continue</h2>
-              <div className="mt-3 w-full px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 text-center">
-                {inviteError}
-              </div>
-            </div>
-          ) : (
-            <div className="text-center">
-              <h2 className="text-base font-semibold text-gray-200">Sign in to continue</h2>
-              <p className="text-xs text-gray-500 mt-1">Connect your Google account to access your boards</p>
-            </div>
-          )}
-
-          {authError && (
-            <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 text-center">
-              {authError}
-            </div>
-          )}
-
-          {!inviteLoading && (
-            <div className="w-full flex justify-center">
-              <GoogleLogin
-                onSuccess={({ credential }) => googleLogin(credential)}
-                onError={() => useStore.getState().setAuthError('Google sign-in failed. Please try again.')}
-                theme="filled_black"
-                shape="rectangular"
-                size="large"
-                text={isInviteFlow ? 'signin_with' : 'continue_with'}
-                width="280"
-              />
-            </div>
-          )}
-
-          <p className="text-[10px] text-gray-600 text-center leading-relaxed">
-            By signing in you agree to use this tool responsibly.<br />
-            Your data stays on your own server.
-          </p>
-        </div>
-
-        {/* Footer */}
-        <p className="text-[10px] text-gray-700">
-          AutoKan · Built for humans &amp; AI agents
-        </p>
+      {/* ── Aurora background blobs ── */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-20%] left-[-8%]  w-[640px] h-[640px] rounded-full bg-indigo-500/[0.16] blur-[90px] animate-blob-1" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
+        <div className="absolute bottom-[-15%] left-[20%] w-[560px] h-[560px] rounded-full bg-violet-600/[0.13] blur-[80px] animate-blob-2" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
+        <div className="absolute top-[10%] right-[-12%] w-[500px] h-[500px] rounded-full bg-blue-500/[0.11] blur-[75px] animate-blob-3" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
       </div>
+
+      {/* ── Jumbo hero ── */}
+      <div className="relative z-10 flex flex-col items-start sm:items-center justify-center pt-14 pb-10 px-4 sm:px-4">
+        <div className="relative flex items-center justify-center w-28 h-28 mb-5">
+          <div className="absolute inset-0 rounded-full animate-spin-reverse pointer-events-none"
+            style={{ border: '1px dashed rgba(99,102,241,0.28)', transform: 'scale(1.55)' }} />
+          <div className="absolute inset-0 rounded-full animate-spin-slow pointer-events-none"
+            style={{
+              background: 'conic-gradient(from 0deg, rgba(99,102,241,0.6) 0%, rgba(139,92,246,0.4) 20%, transparent 50%, rgba(99,102,241,0.1) 80%, rgba(99,102,241,0.6) 100%)',
+              transform: 'scale(1.28)', borderRadius: '50%',
+              mask: 'radial-gradient(transparent 88%, black 89%)',
+              WebkitMask: 'radial-gradient(transparent 88%, black 89%)',
+            }} />
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="animate-orbit-dot">
+              <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_6px_2px_rgba(99,102,241,0.8)]" />
+            </div>
+          </div>
+          {/* Glow layer — opacity only, fully GPU composited */}
+          <div
+            className="absolute inset-0 rounded-full animate-logo-glow pointer-events-none z-10"
+            style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.45) 0%, rgba(139,92,246,0.25) 50%, transparent 70%)', filter: 'blur(18px)' }}
+          />
+          <img src={heroImg} alt="AutoKan" className="w-full h-full object-contain relative z-20" />
+        </div>
+        <h1
+          className="text-3xl sm:text-4xl font-bold tracking-tight select-none animate-shimmer mb-3"
+          style={{
+            backgroundImage: 'linear-gradient(90deg, #a5b4fc 0%, #818cf8 20%, #c4b5fd 40%, #6366f1 60%, #a78bfa 80%, #a5b4fc 100%)',
+            backgroundSize: '300% auto',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            color: 'transparent',
+          }}
+        >AutoKan</h1>
+        <p className="text-base text-gray-500 tracking-wide">Autonomous AI task orchestration</p>
+      </div>
+
+      {/* ── Two columns ── */}
+      <div className="relative z-10 flex flex-col lg:flex-row items-stretch justify-center gap-6 px-4 sm:px-8 lg:px-10 pb-12 w-full max-w-5xl mx-auto">
+
+        {/* ── Left: login ── */}
+        <div className="w-full lg:w-80 xl:w-96 shrink-0 group">
+          <div className="
+            bg-white/[0.04] border border-white/[0.08] rounded-2xl px-6 py-8 sm:p-8
+            flex flex-col gap-6 backdrop-blur-sm shadow-2xl h-full justify-center text-left
+            transition-all duration-300
+            hover:border-white/[0.14] hover:shadow-[0_0_50px_rgba(99,102,241,0.12)]
+          ">
+
+            {inviteLoading ? (
+              <p className="text-sm text-gray-500">Verifying invite…</p>
+            ) : inviteValid ? (
+              <div className="flex flex-col gap-1">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 mb-2">
+                  <span className="text-lg">🎉</span>
+                </div>
+                <h2 className="text-xl font-semibold text-gray-100">You've been invited!</h2>
+                <p className="text-sm text-gray-500">
+                  Sign in with the Google account for{' '}
+                  <span className="text-gray-300 font-medium">{inviteState.email}</span>
+                </p>
+              </div>
+            ) : inviteError ? (
+              <div className="flex flex-col gap-3">
+                <h2 className="text-xl font-semibold text-gray-100">Sign in to continue</h2>
+                <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+                  {inviteError}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1">
+                <h2 className="text-xl font-semibold text-gray-100">Sign in to continue</h2>
+                <p className="text-sm text-gray-600">Access your boards and agents</p>
+              </div>
+            )}
+
+            {authError && (
+              <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                {authError}
+              </div>
+            )}
+
+            {!inviteLoading && (
+              <div className="flex flex-col gap-4">
+                {/* Google button — full width */}
+                <div className="google-btn-wrap relative w-full overflow-hidden rounded-lg group/btn">
+                  <GoogleLogin
+                    onSuccess={({ credential }) => googleLogin(credential)}
+                    onError={() => useStore.getState().setAuthError('Google sign-in failed. Please try again.')}
+                    theme="filled_black"
+                    shape="rectangular"
+                    size="large"
+                    text={isInviteFlow ? 'signin_with' : 'continue_with'}
+                    width="320"
+                  />
+                  {/* Overlay to cancel Google's gray hover tint */}
+                  <div className="absolute inset-0 rounded-lg pointer-events-none bg-black/0 group-hover/btn:bg-black/40 transition-colors duration-300" />
+                </div>
+                <p className="text-xs text-gray-600 leading-relaxed">
+                  By signing in you agree to use this tool responsibly.<br />
+                  Your data stays on your own server.
+                </p>
+              </div>
+            )}
+
+          </div>
+        </div>
+
+        {/* ── Right: product preview ── */}
+        <div className="hidden lg:flex flex-1 min-h-[420px] group">
+          <div className="
+            w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl overflow-hidden
+            relative flex items-center justify-center backdrop-blur-sm
+            transition-all duration-300
+            hover:bg-white/[0.04] hover:border-white/[0.1] hover:shadow-[0_0_50px_rgba(99,102,241,0.1)]
+          ">
+            <div className="absolute inset-0"
+              style={{ background: 'radial-gradient(ellipse at 60% 40%, rgba(99,102,241,0.08) 0%, rgba(139,92,246,0.05) 40%, transparent 70%)' }}
+            />
+            <div className="relative z-10 flex flex-col items-center gap-3 text-center px-8">
+              <div className="w-12 h-12 rounded-xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center mb-1
+                transition-all duration-300 group-hover:bg-white/[0.08] group-hover:border-white/[0.14]">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(99,102,241,0.6)" strokeWidth="1.5">
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
+              </div>
+              <p className="text-base font-medium text-gray-500 transition-colors duration-300 group-hover:text-gray-400">Product preview</p>
+              <p className="text-sm text-gray-600 transition-colors duration-300 group-hover:text-gray-500">GIF / video goes here</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Footer */}
+      <p className="relative z-10 text-xs text-gray-500 text-center pb-8">
+        AutoKan · Built for humans &amp; AI agents
+      </p>
     </div>
   );
 }

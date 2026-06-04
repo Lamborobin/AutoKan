@@ -40,6 +40,7 @@
 .light ::-webkit-scrollbar-thumb { background: #c8c8d8; }
 .light ::-webkit-scrollbar-thumb:hover { background: #b0b0c8; }
 
+
 @layer base {
   * { box-sizing: border-box; }
 
