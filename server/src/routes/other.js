@@ -404,46 +404,6 @@ columnsRouter.delete('/:id', (req, res) => {
   broadcast('reload');
 });
 
-// ── Secrets ───────────────────────────────────────────────────────────────────
-const secretsRouter = express.Router();
-
-secretsRouter.get('/', (req, res) => {
-  const agentId = req.headers['x-agent-id'];
-  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can view secrets' });
-
-  const db = getDb();
-  res.json(db.prepare('SELECT * FROM secrets ORDER BY created_at DESC').all());
-});
-
-secretsRouter.post('/', attachAgent, (req, res) => {
-  const db = getDb();
-  const { name, description, task_id } = req.body;
-  if (!name) return res.status(400).json({ error: 'name is required' });
-
-  const id = 'secret_' + uuidv4().slice(0, 8);
-  db.prepare('INSERT OR IGNORE INTO secrets (id, name, description, task_id) VALUES (?, ?, ?, ?)').run(id, name, description, task_id);
-
-  // Move task to Human Action if provided
-  if (task_id) {
-    db.prepare(`UPDATE tasks SET column_id = 'col_humanaction', requires_human_action = 1, human_action_reason = ? WHERE id = ?`)
-      .run(`Secret required: ${name}`, task_id);
-  }
-
-  res.status(201).json(db.prepare('SELECT * FROM secrets WHERE id = ?').get(id));
-});
-
-secretsRouter.patch('/:id/resolve', (req, res) => {
-  const agentId = req.headers['x-agent-id'];
-  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can resolve secrets' });
-
-  const db = getDb();
-  const { status } = req.body; // 'provided' or 'rejected'
-  if (!['provided', 'rejected'].includes(status)) return res.status(400).json({ error: 'status must be provided or rejected' });
-
-  db.prepare('UPDATE secrets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
-  res.json({ ok: true });
-});
-
 // ── Instructions ──────────────────────────────────────────────────────────────
 const instructionsRouter = express.Router();
 const { GLOBAL_INSTRUCTIONS_DIR } = require('../utils/instructions');
@@ -809,4 +769,4 @@ rolesRouter.get('/', (req, res) => {
   res.json(roles.map(parseRole));
 });
 
-module.exports = { agentsRouter, columnsRouter, secretsRouter, instructionsRouter, agentTemplatesRouter, rolesRouter };
+module.exports = { agentsRouter, columnsRouter, instructionsRouter, agentTemplatesRouter, rolesRouter };

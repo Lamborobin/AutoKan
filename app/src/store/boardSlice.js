@@ -8,7 +8,6 @@ export const createBoardSlice = (set, get) => ({
   archivedTasks: [],
   agents: [],
   roles: [],
-  secrets: [],
   agentTemplates: [],
   instructionFiles: [],
   subscriptionInstructionFiles: [],

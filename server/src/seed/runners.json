@@ -173,5 +173,17 @@
       "on_block": { "column": "col_humanaction", "require_human_action": true },
       "description": "Runs the project's automated test suite (npm test / pytest / etc), writes missing coverage tests, reports pass/fail. Narrow scope — escalates anything not shell-validatable. Fail retries once before escalating."
     }
+    ,
+    { "id": "runner_frontend_placeholder",      "capability": "perm_frontend",          "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_frontend is built out." },
+    { "id": "runner_backend_placeholder",       "capability": "perm_backend",           "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_backend is built out." },
+    { "id": "runner_ux_placeholder",            "capability": "perm_ux",                "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_ux is built out." },
+    { "id": "runner_architect_placeholder",     "capability": "perm_architect",         "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_architect is built out." },
+    { "id": "runner_code_reader_placeholder",   "capability": "perm_code_reader",       "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_code_reader is built out." },
+    { "id": "runner_migrate_placeholder",       "capability": "perm_migrate",           "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_migrate is built out." },
+    { "id": "runner_network_placeholder",       "capability": "perm_network",           "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_network is built out." },
+    { "id": "runner_cloud_placeholder",         "capability": "perm_cloud",             "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_cloud is built out." },
+    { "id": "runner_security_placeholder",      "capability": "perm_security_control",  "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_security_control is built out." },
+    { "id": "runner_log_reader_placeholder",    "capability": "perm_log_reader",        "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_log_reader is built out." },
+    { "id": "runner_data_analytic_placeholder", "capability": "perm_data_analytic",     "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_data_analytic is built out." }
   ]
 }

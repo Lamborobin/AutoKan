@@ -5,7 +5,7 @@ const { requirePermission, attachAgent, requireAuth } = require('../middleware/a
 const { triggerRunner } = require('../services/agentRunner');
 const { broadcast } = require('../sse');
 const { sendMentionEmail } = require('../services/emailService');
-const { createNotification } = require('../services/notificationsService');
+const { createNotification, notifyHumanActionMembers } = require('../services/notificationsService');
 
 const router = express.Router();
 
@@ -379,6 +379,7 @@ router.post('/:id/request_human', requirePermission('task:request_human'), (req,
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
   res.json({ ok: true, message: 'Task flagged for human action' });
   broadcast('task_updated', { task: fmt(updated) });
+  notifyHumanActionMembers(db, task.id, reason || 'Human action required').catch(() => {});
 });
 
 // POST /tasks/:id/approve_pr — human approves the PR, moves task to Testing

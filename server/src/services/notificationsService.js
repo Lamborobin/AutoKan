@@ -1,6 +1,7 @@
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { broadcastToUser } = require('../sse');
+const { sendHumanActionEmail } = require('./emailService');
 
 /**
  * Persist a notification for a user and push it live if they're connected.
@@ -35,4 +36,32 @@ function createNotification(userId, type, title, body = null, link = null) {
   return { notification, delivered };
 }
 
-module.exports = { createNotification };
+/**
+ * Notify all accepted human members of a project when a task moves to Human Action.
+ * Sends an in-app notification (respecting notifications_inapp preference) and an
+ * email fallback (respecting notifications_email preference).
+ */
+async function notifyHumanActionMembers(db, taskId, reason) {
+  const task = db.prepare('SELECT id, title, project_id FROM tasks WHERE id = ?').get(taskId);
+  if (!task || !task.project_id) return;
+
+  const members = db.prepare(`
+    SELECT u.id AS user_id, u.email, u.notifications_email
+    FROM project_members pm
+    JOIN users u ON u.id = pm.user_id
+    WHERE pm.project_id = ? AND pm.user_id IS NOT NULL AND pm.accepted_at IS NOT NULL
+  `).all(task.project_id);
+
+  const link = `?task=${taskId}`;
+  const title = 'Action required';
+  const body = `"${task.title}" — ${reason}`;
+
+  for (const member of members) {
+    const { deduplicated } = createNotification(member.user_id, 'human_action', title, body, link);
+    if (member.notifications_email && !deduplicated) {
+      await sendHumanActionEmail(member.email, task.title, reason, taskId);
+    }
+  }
+}
+
+module.exports = { createNotification, notifyHumanActionMembers };

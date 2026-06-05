@@ -220,18 +220,6 @@ The `/api/docs` group serves the editable doc files driven by `agent.config.json
 
 ---
 
-## Secrets
-
-Backend for the secret-request flow (the management UI is not yet built). When an agent hits a missing credential it requests one; the task is bounced to Human Action; a human provides or rejects it.
-
-| Method | Endpoint | Who | Description |
-|--------|----------|-----|-------------|
-| GET | /api/secrets | Human | List secret requests |
-| POST | /api/secrets | Agent | Request a secret (`{ name, description?, task_id? }`); moves the task to Human Action |
-| PATCH | /api/secrets/:id/resolve | Human | Resolve a request — `{ status: 'provided' \| 'rejected' }` |
-
----
-
 ## Notifications
 
 | Method | Endpoint | Description |

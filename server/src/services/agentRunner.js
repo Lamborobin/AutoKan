@@ -8,6 +8,8 @@ const util = require('util');
 const { getDb } = require('../db');
 const { broadcast } = require('../sse');
 const { resolveInstructionPath } = require('../utils/instructions');
+const { notifyHumanActionMembers } = require('./notificationsService');
+const { writeFileSafe } = require('../utils/writeGuard');
 const runnersRegistry = require('../seed/runners.json');
 
 // ── Runner registry helpers ──────────────────────────────────────────────────
@@ -586,11 +588,11 @@ const IMPLEMENTATION_TOOLS = [
   },
   {
     name: 'write_file',
-    description: 'Write or overwrite a file. Path MUST be inside the client/ folder.',
+    description: 'Write or overwrite a file. Path must be within your assigned write scope — the server will reject out-of-scope paths.',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Path relative to repo root, must start with client/' },
+        path: { type: 'string', description: 'Path relative to repo root' },
         content: { type: 'string', description: 'Full file content' }
       },
       required: ['path', 'content']
@@ -656,21 +658,6 @@ async function runBash(command, cwd = PROJECT_ROOT) {
   }
 }
 
-function writeToClientOnly(relPath, content, worktreeDir) {
-  const baseDir = worktreeDir || PROJECT_ROOT;
-  const clientDir = path.join(baseDir, 'client');
-  const absPath = path.join(baseDir, relPath);
-  if (!absPath.startsWith(clientDir + path.sep) && absPath !== clientDir) {
-    return { error: `Write denied: path must be inside client/. Got: ${relPath}` };
-  }
-  try {
-    fs.mkdirSync(path.dirname(absPath), { recursive: true });
-    fs.writeFileSync(absPath, content, 'utf8');
-    return { success: true };
-  } catch (err) {
-    return { error: err.message };
-  }
-}
 
 function readFileFromDir(relPath, baseDir) {
   try {
@@ -758,7 +745,7 @@ async function runImplementInWorktree(task, agent, runner) {
         result = content ? { success: true, content } : { error: 'File not found' };
 
       } else if (block.name === 'write_file') {
-        result = writeToClientOnly(block.input.path, block.input.content, worktreePath);
+        result = writeFileSafe(block.input.path, block.input.content, runner.capability, worktreePath || PROJECT_ROOT, { subscriptionId, projectId: task.project_id });
 
       } else if (block.name === 'task_log') {
         const { progress, message } = block.input;
@@ -802,6 +789,7 @@ async function runImplementInWorktree(task, agent, runner) {
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
             .run(uuidv4(), taskId, agent.id, 'moved', 'col_inprogress', 'col_humanaction', 'Moved to Human Action — awaiting PR review');
           console.log(`[AgentRunner][${runner.id}][${taskId}] awaiting review. PR: ${pr_url || 'creation failed'}`);
+          notifyHumanActionMembers(db, taskId, 'PR ready for review').catch(() => {});
         }
         broadcastTask(db, taskId);
         completed = true;
@@ -814,6 +802,7 @@ async function runImplementInWorktree(task, agent, runner) {
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
           .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
         console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
+        notifyHumanActionMembers(db, taskId, reason).catch(() => {});
         broadcastTask(db, taskId);
         completed = true; // stop the loop; human must resume
         if (worktreePath) removeWorktree(worktreePath);
@@ -865,11 +854,11 @@ const TESTING_TOOLS = [
   },
   {
     name: 'write_file',
-    description: 'Write a test file. Path must be inside a test directory or match a test file pattern (*.test.*, *.spec.*, __tests__/, test/).',
+    description: 'Write a file. Path must be within your assigned write scope — the server will reject out-of-scope paths.',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Path relative to repo root — must be a test file or inside a test directory' },
+        path: { type: 'string', description: 'Path relative to repo root' },
         content: { type: 'string', description: 'Full file content' }
       },
       required: ['path', 'content']
@@ -912,24 +901,6 @@ const TESTING_TOOLS = [
   }
 ];
 
-function writeToTestFilesOnly(relPath, content) {
-  const TEST_PATTERNS = [/\.test\.[jt]sx?$/, /\.spec\.[jt]sx?$/, /__tests__\//, /[/\\]test[/\\]/];
-  if (!TEST_PATTERNS.some(p => p.test(relPath))) {
-    return { error: `Write denied: this runner can only write test files. Got: ${relPath}` };
-  }
-  const clientDir = path.join(PROJECT_ROOT, 'client');
-  const absPath = path.join(PROJECT_ROOT, relPath);
-  if (!absPath.startsWith(clientDir + path.sep)) {
-    return { error: `Write denied: tests must live inside client/. Got: ${relPath}` };
-  }
-  try {
-    fs.mkdirSync(path.dirname(absPath), { recursive: true });
-    fs.writeFileSync(absPath, content, 'utf8');
-    return { success: true };
-  } catch (err) {
-    return { error: err.message };
-  }
-}
 
 async function runTestWithRetry(task, agent, runner) {
   const db = getDb();
@@ -1000,7 +971,7 @@ async function runTestWithRetry(task, agent, runner) {
         result = content ? { success: true, content } : { error: 'File not found' };
 
       } else if (block.name === 'write_file') {
-        result = writeToTestFilesOnly(block.input.path, block.input.content);
+        result = writeFileSafe(block.input.path, block.input.content, runner.capability, PROJECT_ROOT, { subscriptionId, projectId: task.project_id });
 
       } else if (block.name === 'task_log') {
         const { progress, message } = block.input;
@@ -1022,14 +993,17 @@ async function runTestWithRetry(task, agent, runner) {
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
             .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', 'Tests passed — ready for human sign-off');
           console.log(`[AgentRunner][${runner.id}][${taskId}] tests passed → Human Action (awaiting sign-off)`);
+          notifyHumanActionMembers(db, taskId, 'Tests passed — ready for sign-off').catch(() => {});
         } else {
           const newRetryCount = retryCount + 1;
           if (newRetryCount > MAX_RETRIES) {
+            const maxRetryReason = `Test run failed after ${newRetryCount} attempts: ${summary}`;
             db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
-              .run('col_humanaction', `Test run failed after ${newRetryCount} attempts: ${summary}`, taskId);
+              .run('col_humanaction', maxRetryReason, taskId);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
               .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
             console.log(`[AgentRunner][${runner.id}][${taskId}] max retries → Human Action`);
+            notifyHumanActionMembers(db, taskId, maxRetryReason).catch(() => {});
           } else {
             const newMeta = JSON.stringify({ ...metadata, test_retry_count: newRetryCount });
             db.prepare('UPDATE tasks SET column_id = ?, metadata = ? WHERE id = ?').run('col_inprogress', newMeta, taskId);
@@ -1051,6 +1025,7 @@ async function runTestWithRetry(task, agent, runner) {
         db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
           .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
         console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
+        notifyHumanActionMembers(db, taskId, reason).catch(() => {});
         broadcastTask(db, taskId);
         completed = true;
         result = { success: true };
@@ -1092,10 +1067,34 @@ function getToolSet(runner) {
   return set;
 }
 
+// ── Placeholder handler ───────────────────────────────────────────────────────
+// Used by capabilities that are declared in runners.json but have no real
+// handler yet. Logs the dispatch, moves the task to Human Action, and notifies
+// humans so the stall is visible rather than silent.
+async function runPlaceholder(task, agent, runner) {
+  const db = getDb();
+  const taskId = task.id;
+  const cap = runnersRegistry.capabilities.find(c => c.id === runner.capability);
+  const capLabel = cap?.label || runner.capability;
+  const reason = `${capLabel} capability has no handler implemented yet — needs human attention`;
+
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), taskId, agent.id, 'note', `Agent dispatched — ${capLabel} has no handler implemented yet`);
+  db.prepare(`UPDATE tasks SET column_id = 'col_humanaction', requires_human_action = 1, human_action_reason = ? WHERE id = ?`)
+    .run(reason, taskId);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+
+  console.log(`[AgentRunner][${runner.id}][${taskId}] placeholder — ${capLabel} has no handler`);
+  notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+  broadcastTask(db, taskId);
+}
+
 const HANDLERS = {
   clarify_and_approve: runClarifyAndApprove,
   implement_in_worktree: runImplementInWorktree,
   test_with_retry: runTestWithRetry,
+  placeholder: runPlaceholder,
 };
 
 async function dispatch(taskId) {

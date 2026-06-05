@@ -221,17 +221,6 @@ function applySchema(db) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- ── Secrets ──────────────────────────────────────────────
-    CREATE TABLE IF NOT EXISTS secrets (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE,
-      description TEXT,
-      task_id TEXT REFERENCES tasks(id),
-      status TEXT DEFAULT 'pending' CHECK(status IN ('pending','provided','rejected')),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
     -- ── Invites ──────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS invites (
       id TEXT PRIMARY KEY,

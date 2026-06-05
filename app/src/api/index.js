@@ -75,12 +75,6 @@ export const agentsApi = {
   delete: (id) => api.delete(`/agents/${id}`).then(r => r.data),
 };
 
-export const secretsApi = {
-  list: () => api.get('/secrets').then(r => r.data),
-  request: (data) => api.post('/secrets', data).then(r => r.data),
-  resolve: (id, status) => api.patch(`/secrets/${id}/resolve`, { status }).then(r => r.data),
-};
-
 function instrParams({ subscriptionId = null, projectId = null, includeArchived = false } = {}) {
   const p = {};
   if (includeArchived)   p.include_archived = true;

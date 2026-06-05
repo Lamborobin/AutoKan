@@ -203,4 +203,33 @@ async function sendTeamAddedEmail(toEmail, teamName, fromUserName) {
   }
 }
 
-module.exports = { isEmailConfigured, sendInviteEmail, sendMentionEmail, sendBoardInviteEmail, sendBoardAddedEmail, sendTeamInviteEmail, sendTeamAddedEmail };
+async function sendHumanActionEmail(toEmail, taskTitle, reason, taskId) {
+  if (!isEmailConfigured()) return;
+  const taskUrl = taskId ? `${baseUrl()}?task=${taskId}` : baseUrl();
+  try {
+    await getTransporter().sendMail({
+      from: `"AutoKan" <${EMAIL_FROM}>`,
+      to: toEmail,
+      subject: `Action required: "${taskTitle}"`,
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;">
+          <h2 style="margin:0 0 8px;font-size:20px;color:#111;">A task needs your attention</h2>
+          <p style="margin:0 0 16px;color:#555;font-size:15px;">
+            <strong>${taskTitle}</strong> has been moved to Human Action:
+          </p>
+          <blockquote style="margin:0 0 24px;padding:12px 16px;background:#f5f5f5;border-left:3px solid #f59e0b;border-radius:4px;color:#333;font-size:14px;">
+            ${reason}
+          </blockquote>
+          <a href="${taskUrl}"
+             style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">
+            Open task
+          </a>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('[email] Failed to send human action email:', err.message);
+  }
+}
+
+module.exports = { isEmailConfigured, sendInviteEmail, sendMentionEmail, sendBoardInviteEmail, sendBoardAddedEmail, sendTeamInviteEmail, sendTeamAddedEmail, sendHumanActionEmail };
