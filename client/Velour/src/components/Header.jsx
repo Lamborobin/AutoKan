@@ -57,14 +57,14 @@ export default function Header({ cartCount = 0, activeCategory, onNavigate }) {
             )}
           </div>
 
-          {/* Google button - styled as main CTA button */}
+          {/* Go to client button - same style as nav links with added shadow */}
           <a
-            href="https://google.com/"
+            href="https://www.google.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="px-4 py-2 text-xs uppercase tracking-wider border border-gray-900 hover:bg-gray-900 hover:text-white transition-colors"
+            className="hover:text-gray-900 transition-colors shadow-sm"
           >
-            Google
+            Go to client
           </a>
         </nav>
         <button className="text-sm relative">
@@ -118,17 +118,15 @@ export default function Header({ cartCount = 0, activeCategory, onNavigate }) {
               </div>
             )}
           </div>
-        </div>
 
-        {/* Mobile Google button - centered below nav items */}
-        <div className="px-4">
+          {/* Mobile Go to client button - same style as nav links with added shadow */}
           <a
-            href="https://google.com/"
+            href="https://www.google.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="block w-full text-center px-4 py-2 text-xs uppercase tracking-wider border border-gray-900 hover:bg-gray-900 hover:text-white transition-colors"
+            className="hover:text-gray-900 transition-colors shadow-sm"
           >
-            Google
+            Go to client
           </a>
         </div>
       </nav>
