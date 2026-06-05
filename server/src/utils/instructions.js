@@ -36,14 +36,18 @@ function scaffoldProjectInstructions(projectId, subscriptionId, clientMdContent 
 
   if (skipContextFiles) return; // personal board — directory only, no context files
 
+  // client.md is for the whole team (all agents) — no capability restriction.
   const clientMd = path.join(projectDir, 'client.md');
   if (!fs.existsSync(clientMd)) {
-    fs.writeFileSync(clientMd, clientMdContent ?? '# Client Context\n\nAdd client-specific information here.\n', 'utf8');
+    const body = clientMdContent ?? '# Client Context\n\nAdd client-specific information here — brand, priorities, audience, business rules.\n';
+    fs.writeFileSync(clientMd, body, 'utf8');
   }
 
+  const CODER_CAPS = 'perm_coding,perm_coding_tester,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader';
   const projectMd = path.join(projectDir, 'project.md');
   if (!fs.existsSync(projectMd)) {
-    fs.writeFileSync(projectMd, projectMdContent ?? '# Project Context\n\nAdd project-specific context here.\n', 'utf8');
+    const body = projectMdContent ?? '# Project Context\n\nAdd technical project context here — tech stack, coding conventions, architecture, domain rules.\n';
+    fs.writeFileSync(projectMd, `---\ncapabilities: ${CODER_CAPS}\n---\n\n${body}`, 'utf8');
   }
 }
 

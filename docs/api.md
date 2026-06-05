@@ -64,6 +64,8 @@ The `/api/docs` group serves the editable doc files driven by `agent.config.json
 | POST | /api/tasks/:id/archive | Archive task |
 | POST | /api/tasks/:id/unarchive | Restore archived task |
 | POST | /api/tasks/:id/bypass_pm | Skip PM planning gate |
+| POST | /api/tasks/:id/save_client_context | Append PM's context draft to `client.md` and clear draft |
+| POST | /api/tasks/:id/dismiss_client_context | Discard PM's context draft without saving |
 | DELETE | /api/tasks/:id | Delete task |
 
 ### PM Planning

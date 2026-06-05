@@ -265,6 +265,33 @@ const CLARIFICATION_TOOLS = [
           type: 'array',
           description: 'Final checklist with all items marked resolved: true.',
           items: CHECKLIST_ITEM_SCHEMA
+        },
+        client_context_draft: {
+          type: 'string',
+          description: `Optional. If this conversation confirmed something genuinely worth remembering about the client as a whole — not just for this task — write a short bullet list here. The human will review and edit it before anything is saved.
+
+THE KEY TEST before including a bullet: "Would this fact still be useful to know on a completely different future task?" If yes, include it. If it only makes sense in the context of what was just built, leave it out.
+
+WHAT TO INCLUDE — things that describe the client in general:
+- Contact details: email addresses used for specific purposes ("info@company.com is used for customer enquiries")
+- Lasting preferences: how they always want things to feel or work across the site ("client prefers clean, minimal design — avoid clutter")
+- Audience facts: who their customers are, their technical level, their expectations
+- Business rules that apply broadly ("no database storage of customer data — email notification only")
+- Tone and voice guidelines ("all copy should be friendly but professional")
+- Background context: legacy systems, existing tools, history that future agents should know
+
+WHAT TO LEAVE OUT — things that only describe how this specific task was built:
+- Where a button goes, which page something appears on
+- Specific wording chosen for this feature's confirmation message
+- Which method was used to solve a problem in this task
+- Anything that would need rewriting the moment a different task starts
+
+LANGUAGE RULES:
+- Bullet points only, one fact per line, starting with "• "
+- Plain everyday language. No developer or technical terms. Describe what something does, not what it is called. Bad: "honeypot spam protection". Good: "• Spam filtering on forms should be invisible to the user — no puzzles or tick-boxes". Bad: "SMTP emailService wrapper". Good: "• Customer emails go to info@company.com".
+- Write as if briefing a new person joining the project who has never spoken to the client.
+
+If nothing genuinely reusable was learned in this conversation, omit this field entirely.`
         }
       },
       required: ['comment', 'checklist']
@@ -305,6 +332,24 @@ const RUNNER_PERSONALITY_BASENAMES = new Set(
 function readAbs(absPath) {
   try { return fs.readFileSync(absPath, 'utf8'); }
   catch { return ''; }
+}
+
+// Parse YAML-style front matter from a markdown file.
+// Returns { meta: { key: value }, body: string (content without front matter) }
+// Files without front matter return meta={}, body=full content.
+function parseFrontMatter(content) {
+  if (!content.startsWith('---\n')) return { meta: {}, body: content };
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return { meta: {}, body: content };
+  const block = content.slice(4, end);
+  const meta = {};
+  for (const line of block.split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon > 0) {
+      meta[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+    }
+  }
+  return { meta, body: content.slice(end + 5).trimStart() };
 }
 
 function safeListMd(folder, excludeBasenames = new Set()) {
@@ -362,14 +407,23 @@ function buildContextBlock(agent, subscriptionId, projectId) {
     }
   }
 
-  // 4. Board context (per-project)
+  // 4. Board context (per-project) — filtered by capabilities front matter
   if (subscriptionId && projectId) {
     const boardFolder = path.join(PROJECT_ROOT, 'instructions', subscriptionId, projectId);
+    const agentCap = getAgentCapability(agent);
     for (const fileName of safeListMd(boardFolder)) {
-      pushFromAbs(
-        path.join(boardFolder, fileName),
-        `BOARD/${fileName.replace('.md', '').toUpperCase()}`,
-      );
+      const absPath = path.join(boardFolder, fileName);
+      if (includedAbsPaths.has(absPath)) continue;
+      const raw = readAbs(absPath);
+      if (!raw) continue;
+      const { meta, body } = parseFrontMatter(raw);
+      // If the file declares capabilities, only load it for matching agents
+      if (meta.capabilities) {
+        const allowed = meta.capabilities.split(',').map(c => c.trim()).filter(Boolean);
+        if (!agentCap || !allowed.includes(agentCap)) continue;
+      }
+      includedAbsPaths.add(absPath);
+      if (body) sections.push(`## [BOARD/${fileName.replace('.md', '').toUpperCase()}]\n${body}`);
     }
   }
 
@@ -515,12 +569,13 @@ async function runClarifyAndApprove(task, agent, runner) {
       broadcastTask(db, taskId);
 
     } else if (block.name === 'approve_task') {
-      const { comment, checklist = [], acceptance_criteria = '', priority, complexity } = block.input;
+      const { comment, checklist = [], acceptance_criteria = '', priority, complexity, client_context_draft } = block.input;
       const resolvedChecklist = checklist.map(i => ({ ...i, resolved: true }));
       db.prepare(`
-        UPDATE tasks SET pm_approval_status = 'approved', pm_review_comment = ?, pm_review_date = CURRENT_TIMESTAMP, pm_checklist = ?
+        UPDATE tasks SET pm_approval_status = 'approved', pm_review_comment = ?, pm_review_date = CURRENT_TIMESTAMP, pm_checklist = ?,
+          pm_client_context_draft = ?
         WHERE id = ?
-      `).run(comment, JSON.stringify(resolvedChecklist), taskId);
+      `).run(comment, JSON.stringify(resolvedChecklist), client_context_draft || null, taskId);
       // Populate acceptance_criteria if the human hasn't already set one
       if (acceptance_criteria && !task.acceptance_criteria) {
         db.prepare(`UPDATE tasks SET acceptance_criteria = ? WHERE id = ?`).run(acceptance_criteria, taskId);

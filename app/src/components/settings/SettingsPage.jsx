@@ -13,6 +13,17 @@ import { useStore } from '../../store';
 import { instructionsApi, projectsApi, invitesApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
 
+// Mirror of the server's filename sanitisation — lets the user type a free-text
+// label and see the resulting filesystem-safe name before creating the file.
+function safeFileName(name) {
+  return (name || '').trim().toLowerCase()
+    .replace(/\.md$/i, '')
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 100);
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const {
@@ -57,10 +68,16 @@ export default function SettingsPage() {
     loadTeams,
     createTeam,
     deleteTeam,
+    roles,
   } = useStore();
 
   const currentProject = projects.find(p => p.id === currentProjectId);
   const isClientBoard = !!currentProject?.client_id;
+
+  // Capability metadata, sourced from the roles store (permission-type roles).
+  // Drives the "Visible to" pickers and the badges on file rows.
+  const capabilityRoles = (roles || []).filter(r => r.type === 'permission');
+  const capMeta = Object.fromEntries(capabilityRoles.map(r => [r.id, { label: r.name, color: r.color }]));
 
   const [section, setSection]         = useState('files');
   const [connRefreshKey, setConnRefreshKey] = useState(0);
@@ -137,10 +154,13 @@ export default function SettingsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [archiveConfirm, setArchiveConfirm] = useState(null);
-  const [addingFile, setAddingFile]     = useState(false);
-  const [newFileName, setNewFileName]   = useState('');
-  const [newFileError, setNewFileError] = useState('');
-  const [actionError, setActionError]   = useState(null);
+  const [addingFile, setAddingFile]       = useState(false);
+  const [newFileName, setNewFileName]     = useState('');
+  const [newFileCapabilities, setNewFileCapabilities] = useState([]);
+  const [newFileError, setNewFileError]   = useState('');
+  const [actionError, setActionError]     = useState(null);
+  const [editingCaps, setEditingCaps]     = useState(false);
+  const [savingCaps, setSavingCaps]       = useState(false);
   const saveTimerRef = useRef(null);
 
   // Refresh project + subscription data on mount
@@ -189,12 +209,30 @@ export default function SettingsPage() {
     if (dirty && selectedFile) await saveCurrentContent();
     setSelectedFile({ ...file, scope });
     setContent(''); setDirty(false); setSaveStatus(null); setLoadingContent(true);
+    setEditingCaps(false);
     try {
       const { projectId, subscriptionId } = getApiScope(scope);
       const data = await instructionsApi.get(file.name + '.md', projectId, subscriptionId);
       setContent(data.content);
+      // GET returns authoritative capabilities + protected flag (front matter stripped)
+      setSelectedFile({ ...file, scope, capabilities: data.capabilities || [], protected: !!data.protected, archived: !!data.archived });
     } catch { setContent(''); }
     finally { setLoadingContent(false); }
+  }
+
+  // Change which capabilities a board file is visible to. Persists immediately
+  // (also flushes any pending content edit), then refreshes the list badges.
+  async function handleCapabilitiesChange(newCaps) {
+    if (!selectedFile) return;
+    setSavingCaps(true);
+    setSelectedFile(f => ({ ...f, capabilities: newCaps }));
+    try {
+      const { projectId, subscriptionId } = getApiScope(selectedFile.scope);
+      await instructionsApi.update(selectedFile.name + '.md', content, projectId, subscriptionId, newCaps);
+      setDirty(false);
+      await loadInstructionFiles();
+    } catch { setActionError('Failed to update visibility'); }
+    finally { setSavingCaps(false); }
   }
 
   function handleContentChange(v) {
@@ -235,6 +273,7 @@ export default function SettingsPage() {
       if (scope === 'subscription') await archiveSubscriptionInstructionFile(file.name + '.md');
       else await archiveInstructionFile(file.name + '.md');
       if (selectedFile?.name === file.name) setSelectedFile(null);
+      setShowArchived(true); // reveal the Archived section so the restore action is discoverable
     } catch (err) { setActionError(err.response?.data?.error || 'Failed to archive'); }
   }
 
@@ -266,32 +305,74 @@ export default function SettingsPage() {
     if (!trimmed) { setNewFileError('Name is required'); return; }
     setNewFileError('');
     try {
-      if (section === 'sub_files') {
-        const file = await createSubscriptionInstructionFile(trimmed, `# ${trimmed}\n\n`);
-        setAddingFile(false); setNewFileName('');
-        selectFile(file, 'subscription');
-      } else {
-        const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`);
-        setAddingFile(false); setNewFileName('');
-        selectFile(file, 'board');
-      }
+      const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`, newFileCapabilities);
+      setAddingFile(false); setNewFileName(''); setNewFileCapabilities([]);
+      selectFile(file, 'board');
     } catch (err) { setNewFileError(err.response?.data?.error || 'Failed to create'); }
+  }
+
+  function CapBadge({ cap }) {
+    const meta = capMeta[cap] || { label: cap, color: '#6366f1' };
+    return (
+      <span className="text-[8px] px-1 py-0.5 rounded-full font-medium"
+        style={{ background: meta.color + '20', color: meta.color }}>
+        {meta.label}
+      </span>
+    );
+  }
+
+  // Picker for which capabilities a board file is visible to.
+  // Empty selection = visible to every agent ("All agents").
+  function CapabilityPicker({ selected, onChange }) {
+    const allAgents = selected.length === 0;
+    return (
+      <div className="bg-surface-3 border border-border rounded-lg p-2 space-y-1 max-h-56 overflow-y-auto">
+        <label className="flex items-center gap-1.5 px-0.5 cursor-pointer">
+          <input type="checkbox" className="accent-accent w-2.5 h-2.5" checked={allAgents} onChange={() => onChange([])} />
+          <span className="text-[10px] text-gray-300 font-medium">All agents</span>
+          <span className="text-[9px] text-gray-600">· no restriction</span>
+        </label>
+        <div className="border-t border-border my-0.5 opacity-50" />
+        {capabilityRoles.length === 0 && <p className="text-[9px] text-gray-600 px-0.5">No capabilities available.</p>}
+        {capabilityRoles.map(role => (
+          <label key={role.id} className={`flex items-center gap-1.5 px-0.5 cursor-pointer ${allAgents ? 'opacity-50' : ''}`}>
+            <input type="checkbox" className="accent-accent w-2.5 h-2.5"
+              checked={selected.includes(role.id)}
+              onChange={e => onChange(e.target.checked ? [...selected, role.id] : selected.filter(c => c !== role.id))}
+            />
+            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: role.color }} />
+            <span className="text-[10px] text-gray-400">{role.name}</span>
+          </label>
+        ))}
+      </div>
+    );
   }
 
   function FileRow({ file, scope, actions }) {
     const isSelected = selectedFile?.name === file.name && selectedFile?.scope === scope;
+    const caps = file.capabilities || [];
     return (
       <div
-        className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
+        className={`group flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
           isSelected ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
         onClick={() => selectFile(file, scope)}
       >
-        <FileText size={11} className="shrink-0" />
-        <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
-        {actions && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-            {actions}
+        <div className="flex items-center gap-2">
+          <FileText size={11} className="shrink-0" />
+          <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
+          {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
+          {actions && (
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+              {actions}
+            </div>
+          )}
+        </div>
+        {scope === 'board' && (
+          <div className="flex flex-wrap gap-1 pl-[19px]">
+            {caps.length > 0
+              ? caps.map(c => <CapBadge key={c} cap={c} />)
+              : <span className="text-[8px] px-1 py-0.5 rounded-full font-medium bg-surface-3 text-gray-500">All agents</span>}
           </div>
         )}
       </div>
@@ -380,6 +461,10 @@ export default function SettingsPage() {
                   <FileRow key={f.name} file={f} scope="board"
                     actions={
                       <>
+                        <button onClick={() => selectFile(f, 'board')} title="Edit content & visibility"
+                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          <Pencil size={10} />
+                        </button>
                         <button onClick={() => setArchiveConfirm({ file: f, scope: 'board' })} title="Archive"
                           className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
                           <Archive size={10} />
@@ -394,28 +479,38 @@ export default function SettingsPage() {
                 ))}
 
                 {addingFile ? (
-                  <form onSubmit={handleCreate} className="mt-1.5 px-1">
+                  <form onSubmit={handleCreate} className="mt-1.5 px-1 space-y-1.5">
                     <input
                       autoFocus value={newFileName}
                       onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
-                      onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''))}
-                      placeholder="filename"
+                      onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''), setNewFileCapabilities([]))}
+                      placeholder="e.g. Brand voice, Returns policy…"
                       className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                     />
-                    {newFileError && <p className="text-[9px] text-red-400 mt-0.5">{newFileError}</p>}
-                    <div className="flex gap-1.5 mt-1.5">
-                      <button type="submit" className="flex-1 py-0.5 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-md transition-colors">
+                    {newFileName.trim() && (
+                      safeFileName(newFileName)
+                        ? <p className="text-[9px] text-gray-600 px-0.5">Saved as <span className="font-mono text-gray-500">{safeFileName(newFileName)}.md</span></p>
+                        : <p className="text-[9px] text-amber-500/80 px-0.5">Needs at least one letter or number</p>
+                    )}
+                    {newFileError && <p className="text-[9px] text-red-400">{newFileError}</p>}
+                    <div className="flex gap-1.5">
+                      <button type="submit" disabled={!safeFileName(newFileName)}
+                        className="flex-1 py-1 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 disabled:opacity-40 rounded-md transition-colors">
                         Create
                       </button>
-                      <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); }}
-                        className="px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-300 rounded-md transition-colors">
+                      <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); setNewFileCapabilities([]); setNewFileError(''); }}
+                        className="px-3 py-1 text-[10px] text-gray-400 hover:text-gray-200 border border-border rounded-md transition-colors">
                         Cancel
                       </button>
+                    </div>
+                    <div className="space-y-1 pt-0.5">
+                      <p className="text-[9px] text-gray-600 uppercase tracking-wide font-medium px-0.5">Visible to</p>
+                      <CapabilityPicker selected={newFileCapabilities} onChange={setNewFileCapabilities} />
                     </div>
                   </form>
                 ) : (
                   <button
-                    onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); }}
+                    onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); setNewFileCapabilities([]); }}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-[11px] text-gray-600 hover:text-gray-400 transition-colors rounded-lg"
                   >
                     <Plus size={11} /> New file
@@ -483,7 +578,7 @@ export default function SettingsPage() {
               <div>
                 {subFilesActive.map(f => (
                   <FileRow key={f.name} file={f} scope="subscription"
-                    actions={
+                    actions={f.protected ? null : (
                       <>
                         <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
                           className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
@@ -494,34 +589,10 @@ export default function SettingsPage() {
                           <Trash2 size={10} />
                         </button>
                       </>
-                    }
+                    )}
                   />
                 ))}
-
-                {addingFile ? (
-                  <form onSubmit={handleCreate} className="mt-1.5 px-1">
-                    <input
-                      autoFocus value={newFileName}
-                      onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
-                      onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''))}
-                      placeholder="filename"
-                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-                    />
-                    {newFileError && <p className="text-[9px] text-red-400 mt-0.5">{newFileError}</p>}
-                    <div className="flex gap-1.5 mt-1.5">
-                      <button type="submit" className="flex-1 py-0.5 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-md transition-colors">Create</button>
-                      <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); }}
-                        className="px-2 py-0.5 text-[10px] text-gray-500 hover:text-gray-300 rounded-md transition-colors">Cancel</button>
-                    </div>
-                  </form>
-                ) : (
-                  <button
-                    onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-[11px] text-gray-600 hover:text-gray-400 transition-colors rounded-lg"
-                  >
-                    <Plus size={11} /> New file
-                  </button>
-                )}
+                <p className="text-[9px] text-gray-600 px-2.5 py-1">Workspace files are fixed — edit their content, but no new files can be added here.</p>
               </div>
 
               {/* Archived subscription files */}
@@ -894,6 +965,34 @@ export default function SettingsPage() {
                   )}
                 </div>
               </div>
+
+              {/* Visibility editor — board files only (workspace files load for all agents) */}
+              {selectedFile.scope === 'board' && !selectedFile.archived && (
+                <div className="shrink-0 px-6 py-2.5 border-b border-border bg-surface-1/40">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">Visible to</span>
+                    {(selectedFile.capabilities?.length
+                      ? selectedFile.capabilities.map(c => <CapBadge key={c} cap={c} />)
+                      : <span className="text-[8px] px-1 py-0.5 rounded-full font-medium bg-surface-3 text-gray-500">All agents</span>)}
+                    {savingCaps && <span className="text-[9px] text-gray-600">saving…</span>}
+                    <button
+                      onClick={() => setEditingCaps(v => !v)}
+                      className="ml-auto text-[10px] text-accent hover:text-accent/80 transition-colors"
+                    >
+                      {editingCaps ? 'Done' : 'Edit'}
+                    </button>
+                  </div>
+                  {editingCaps && (
+                    <div className="mt-2 max-w-xs">
+                      <CapabilityPicker
+                        selected={selectedFile.capabilities || []}
+                        onChange={handleCapabilitiesChange}
+                      />
+                      <p className="text-[9px] text-gray-600 mt-1">Controls which agents load this file as context.</p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {loadingContent ? (
                 <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">Loading…</div>

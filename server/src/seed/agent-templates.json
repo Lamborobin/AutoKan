@@ -40,5 +40,37 @@
       "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
       "role_ids": ["perm_coding_tester", "role_access_testing"]
     }
+  ],
+  "velour_agents": [
+    {
+      "id": "agent_pm_velour",
+      "template_id": "tpl_pm",
+      "name": "Project Manager",
+      "role": "pm",
+      "model": "claude-opus-4-5",
+      "color": "#6366f1",
+      "description": "Plans and manages tasks for the Velour board.",
+      "role_ids": ["perm_planning", "role_access_backlog"]
+    },
+    {
+      "id": "agent_dev_velour",
+      "template_id": "tpl_dev",
+      "name": "Developer",
+      "role": "developer",
+      "model": "claude-sonnet-4-5",
+      "color": "#3b82f6",
+      "description": "Implements features for the Velour board.",
+      "role_ids": ["perm_coding", "role_access_inprogress"]
+    },
+    {
+      "id": "agent_test_velour",
+      "template_id": "tpl_test",
+      "name": "Tester",
+      "role": "tester",
+      "model": "claude-sonnet-4-5",
+      "color": "#8b5cf6",
+      "description": "Runs tests for the Velour board.",
+      "role_ids": ["perm_coding_tester", "role_access_testing"]
+    }
   ]
 }

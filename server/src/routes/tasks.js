@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent, requireAuth } = require('../middleware/auth');
@@ -6,6 +8,7 @@ const { triggerRunner } = require('../services/agentRunner');
 const { broadcast } = require('../sse');
 const { sendMentionEmail } = require('../services/emailService');
 const { createNotification, notifyHumanActionMembers } = require('../services/notificationsService');
+const { PROJECT_ROOT } = require('../utils/instructions');
 
 const router = express.Router();
 
@@ -661,6 +664,58 @@ router.post('/:id/bypass_pm', attachAgent, (req, res) => {
 
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
   const fmtUpdated = { ...fmt(updated), is_locked: false };
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
+});
+
+// POST /tasks/:id/save_client_context — append context to client.md and clear the draft.
+// Body: { text } — the (possibly human-edited) text to save. Falls back to pm_client_context_draft.
+router.post('/:id/save_client_context', requirePermission('task:update'), (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const textToSave = (req.body.text || task.pm_client_context_draft || '').trim();
+  if (!textToSave) return res.status(400).json({ error: 'No context to save' });
+  if (textToSave.length > 2000) return res.status(400).json({ error: 'Context must be 2000 characters or less' });
+
+  const project = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
+  if (!project?.subscription_id) {
+    return res.status(400).json({ error: 'Task has no associated project or subscription' });
+  }
+
+  const clientMdPath = path.join(PROJECT_ROOT, 'instructions', project.subscription_id, task.project_id, 'client.md');
+
+  let existing = '';
+  if (fs.existsSync(clientMdPath)) {
+    existing = fs.readFileSync(clientMdPath, 'utf8');
+  } else {
+    fs.mkdirSync(path.dirname(clientMdPath), { recursive: true });
+    existing = '# Client Context\n\nAdd client-specific information here.\n';
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  const section = `\n\n## ${date}\n\n> Added from planning: *${task.title}*\n\n${textToSave}\n`;
+  fs.writeFileSync(clientMdPath, existing.trimEnd() + section, 'utf8');
+
+  db.prepare('UPDATE tasks SET pm_client_context_draft = NULL WHERE id = ?').run(task.id);
+
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
+  const fmtUpdated = fmt(updated);
+  res.json(fmtUpdated);
+  broadcast('task_updated', { task: fmtUpdated });
+});
+
+// POST /tasks/:id/dismiss_client_context — discard PM's context draft without saving
+router.post('/:id/dismiss_client_context', requirePermission('task:update'), (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  db.prepare('UPDATE tasks SET pm_client_context_draft = NULL WHERE id = ?').run(task.id);
+
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
+  const fmtUpdated = fmt(updated);
   res.json(fmtUpdated);
   broadcast('task_updated', { task: fmtUpdated });
 });

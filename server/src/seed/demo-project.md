@@ -1,4 +1,12 @@
+---
+capabilities: perm_coding,perm_coding_tester,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader
+---
+
 # Project Context — Velour E-Commerce Platform
+
+**Sector:** Fashion E-Commerce
+**Type of project:** Custom e-commerce website — a software development project building an online store from scratch
+**Language on this board:** features, pages, checkout, orders, products, customers, admin panel. Not physical deliverables, documents, or offline processes.
 
 This file gives all agents background knowledge about the project so they can ask smarter questions, implement correctly, and test accurately.
 
@@ -15,7 +23,7 @@ Core modules:
 - **Admin panel** — product management, order processing, stock updates, discount codes
 - **Content** — lookbook/editorial pages, homepage hero, homepage featured collections
 
-## Tech Stack
+## Tech Stack *(for developers and testers only — do not reference these in client conversations)*
 
 - **Backend**: Node.js + Express + PostgreSQL (via `pg`) — port 3001
 - **Frontend**: React + Tailwind CSS + Vite — port 5173
@@ -49,7 +57,7 @@ velour/
 └── data/                    # Local dev DB dumps / seed files
 ```
 
-## Coding Conventions
+## Coding Conventions *(for developers and testers only — do not reference these in client conversations)*
 
 - Backend: Node.js CommonJS (`require`/`module.exports`), no TypeScript
 - Frontend: React functional components, hooks, JSX, Tailwind utility classes
@@ -59,7 +67,7 @@ velour/
 - Images: always use Cloudinary transformation URLs, never raw upload paths
 - Prices: stored as integers (pence/cents), displayed with `formatPrice()` helper
 
-## Key Domain Rules
+## Key Domain Rules *(for developers and testers only — do not reference these in client conversations)*
 
 - **Inventory**: Stock is tracked per variant (product + size + colour combination). Decrement on order placement, restore on cancellation/return.
 - **Pricing**: Base price on product, optional sale price. Both stored in pence. Display layer formats them.

@@ -232,10 +232,10 @@ export const createBoardSlice = (set, get) => ({
     return files;
   },
 
-  async createInstructionFile(name, content) {
+  async createInstructionFile(name, content, capabilities = []) {
     const { currentProjectId, subscription } = get();
     const subId = subscription?.id || 'sub_default';
-    const file = await instructionsApi.create({ name, content }, currentProjectId, subId);
+    const file = await instructionsApi.create({ name, content }, currentProjectId, subId, capabilities);
     set(s => ({ instructionFiles: [...s.instructionFiles, file] }));
     return file;
   },

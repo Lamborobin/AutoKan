@@ -25,6 +25,7 @@ function seedDefaults(db) {
   seedProjects(db);
   seedAgentTemplates(db);
   seedAgents(db);
+  seedVelourAgents(db);
   scaffoldInstructionFolders();
 }
 
@@ -142,6 +143,31 @@ function seedAgents(db) {
       null,
       t.color, t.id, MY_BOARD_ID,
       JSON.stringify(t.role_ids),
+    );
+  }
+}
+
+// ── Velour board agents ───────────────────────────────────────────────────────
+
+function seedVelourAgents(db) {
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO agents
+      (id, name, role, model, description, permissions, personality_file,
+       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const a of agentTemplates.velour_agents) {
+    const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
+    if (!tpl) continue;
+    insert.run(
+      a.id, a.name, a.role, a.model, a.description,
+      JSON.stringify(tpl.permissions),
+      tpl.personality_file || null,
+      tpl.template_system_prompt ? 1 : 0,
+      null,
+      a.color, a.template_id, TEST_CLIENT_ID,
+      JSON.stringify(a.role_ids),
     );
   }
 }

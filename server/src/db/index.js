@@ -184,6 +184,7 @@ function applySchema(db) {
       pm_review_date DATETIME,
       human_review_date DATETIME,
       pm_checklist TEXT,
+      pm_client_context_draft TEXT,
       pr_url TEXT,
       auto_complete INTEGER DEFAULT 0,
       archived_at DATETIME,

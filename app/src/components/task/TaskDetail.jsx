@@ -35,6 +35,9 @@ export default function TaskDetail() {
   const [approvingPr, setApprovingPr] = useState(false);
   const [checkingPr, setCheckingPr] = useState(false);
   const [pendingEditAgent, setPendingEditAgent] = useState(null);
+  const [savingClientContext, setSavingClientContext] = useState(false);
+  const [clientContextEdit, setClientContextEdit] = useState(null);
+  const [clientContextSkipped, setClientContextSkipped] = useState(false);
 
   const titleRef = useRef(null);
   const descRef = useRef(null);
@@ -236,6 +239,23 @@ export default function TaskDetail() {
     setSelectedTask(null);
   }
 
+  async function handleSaveClientContext() {
+    const text = (clientContextEdit ?? task.pm_client_context_draft ?? '').trim();
+    if (!text || text.length > 2000) return;
+    setSavingClientContext(true);
+    try {
+      const updated = await tasksApi.saveClientContext(task.id, text);
+      setTask(updated);
+      setClientContextEdit(null);
+    } finally {
+      setSavingClientContext(false);
+    }
+  }
+
+  function handleSkipClientContext() {
+    setClientContextSkipped(true);
+  }
+
   async function handleBypass() {
     if (!confirmBypass) { setConfirmBypass(true); return; }
     const updated = await bypassPm(task.id);
@@ -403,7 +423,7 @@ export default function TaskDetail() {
                 <Lock size={12} className="text-amber-400 shrink-0" />
                 <div>
                   <p className="text-xs font-medium text-amber-300">Planning in progress</p>
-                  <p className="text-[10px] text-amber-500/70 mt-0.5">You can still edit fields and check items — dragging is locked until both PM and you approve</p>
+                  <p className="text-[10px] text-amber-500/70 mt-0.5">You can still edit fields and check items — dragging is locked until both the planning agent and you approve</p>
                 </div>
               </div>
             )}
@@ -603,8 +623,8 @@ export default function TaskDetail() {
                     </div>
                     {!pmDone && (
                       <p className="text-[10px] text-gray-700 mt-2">
-                        Click any item to check / uncheck it — PM re-evaluates after each toggle.
-                        {allItemsChecked && ' All checked — PM doing final review…'}
+                        Click any item to check / uncheck it — the planning agent re-evaluates after each toggle.
+                        {allItemsChecked && ' All checked — planning agent doing final review…'}
                       </p>
                     )}
                   </div>
@@ -613,7 +633,7 @@ export default function TaskDetail() {
                 {/* Conversation thread */}
                 {conversationLogs.length === 0 && !hasPendingQuestion && !agentThinking && (
                   <div className="px-4 py-6 text-center">
-                    <p className="text-xs text-gray-600">PM is analysing the task…</p>
+                    <p className="text-xs text-gray-600">Planning agent is analysing the task…</p>
                   </div>
                 )}
                 {(conversationLogs.length > 0 || agentThinking) && (
@@ -682,10 +702,64 @@ export default function TaskDetail() {
                   </div>
                 )}
 
+                {/* ── Board knowledge suggestion ─────────────────────────── */}
+                {pmDone && task.pm_client_context_draft && (
+                  <div className={`border-t border-surface-3 p-4 space-y-2.5 transition-opacity ${clientContextSkipped ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                        <p className="text-xs font-medium text-purple-300">
+                          {clientContextSkipped ? 'Knowledge notes — skipped (still available to save)' : 'Agent noted something worth remembering'}
+                        </p>
+                      </div>
+                      {clientContextSkipped && (
+                        <button onClick={() => setClientContextSkipped(false)} className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors">
+                          Review
+                        </button>
+                      )}
+                    </div>
+                    {!clientContextSkipped && (() => {
+                      const value = clientContextEdit ?? task.pm_client_context_draft ?? '';
+                      const overLimit = value.length > 2000;
+                      return (
+                        <div className="space-y-1.5">
+                          <textarea
+                            value={value}
+                            onChange={e => setClientContextEdit(e.target.value)}
+                            rows={5}
+                            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-gray-300 leading-relaxed resize-none outline-none focus:border-purple-500/50 placeholder-gray-600"
+                            placeholder="Edit what should be remembered about this client…"
+                          />
+                          <div className="flex justify-between items-center">
+                            <p className="text-[10px] text-gray-600">Edit before saving</p>
+                            <span className={`text-[10px] tabular-nums ${overLimit ? 'text-red-400' : 'text-gray-600'}`}>{value.length} / 2000</span>
+                          </div>
+                          <div className="flex gap-2 pt-0.5">
+                            <button
+                              onClick={handleSaveClientContext}
+                              disabled={savingClientContext || value.length > 2000}
+                              className="flex-1 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-lg transition-colors"
+                            >
+                              {savingClientContext ? 'Saving…' : 'Save knowledge'}
+                            </button>
+                            <button
+                              onClick={handleSkipClientContext}
+                              disabled={savingClientContext}
+                              className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 border border-border rounded-lg transition-colors"
+                            >
+                              Skip for now
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
                 {/* PM satisfied — human sign-off */}
                 {pmDone && task.human_approval_status !== HUMAN_STATUS.APPROVED && (
                   <div className="border-t border-surface-3 p-4 space-y-2.5">
-                    <p className="text-xs text-green-400 font-medium">PM satisfied — review the requirements and approve</p>
+                    <p className="text-xs text-green-400 font-medium">Planning agent satisfied — review the requirements and approve</p>
                     {task.pm_review_comment && (
                       <div className="bg-surface-2 rounded-lg p-3">
                         <p className="text-[10px] text-gray-600 font-medium uppercase tracking-wide mb-1.5">Requirements</p>
@@ -693,7 +767,12 @@ export default function TaskDetail() {
                       </div>
                     )}
                     {!approvingHuman ? (
-                      <button onClick={() => setApprovingHuman(true)} className="w-full py-2 text-xs font-medium bg-green-600/20 text-green-300 rounded-lg hover:bg-green-600/30 transition-colors">
+                      <button
+                        onClick={() => setApprovingHuman(true)}
+                        disabled={!!(task.pm_client_context_draft && !clientContextSkipped)}
+                        title={task.pm_client_context_draft && !clientContextSkipped ? 'Save or skip the knowledge notes above first' : undefined}
+                        className="w-full py-2 text-xs font-medium bg-green-600/20 text-green-300 rounded-lg hover:bg-green-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
                         Approve &amp; unlock In Progress
                       </button>
                     ) : (
@@ -717,11 +796,11 @@ export default function TaskDetail() {
                 {/* Bypass — all items checked but PM hasn't approved */}
                 {showBypass && (
                   <div className="border-t border-surface-3 px-4 py-3 space-y-2">
-                    <p className="text-[10px] text-gray-500">All items are checked but PM hasn't approved. You can bypass if you're satisfied.</p>
+                    <p className="text-[10px] text-gray-500">All items are checked but the planning agent hasn't approved. You can bypass if you're satisfied.</p>
                     <div className="flex gap-2">
                       <button onClick={handleBypass} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg transition-colors ${confirmBypass ? 'bg-orange-500/25 text-orange-300 border border-orange-500/30' : 'bg-surface-3 text-gray-500 hover:text-orange-300 hover:bg-orange-500/10'}`}>
                         <Unlock size={11} />
-                        {confirmBypass ? 'Confirm bypass?' : 'Bypass PM checks'}
+                        {confirmBypass ? 'Confirm bypass?' : 'Bypass planning checks'}
                       </button>
                       <button onClick={() => { setShowNewTask(true); setSelectedTask(null); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg bg-surface-3 text-gray-500 hover:text-accent hover:bg-accent/10 transition-colors">
                         <Plus size={11} />
@@ -1021,10 +1100,10 @@ export default function TaskDetail() {
                   const label = (() => {
                     switch (log.action) {
                       case LOG_ACTION.CREATED:                return 'Task created';
-                      case LOG_ACTION.PM_QUESTION:            return 'PM asked a clarifying question';
+                      case LOG_ACTION.PM_QUESTION:            return 'Planning agent asked a clarifying question';
                       case LOG_ACTION.HUMAN_ANSWER:           return 'You replied';
-                      case LOG_ACTION.PM_REVIEWED:            return 'PM approved the task';
-                      case LOG_ACTION.PM_REVIEW_REQUESTED:    return 'PM review requested';
+                      case LOG_ACTION.PM_REVIEWED:            return 'Planning agent approved the task';
+                      case LOG_ACTION.PM_REVIEW_REQUESTED:    return 'Planning review requested';
                       case LOG_ACTION.HUMAN_APPROVED:         return `Human approved${log.message && log.message.replace(/^Human approved\s*[-–]?\s*/, '') ? ' — ' + log.message.replace(/^Human approved\s*[-–]?\s*/, '') : ''}`;
                       case LOG_ACTION.HUMAN_REJECTED:         return 'Human rejected';
                       case LOG_ACTION.MOVED:                  return log.message || 'Moved';

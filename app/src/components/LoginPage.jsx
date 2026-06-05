@@ -1,8 +1,125 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useStore } from '../store';
 import { invitesApi } from '../api';
 import heroImg from '../assets/images/hero.png';
+
+// ── Animated kanban preview ──────────────────────────────────────────────────
+
+const COLS = [
+  { id: 'backlog',  label: 'Backlog',     color: '#6366f1' },
+  { id: 'inprog',  label: 'In Progress',  color: '#ec4899' },
+  { id: 'review',  label: 'Review',       color: '#f59e0b' },
+  { id: 'done',    label: 'Done',         color: '#10b981' },
+];
+
+const INITIAL_CARDS = [
+  { id: 1, title: 'Design system setup',      col: 'done',    tag: 'UI',      tagColor: '#6366f1' },
+  { id: 2, title: 'Auth flow & login page',   col: 'done',    tag: 'Backend', tagColor: '#3b82f6' },
+  { id: 3, title: 'Kanban board UI',          col: 'review',  tag: 'UI',      tagColor: '#6366f1' },
+  { id: 4, title: 'Agent runner service',     col: 'inprog',  tag: 'Backend', tagColor: '#3b82f6' },
+  { id: 5, title: 'Planning clarification flow', col: 'inprog',  tag: 'Agent',   tagColor: '#a855f7' },
+  { id: 6, title: 'Notification system',      col: 'backlog', tag: 'Backend', tagColor: '#3b82f6' },
+  { id: 7, title: 'Mobile responsive layout', col: 'backlog', tag: 'UI',      tagColor: '#6366f1' },
+  { id: 8, title: 'Analytics dashboard',      col: 'backlog', tag: 'Feature', tagColor: '#f59e0b' },
+];
+
+const MOVE_SEQUENCE = [
+  { cardId: 6, to: 'inprog'  },
+  { cardId: 3, to: 'done'    },
+  { cardId: 7, to: 'inprog'  },
+  { cardId: 5, to: 'review'  },
+  { cardId: 8, to: 'inprog'  },
+  { cardId: 7, to: 'review'  },
+  { cardId: 6, to: 'review'  },
+  { cardId: 4, to: 'review'  },
+];
+
+function KanbanPreview() {
+  const [cards, setCards] = useState(INITIAL_CARDS);
+  const [activeCard, setActiveCard] = useState(null);
+  const stepRef = useRef(0);
+
+  useEffect(() => {
+    const tick = () => {
+      const step = MOVE_SEQUENCE[stepRef.current % MOVE_SEQUENCE.length];
+      setActiveCard(step.cardId);
+      setTimeout(() => {
+        setCards(prev => prev.map(c => c.id === step.cardId ? { ...c, col: step.to } : c));
+        setActiveCard(null);
+        stepRef.current += 1;
+      }, 700);
+    };
+    const interval = setInterval(tick, 2800);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="w-full h-full flex flex-col p-5 gap-4 select-none" aria-hidden="true">
+      {/* Top bar */}
+      <div className="flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+          <span className="text-[11px] font-semibold text-gray-300 tracking-wide">Project Board</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {['#6366f1','#ec4899','#10b981'].map(c => (
+            <div key={c} className="w-5 h-5 rounded-full border border-white/10" style={{ background: c + '40' }} />
+          ))}
+        </div>
+      </div>
+
+      {/* Columns */}
+      <div className="flex gap-3 flex-1 min-h-0 overflow-hidden">
+        {COLS.map(col => {
+          const colCards = cards.filter(c => c.col === col.id);
+          return (
+            <div key={col.id} className="flex-1 flex flex-col gap-2 min-w-0">
+              {/* Column header */}
+              <div className="flex items-center gap-1.5 mb-1 shrink-0">
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: col.color }} />
+                <span className="text-[10px] font-medium text-gray-400 truncate">{col.label}</span>
+                <span className="ml-auto text-[10px] text-gray-600">{colCards.length}</span>
+              </div>
+              {/* Cards */}
+              <div className="flex flex-col gap-1.5 flex-1 overflow-hidden">
+                {colCards.map(card => (
+                  <div
+                    key={card.id}
+                    className="rounded-lg px-2.5 py-2 border transition-all duration-500"
+                    style={{
+                      background: activeCard === card.id ? col.color + '18' : 'rgba(255,255,255,0.03)',
+                      borderColor: activeCard === card.id ? col.color + '60' : 'rgba(255,255,255,0.06)',
+                      boxShadow: activeCard === card.id ? `0 0 12px ${col.color}30` : 'none',
+                      transform: activeCard === card.id ? 'scale(1.02)' : 'scale(1)',
+                    }}
+                  >
+                    <p className="text-[10px] text-gray-300 leading-tight truncate mb-1.5">{card.title}</p>
+                    <span
+                      className="text-[8px] px-1.5 py-0.5 rounded-full font-medium"
+                      style={{ background: card.tagColor + '20', color: card.tagColor }}
+                    >
+                      {card.tag}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Bottom status bar */}
+      <div className="flex items-center justify-between shrink-0 pt-1 border-t border-white/[0.05]">
+        <span className="text-[10px] text-gray-600">{cards.length} tasks · 3 agents active</span>
+        <div className="flex items-center gap-1">
+          <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <span className="text-[10px] text-gray-600">Live</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function LoginPage({ inviteToken }) {
   const { googleLogin, authError } = useStore();
@@ -167,19 +284,8 @@ export default function LoginPage({ inviteToken }) {
 
         {/* ── Right: product preview ── */}
         <div className="hidden lg:flex flex-1 min-h-[420px]">
-          <div className="w-full border border-white/[0.06] rounded-2xl overflow-hidden relative">
-            <video
-              aria-hidden="true"
-              tabIndex={-1}
-              className="w-full h-full object-cover"
-              autoPlay
-              loop
-              playsInline
-              muted
-            >
-              <source src="https://media.w3.org/2010/05/video/movie_300.webm" type="video/webm" />
-              <source src="https://media.w3.org/2010/05/video/movie_300.mp4" type="video/mp4" />
-            </video>
+          <div className="w-full border border-white/[0.06] rounded-2xl overflow-hidden relative bg-[#0d0d14]">
+            <KanbanPreview />
           </div>
         </div>
 

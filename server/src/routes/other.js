@@ -407,6 +407,45 @@ columnsRouter.delete('/:id', (req, res) => {
 // ── Instructions ──────────────────────────────────────────────────────────────
 const instructionsRouter = express.Router();
 const { GLOBAL_INSTRUCTIONS_DIR } = require('../utils/instructions');
+const runnersRegistry = require('../seed/runners.json');
+
+// Runner personality file basenames — these are protected from deletion
+const RUNNER_PERSONALITY_FILES = new Set(
+  runnersRegistry.runners
+    .map(r => r.personality_file)
+    .filter(Boolean)
+    .map(p => path.basename(p))
+);
+
+// Split YAML-style front matter from markdown content.
+// Returns { capabilities: string[], body: string (without front matter) }.
+function splitFrontMatter(content) {
+  if (!content.startsWith('---\n')) return { capabilities: [], body: content };
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return { capabilities: [], body: content };
+  let caps = [];
+  for (const line of content.slice(4, end).split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon > 0 && line.slice(0, colon).trim() === 'capabilities') {
+      caps = line.slice(colon + 1).trim().split(',').map(c => c.trim()).filter(Boolean);
+    }
+  }
+  return { capabilities: caps, body: content.slice(end + 5).replace(/^\n+/, '') };
+}
+
+// Parse capabilities from a file's front matter. Returns [] if none/missing.
+function readCapabilities(filePath) {
+  try { return splitFrontMatter(fs.readFileSync(filePath, 'utf8')).capabilities; }
+  catch { return []; }
+}
+
+// Write front matter + body to a file. Empty capabilities = no front matter.
+function writeMdWithFrontMatter(filePath, body, capabilities) {
+  const fm = capabilities?.length
+    ? `---\ncapabilities: ${capabilities.join(',')}\n---\n\n`
+    : '';
+  fs.writeFileSync(filePath, fm + body, 'utf8');
+}
 
 /**
  * Resolve the file-system directory for a given scope.
@@ -439,12 +478,17 @@ function listInstructionFiles(includeArchived, subscriptionId, projectId) {
   const active = fs.existsSync(dir)
     ? fs.readdirSync(dir)
         .filter(f => f.endsWith('.md'))
-        .map(f => ({
-          path: `${prefix}/${f}`,
-          name: f.replace('.md', ''),
-          label: f.replace('.md', '').replace(/_/g, ' '),
-          archived: false,
-        }))
+        .map(f => {
+          const caps = readCapabilities(path.join(dir, f));
+          return {
+            path: `${prefix}/${f}`,
+            name: f.replace('.md', ''),
+            label: f.replace('.md', '').replace(/_/g, ' '),
+            archived: false,
+            capabilities: caps || [],
+            protected: RUNNER_PERSONALITY_FILES.has(f),
+          };
+        })
     : [];
 
   if (!includeArchived) return active;
@@ -457,6 +501,8 @@ function listInstructionFiles(includeArchived, subscriptionId, projectId) {
           name: f.replace('.md', ''),
           label: f.replace('.md', '').replace(/_/g, ' '),
           archived: true,
+          capabilities: readCapabilities(path.join(archivedDir, f)),
+          protected: RUNNER_PERSONALITY_FILES.has(f),
         }))
     : [];
 
@@ -492,18 +538,18 @@ instructionsRouter.get('/:filename', attachAgent, (req, res) => {
   const projectId = req.query.project_id || null;
   const { dir, archivedDir } = getInstructionsDirs(subscriptionId, projectId);
 
-  if (fs.existsSync(path.join(dir, filename))) {
-    return res.json({ content: fs.readFileSync(path.join(dir, filename), 'utf8'), archived: false });
-  }
-  if (fs.existsSync(path.join(archivedDir, filename))) {
-    return res.json({ content: fs.readFileSync(path.join(archivedDir, filename), 'utf8'), archived: true });
-  }
+  // Returns { content (body, no front matter), capabilities, protected, archived }
+  const respond = (filePath, archived) => {
+    const { capabilities, body } = splitFrontMatter(fs.readFileSync(filePath, 'utf8'));
+    return res.json({ content: body, capabilities, protected: RUNNER_PERSONALITY_FILES.has(filename), archived });
+  };
+
+  if (fs.existsSync(path.join(dir, filename))) return respond(path.join(dir, filename), false);
+  if (fs.existsSync(path.join(archivedDir, filename))) return respond(path.join(archivedDir, filename), true);
   // Fallback: try subscription-level file when reading a board file
   if (subscriptionId && projectId) {
-    const subDir = path.join(GLOBAL_INSTRUCTIONS_DIR, subscriptionId);
-    if (fs.existsSync(path.join(subDir, filename))) {
-      return res.json({ content: fs.readFileSync(path.join(subDir, filename), 'utf8'), archived: false });
-    }
+    const subPath = path.join(GLOBAL_INSTRUCTIONS_DIR, subscriptionId, filename);
+    if (fs.existsSync(subPath)) return respond(subPath, false);
   }
   res.status(404).json({ error: 'File not found' });
 });
@@ -516,29 +562,39 @@ instructionsRouter.patch('/:filename', (req, res) => {
   if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
     return res.status(400).json({ error: 'Invalid filename' });
   }
-  const { content } = req.body;
+  const { content, capabilities } = req.body;
   if (content === undefined) return res.status(400).json({ error: 'content is required' });
 
   const subscriptionId = req.query.subscription_id || null;
   const projectId = req.query.project_id || null;
   const { dir, archivedDir } = getInstructionsDirs(subscriptionId, projectId);
 
-  if (fs.existsSync(path.join(dir, filename))) {
-    fs.writeFileSync(path.join(dir, filename), content, 'utf8');
-    return res.json({ ok: true });
-  }
-  if (fs.existsSync(path.join(archivedDir, filename))) {
-    fs.writeFileSync(path.join(archivedDir, filename), content, 'utf8');
-    return res.json({ ok: true });
-  }
-  res.status(404).json({ error: 'File not found' });
+  const target = fs.existsSync(path.join(dir, filename))
+    ? path.join(dir, filename)
+    : fs.existsSync(path.join(archivedDir, filename))
+      ? path.join(archivedDir, filename)
+      : null;
+  if (!target) return res.status(404).json({ error: 'File not found' });
+
+  // capabilities provided → use it; absent → preserve existing front matter
+  const caps = Array.isArray(capabilities)
+    ? capabilities.filter(c => typeof c === 'string' && c.startsWith('perm_'))
+    : readCapabilities(target);
+  writeMdWithFrontMatter(target, content, caps);
+  res.json({ ok: true, capabilities: caps });
 });
 
 // POST /api/instructions?subscription_id=xxx&project_id=yyy — create a new .md file
 instructionsRouter.post('/', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create instruction files' });
 
-  const { name, content = '' } = req.body;
+  const subscriptionIdCheck = req.query.subscription_id || req.body.subscription_id || null;
+  const projectIdCheck = req.query.project_id || req.body.project_id || null;
+  if (subscriptionIdCheck && !projectIdCheck) {
+    return res.status(403).json({ error: 'Workspace context files are fixed — edit existing ones rather than adding new ones.' });
+  }
+
+  const { name, content = '', capabilities } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const safeName = name.trim().toLowerCase()
@@ -566,8 +622,9 @@ instructionsRouter.post('/', (req, res) => {
     return res.status(409).json({ error: `File "${filename}" already exists` });
   }
 
-  fs.writeFileSync(filePath, content, 'utf8');
-  res.status(201).json({ path: `${prefix}/${filename}`, name: safeName, archived: false });
+  const caps = Array.isArray(capabilities) ? capabilities.filter(c => typeof c === 'string' && c.startsWith('perm_')) : [];
+  writeMdWithFrontMatter(filePath, content, caps);
+  res.status(201).json({ path: `${prefix}/${filename}`, name: safeName, archived: false, capabilities: caps, protected: false });
 });
 
 // POST /api/instructions/:filename/archive?subscription_id=xxx&project_id=yyy
@@ -627,6 +684,11 @@ instructionsRouter.delete('/:filename', (req, res) => {
   const subscriptionId = req.query.subscription_id || null;
   const projectId = req.query.project_id || null;
   if (!subscriptionId) return res.status(400).json({ error: 'subscription_id is required' });
+
+  // Protect workspace personality files — they are part of the fixed agent configuration
+  if (!projectId && RUNNER_PERSONALITY_FILES.has(filename)) {
+    return res.status(403).json({ error: 'This workspace file is protected — it defines agent behaviour and cannot be deleted. You can edit its content instead.', protected: true });
+  }
 
   const db = getDb();
   const refs = getAgentReferences(db, filename, subscriptionId, projectId);

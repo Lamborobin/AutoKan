@@ -1,3 +1,7 @@
+---
+capabilities: perm_coding,perm_coding_tester,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader
+---
+
 # Project Context — Velour E-Commerce Platform
 
 This file gives all agents background knowledge about the project so they can ask smarter questions, implement correctly, and test accurately.
