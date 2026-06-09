@@ -28,6 +28,32 @@
       "role_ids": ["perm_coding", "role_access_inprogress"]
     },
     {
+      "id": "tpl_producer",
+      "agent_id": "agent_producer",
+      "name": "Document Producer",
+      "role": "producer",
+      "model": "claude-sonnet-4-6",
+      "color": "#f59e0b",
+      "description": "Produces structured documents, SOPs, checklists, and summaries based on task requirements. Writes to the outputs folder — never modifies source documents.",
+      "template_system_prompt": "You are a Document Producer agent. Based on the task brief and the project's instruction files, you write clear, structured documents in the required format. You follow the document standards defined in the project context exactly. If information is missing, flag it clearly with [INFORMATION NEEDED: describe what is missing] rather than guessing. You never edit existing documents — you produce new ones and write them to the designated output location.",
+      "personality_file": null,
+      "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log"],
+      "role_ids": ["perm_producing", "role_access_inprogress"]
+    },
+    {
+      "id": "tpl_verifier",
+      "agent_id": "agent_verifier",
+      "name": "Document Verifier",
+      "role": "verifier",
+      "model": "claude-sonnet-4-6",
+      "color": "#10b981",
+      "description": "Reads documents and files, checks structure and content against defined criteria, and produces a pass/fail verification report. Never modifies source files.",
+      "template_system_prompt": "You are a Document Verifier agent. You read documents from the client folder and verify them against the criteria defined in the project's instruction files. You produce a structured pass/fail report for each requirement — list every check with PASS or FAIL and a brief note on what was found. You never modify source documents. If a document fails any check, list exactly what needs to be corrected so the author can fix it without ambiguity.",
+      "personality_file": null,
+      "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
+      "role_ids": ["perm_verifying", "role_access_testing"]
+    },
+    {
       "id": "tpl_test",
       "agent_id": "agent_test",
       "name": "Tester",
@@ -41,6 +67,39 @@
       "role_ids": ["perm_coding_tester", "role_access_testing"]
     }
   ],
+  "steel_agents": [
+    {
+      "id": "agent_pm_steel",
+      "template_id": "tpl_pm",
+      "name": "Production Planner",
+      "role": "pm",
+      "model": "claude-opus-4-5",
+      "color": "#6366f1",
+      "description": "Plans and structures tasks for Nordstahl Industries. Ensures every task has clear requirements and a defined output before work begins.",
+      "role_ids": ["perm_planning", "role_access_backlog"]
+    },
+    {
+      "id": "agent_producer_steel",
+      "template_id": "tpl_producer",
+      "name": "SOP Writer",
+      "role": "producer",
+      "model": "claude-sonnet-4-6",
+      "color": "#f59e0b",
+      "description": "Writes Standard Operating Procedures and compliance documents for Nordstahl's production operations following the Nordstahl document standard.",
+      "role_ids": ["perm_producing", "role_access_inprogress"]
+    },
+    {
+      "id": "agent_verifier_steel",
+      "template_id": "tpl_verifier",
+      "name": "Compliance Checker",
+      "role": "verifier",
+      "model": "claude-sonnet-4-6",
+      "color": "#10b981",
+      "description": "Verifies documents against Nordstahl's quality standards and ISO 9001 / ISO 45001 compliance criteria. Produces a structured pass/fail report.",
+      "role_ids": ["perm_verifying", "role_access_testing"]
+    }
+  ],
+
   "velour_agents": [
     {
       "id": "agent_pm_velour",

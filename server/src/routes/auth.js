@@ -137,8 +137,8 @@ router.post('/google', async (req, res) => {
       } else {
         const personalProjectId = generateProjectId();
         const displayName = firstName ? `${firstName}'s Board` : 'My Board';
-        db.prepare(`INSERT INTO projects (id, name, description, color, emoji, owner_id, subscription_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        db.prepare(`INSERT INTO projects (id, name, description, color, emoji, owner_id, subscription_id, sector)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'personal')`)
           .run(personalProjectId, displayName, 'Personal workspace', '#10b981', '🧑', id, subscriptionId);
         db.prepare(`INSERT OR IGNORE INTO project_members (id, project_id, email, user_id, role, accepted_at)
                     VALUES (?, ?, ?, ?, 'owner', CURRENT_TIMESTAMP)`)

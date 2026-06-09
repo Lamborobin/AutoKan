@@ -177,10 +177,15 @@ function RoleCheckbox({ checked, onToggle, color, label, badge }) {
 }
 
 export function RoleField({ selectedRoleIds, onToggle }) {
-  const { roles } = useStore();
+  const { roles, currentProjectId, projects } = useStore();
+
+  const currentProject = projects.find(p => p.id === currentProjectId);
+  const hiddenCapabilities = (() => {
+    try { return JSON.parse(currentProject?.hidden_capability_ids || '[]'); } catch { return []; }
+  })();
 
   const columnRoles = roles.filter(r => r.type === 'column_access');
-  const permissionRoles = roles.filter(r => r.type === 'permission');
+  const permissionRoles = roles.filter(r => r.type === 'permission' && !hiddenCapabilities.includes(r.id));
 
   const allColumnsChecked = selectedRoleIds.includes('role_access_any');
   const hasColumn = selectedRoleIds.some(r => typeof r === 'string' && r.startsWith('role_access_'));

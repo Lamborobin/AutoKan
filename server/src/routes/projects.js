@@ -8,6 +8,7 @@ const { generateProjectId } = require('../utils/ids');
 const { TEST_CLIENT_ID } = require('../config/constants');
 const { requireAuth } = require('../middleware/auth');
 const { scaffoldProjectInstructions } = require('../utils/instructions');
+const runnersRegistry = require('../seed/runners.json');
 
 const router = express.Router();
 
@@ -17,13 +18,21 @@ const CLIENT_DIR = path.join(PROJECT_ROOT, 'client');
 // Ensure client/ folder exists
 if (!fs.existsSync(CLIENT_DIR)) fs.mkdirSync(CLIENT_DIR, { recursive: true });
 
-// Enrich a project row with path_exists status
+// A board has a PR/code workflow if it exposes any coder capability that isn't
+// hidden. Drives UI that only makes sense for code boards (e.g. PR auto-complete).
+function boardHasPrWorkflow(hiddenCapabilityIds) {
+  let hidden = [];
+  try { hidden = JSON.parse(hiddenCapabilityIds || '[]'); } catch {}
+  return runnersRegistry.capabilities.some(c => c.is_coder && !hidden.includes(c.id));
+}
+
+// Enrich a project row with derived UI flags
 function enrichProject(p) {
   if (!p) return p;
   const pathExists = p.client_path
     ? fs.existsSync(path.join(PROJECT_ROOT, p.client_path))
     : null;
-  return { ...p, path_exists: pathExists };
+  return { ...p, path_exists: pathExists, pr_workflow: boardHasPrWorkflow(p.hidden_capability_ids) };
 }
 
 const PROJECT_SELECT = `

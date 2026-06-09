@@ -1,0 +1,27 @@
+{
+  "description": "Sector registry — the single source of truth for what a sector is. A sector classifies a board, is set at board creation, and is locked afterward. It drives two things: (1) which capabilities the board exposes — 'capabilities' is an allow-list, and everything else in runners.json's capability registry is hidden on that board (hidden = registry complement of the allow-list); null means expose all capabilities, no restriction. (2) which context the board seeds at creation. 'team' distinguishes a shared client/team board from a single-user personal board. Add a sector by adding an entry here; seeding reads this registry rather than hardcoding any sector.",
+
+  "sectors": [
+    {
+      "id": "personal",
+      "label": "Personal Board",
+      "description": "A single-user personal workspace with no client attached. Exposes every capability — it is the owner's own sandbox.",
+      "team": false,
+      "capabilities": null
+    },
+    {
+      "id": "software",
+      "label": "Software Development",
+      "description": "A software engineering board. The deliverable is code: agents work inside the client repository, open pull requests, and run automated tests. Exposes every capability.",
+      "team": true,
+      "capabilities": null
+    },
+    {
+      "id": "manufacturing",
+      "label": "Manufacturing",
+      "description": "Industrial operations — quality management, safety compliance, process documentation. The deliverable is a document, not code. Agents read client-supplied files, produce structured documents, and verify them against the client's standards. Read-only on source files.",
+      "team": true,
+      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"]
+    }
+  ]
+}

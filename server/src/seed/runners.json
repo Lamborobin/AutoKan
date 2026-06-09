@@ -127,6 +127,24 @@
       "write_access": null,
       "context_docs": ["docs/rules.md"],
       "is_coder": false
+    },
+    {
+      "id": "perm_producing",
+      "label": "Document Producer",
+      "description": "Produces structured documents, SOPs, checklists, and summaries as markdown output in the client outputs folder. Used for non-software sectors where the deliverable is a document rather than code.",
+      "color": "#f59e0b",
+      "write_access": "client/outputs/",
+      "context_docs": ["docs/rules.md"],
+      "is_coder": false
+    },
+    {
+      "id": "perm_verifying",
+      "label": "Document Verifier",
+      "description": "Reads documents and files from the client folder, checks structure and content against criteria in instruction files, and produces a pass/fail verification report. Never writes to source files.",
+      "color": "#10b981",
+      "write_access": null,
+      "context_docs": ["docs/rules.md"],
+      "is_coder": false
     }
   ],
 
@@ -184,6 +202,8 @@
     { "id": "runner_cloud_placeholder",         "capability": "perm_cloud",             "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_cloud is built out." },
     { "id": "runner_security_placeholder",      "capability": "perm_security_control",  "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_security_control is built out." },
     { "id": "runner_log_reader_placeholder",    "capability": "perm_log_reader",        "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_log_reader is built out." },
-    { "id": "runner_data_analytic_placeholder", "capability": "perm_data_analytic",     "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_data_analytic is built out." }
+    { "id": "runner_data_analytic_placeholder", "capability": "perm_data_analytic",     "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_data_analytic is built out." },
+    { "id": "runner_producing_placeholder",     "capability": "perm_producing",          "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — produce_document handler to be implemented. Agent will write structured markdown output to client/outputs/." },
+    { "id": "runner_verifying_placeholder",     "capability": "perm_verifying",          "column": "col_testing",    "handler": "placeholder", "is_placeholder": true, "description": "Stub — verify_document handler to be implemented. Agent reads files from client folder and checks against instruction file criteria." }
   ]
 }

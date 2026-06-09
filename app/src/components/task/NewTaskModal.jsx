@@ -5,7 +5,10 @@ import { PRIORITIES, COMPLEXITIES, PRIORITY, COMPLEXITY } from '../../constants/
 import { COLUMN } from '../../constants/columns';
 
 export default function NewTaskModal() {
-  const { agents, roles, createTask, setShowNewTask } = useStore();
+  const { agents, roles, createTask, setShowNewTask, currentProjectId, projects } = useStore();
+  const currentProject = projects.find(p => p.id === currentProjectId);
+  // Auto-complete only means something on boards with a PR/code workflow.
+  const showAutoComplete = currentProject?.pr_workflow !== false;
   const defaultPlanningAgent = agents.find(a => a.active !== 0 && Array.isArray(a.role_ids) && a.role_ids.includes('perm_planning'));
   const [form, setForm] = useState({
     title: '', description: '', priority: PRIORITY.MEDIUM, complexity: COMPLEXITY.MEDIUM,
@@ -115,28 +118,30 @@ export default function NewTaskModal() {
             </select>
           </div>
 
-          <div
-            className="flex items-center justify-between bg-surface-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-surface-3/80 transition-colors"
-            onClick={() => set('auto_complete', !form.auto_complete)}
-          >
-            <div>
-              <p className="text-xs font-medium text-gray-300">Auto-complete</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">
-                {form.auto_complete ? 'PR merged automatically → Testing' : 'PR sent to Human Action for review'}
-              </p>
+          {showAutoComplete && (
+            <div
+              className="flex items-center justify-between bg-surface-3 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-surface-3/80 transition-colors"
+              onClick={() => set('auto_complete', !form.auto_complete)}
+            >
+              <div>
+                <p className="text-xs font-medium text-gray-300">Auto-complete</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  {form.auto_complete ? 'PR merged automatically → Testing' : 'PR sent to Human Action for review'}
+                </p>
+              </div>
+              <div className={`rounded-full transition-colors shrink-0 ml-3 relative ${form.auto_complete ? 'bg-accent' : 'bg-surface-4'}`}
+                   style={{ width: '32px', height: '18px' }}>
+                <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${form.auto_complete ? 'translate-x-[14px]' : 'translate-x-0.5'}`} />
+              </div>
             </div>
-            <div className={`rounded-full transition-colors shrink-0 ml-3 relative ${form.auto_complete ? 'bg-accent' : 'bg-surface-4'}`}
-                 style={{ width: '32px', height: '18px' }}>
-              <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${form.auto_complete ? 'translate-x-[14px]' : 'translate-x-0.5'}`} />
-            </div>
-          </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1.5">Tags <span className="text-gray-600">(comma separated)</span></label>
             <input
               value={form.tags}
               onChange={e => set('tags', e.target.value)}
-              placeholder="frontend, auth, bug"
+              placeholder="urgent, review, blocked"
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100
                          placeholder-gray-600 focus:outline-none focus:border-accent transition-colors"
             />

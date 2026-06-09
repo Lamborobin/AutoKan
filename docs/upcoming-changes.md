@@ -10,30 +10,22 @@ Update this file when:
 
 ## Not Yet Built
 
-- **Sectors and non-software capabilities** — extend AutoKan beyond software development into any knowledge-work sector. Agents are optional — boards work as normal human-operated kanban without any agents assigned. Agents add acceleration on specific tasks where automation makes sense. Core design:
+- **Sector infrastructure — remaining pieces.** The `sector` field and `hidden_capability_ids` on boards, the `perm_producing` / `perm_verifying` capabilities, and the first manufacturing board (seeded with derived hidden-capabilities and starter context) all exist. The live sector reference is documented separately. What remains:
+  1. **Runner handlers for produce/verify** — both capabilities currently dispatch to the placeholder handler. Implement `produce_document` (agent writes a structured document to the client outputs area, task moves to Human Action for review) and `verify_document` (agent reads client files, checks against the board's verification criteria, reports pass/fail with the same retry/escalation logic as the test runner).
+  2. **Sector picker at board creation (UI)** — sector is currently only settable via the seed. Add it to the new-board flow, locked after creation.
+  3. **Per-board capability visibility toggle (Settings UI)** — `hidden_capability_ids` is honoured by the agent form but only settable via the seed today. Add a Settings panel to toggle which capabilities a board exposes, defaulting from the sector's allow-list.
+  4. **File reading utility** — shared helper that detects file type and returns clean text/structure. Read-only, writes nothing. Formats: PDF (Claude native), Word/docx (`mammoth`), Excel/csv (`sheetjs`), PowerPoint/pptx (ZIP+XML), plain text, JSON, XML, YAML, SQL, DXF (AutoCAD text), IFC (construction BIM, STEP text), XBRL (financial XML), EDI (logistics text), HL7 v2, FHIR (JSON/XML), SCORM (ZIP+XML), Sketch/XD (ZIP+JSON), PSD layer metadata (`psd` library, MIT), Premiere/DaVinci project files (XML/JSON in ZIP), Unity/Unreal project files (YAML/JSON).
 
-  **Infrastructure (build once, all sectors benefit):**
-  1. `sector` field on boards — set at creation, locked after. Wrong sector = new board.
-  2. Capability visibility toggle per board in Settings — sector provides the default set, user can adjust. Hides irrelevant capabilities from agent assignment UI without deleting them.
-  3. Two new cross-sector capability types:
-     - `perm_producing` — agent writes a structured `.md` summary or checklist to `client/outputs/` (never edits the source document). Task moves to Human Action for review, same flow as PR-ready today.
-     - `perm_verifying` — reads files from the client folder, checks structure/content against criteria in instruction files, outputs a pass/fail report. Same retry/escalation logic as the test runner. Read-only — never writes to source files.
-  4. Sector-scoped rules and guidelines — each sector seeds its own starter instruction files into the board's existing `instructions/{subscriptionId}/{projectId}/` folder at creation time, same path as today. No new folder structure. The sector determines which templates are dropped in — a manufacturing board gets safety and SOP templates, a software board gets the current defaults. A steel factory board should never have git workflow rules in its instruction files.
-  5. File reading utility — shared helper that detects file type and returns clean text/structure. Supported formats: PDF (Claude native), Word/docx (`mammoth`), Excel/csv (`sheetjs`), PowerPoint/pptx (ZIP+XML parse), plain text, JSON, XML, YAML, SQL, DXF (AutoCAD text format), IFC (construction BIM, STEP text format), XBRL (financial XML), EDI (logistics text), HL7 v2 (text), FHIR (JSON/XML), SCORM (ZIP+XML), Sketch/XD (ZIP+JSON), PSD layer metadata (`psd` library, MIT), Premiere Pro/DaVinci project files (XML/JSON inside ZIP), Unity/Unreal project files (YAML/JSON). Writes nothing.
-
-  **Sector rollout priority — discuss and design each before building:**
-  1. `manufacturing` — SOPs, incident reports, maintenance checklists, safety compliance, supplier qualification. Key formats: PDF, Word, Excel, DXF. First non-software proof sector.
-  2. `healthcare` — clinical protocols, training materials, regulatory submission checklists, literature summaries. Key formats: PDF, Word, HL7, FHIR. Compliance rules stored in instructions (ICH/FDA format guidelines).
-  3. `legal` — contract review, clause verification, filing compliance, matter tracking. Key formats: PDF, Word. High value — clear validation rules, structured approval chains already match AutoKan's flow.
-  4. `finance` — audit workflows, reconciliation, financial reporting compliance. Key formats: Excel, CSV, PDF, XBRL (SEC/IFRS reporting XML standard).
-  5. `aec` — architecture/engineering/construction. Design review, planning approval, spec compliance. Key formats: PDF, DXF, IFC (Building Information Modeling open standard).
-  6. `logistics` — order management, shipment workflows, supplier compliance. Key formats: CSV, Excel, EDI (Electronic Data Interchange — plain text, widely used for purchase orders and invoices between companies).
-  7. `realestate` — deal pipelines, lease review, property management tasks. Key formats: PDF, Word, Excel. Agents useful for document checklist verification and lease clause checks — fully human-operated otherwise.
-  8. `government` — procurement, policy compliance, public reporting workflows. Key formats: PDF, Word, XML schemas vary by jurisdiction. Agents useful for checklist verification, not drafting.
-  9. `hr` — hiring pipelines, onboarding, offer letter compliance. Key formats: PDF, Word, Excel.
-  10. `education` — course development, curriculum review, accreditation compliance. Key formats: Word, PDF, SCORM (ZIP-based eLearning packages).
-
-  Each sector discussion should cover: specific use cases, which capabilities make sense, what instruction templates to seed, and what validation rules agents can realistically check. Sectors that are purely human-operated (no agents) are still valid — the board structure and task pipeline have value without automation.
+- **Additional sectors — rollout priority.** Each needs an allow-list, seeded starter context, and a documented validation approach. Discuss and design before building.
+  1. `healthcare` — clinical protocols, training materials, regulatory submission checklists, literature summaries. Formats: PDF, Word, HL7, FHIR. Compliance rules (ICH/FDA) seeded as board context.
+  2. `legal` — contract review, clause verification, filing compliance, matter tracking. Formats: PDF, Word. High value — clear validation rules, approval chains already match the flow.
+  3. `finance` — audit workflows, reconciliation, financial reporting compliance. Formats: Excel, CSV, PDF, XBRL (SEC/IFRS reporting XML standard).
+  4. `aec` — architecture/engineering/construction. Design review, planning approval, spec compliance. Formats: PDF, DXF, IFC (Building Information Modeling open standard).
+  5. `logistics` — order management, shipment workflows, supplier compliance. Formats: CSV, Excel, EDI (purchase orders / invoices between companies).
+  6. `realestate` — deal pipelines, lease review, property management. Formats: PDF, Word, Excel. Mostly human-operated; agents useful for checklist and clause verification.
+  7. `government` — procurement, policy compliance, public reporting. Formats: PDF, Word, jurisdiction-specific XML. Agents useful for checklist verification, not drafting.
+  8. `hr` — hiring pipelines, onboarding, offer letter compliance. Formats: PDF, Word, Excel.
+  9. `education` — course development, curriculum review, accreditation compliance. Formats: Word, PDF, SCORM (ZIP-based eLearning packages).
 
 - **Per-role progress tracking** — replace the single global `progress` field on a task with per-role progress derived from each agent's own checklist. Today progress is a manually set integer (0–100) that only makes sense for the coder; PM runs, tester runs, and any other capability contribute nothing to it. The rework: each capability that has a checklist (the PM already writes `pm_checklist`; the coder and tester would write their own structured checklists) exposes its own completion ratio — resolved items ÷ total items — displayed as a small labelled progress bar per role inside the task card and detail panel. The single global bar is removed from the card exterior. A task with three roles (PM, Developer, Tester) would show three separate bars, each only visible once that role has started and produced a checklist. Implementation touches: `task_logs` or a new `task_role_checklists` structure to store per-role items; the runner prompts for coder and tester updated to emit structured checklists the same way the PM does today; the card and detail UI updated to render per-role bars instead of one global bar.
 

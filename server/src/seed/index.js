@@ -2,9 +2,23 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
-const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID } = require('../config/constants');
+const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME } = require('../config/constants');
+const INSTRUCTIONS_ROOT = path.join(__dirname, '../../../instructions');
 const agentTemplates = require('./agent-templates.json');
 const runnersRegistry = require('./runners.json');
+const sectorsRegistry = require('./sectors.json');
+
+// Hidden-capability list for a sector = the capability registry minus the
+// sector's allow-list. A null allow-list means expose everything (hidden = []).
+// Deriving from the registry means a capability added later is hidden by default
+// on restricted sectors rather than leaking in.
+function hiddenCapsForSector(sectorId) {
+  const sector = sectorsRegistry.sectors.find(s => s.id === sectorId);
+  if (!sector || !sector.capabilities) return [];
+  return runnersRegistry.capabilities
+    .map(c => c.id)
+    .filter(id => !sector.capabilities.includes(id));
+}
 
 /**
  * Seed all default data into a fresh database.
@@ -26,6 +40,7 @@ function seedDefaults(db) {
   seedAgentTemplates(db);
   seedAgents(db);
   seedVelourAgents(db);
+  seedSteelFactory(db);
   scaffoldInstructionFolders();
 }
 
@@ -80,15 +95,15 @@ function seedColumns(db) {
 function seedProjects(db) {
   // Demo client project — pre-connected to the seeded client/Velour folder
   db.prepare(`
-    INSERT OR IGNORE INTO projects (id, name, description, client_name, client_path, color, emoji, subscription_id)
-    VALUES (?, 'Public Website', ?, ?, ?, '#6366f1', '⚡', ?)
-  `).run(TEST_CLIENT_ID, `Development of the public website of ${TEST_CLIENT_NAME}`, TEST_CLIENT_NAME, `client/${TEST_CLIENT_NAME}`, DEFAULT_SUB_ID);
+    INSERT OR IGNORE INTO projects (id, name, description, client_name, client_path, color, emoji, subscription_id, sector, hidden_capability_ids)
+    VALUES (?, 'Public Website', ?, ?, ?, '#6366f1', '⚡', ?, 'software', ?)
+  `).run(TEST_CLIENT_ID, `Development of the public website of ${TEST_CLIENT_NAME}`, TEST_CLIENT_NAME, `client/${TEST_CLIENT_NAME}`, DEFAULT_SUB_ID, JSON.stringify(hiddenCapsForSector('software')));
 
   // Default personal board (claimed by first user who logs in)
   db.prepare(`
-    INSERT OR IGNORE INTO projects (id, name, description, color, emoji, subscription_id)
-    VALUES (?, 'My Board', 'Personal workspace', '#6366f1', '🗂️', ?)
-  `).run(MY_BOARD_ID, DEFAULT_SUB_ID);
+    INSERT OR IGNORE INTO projects (id, name, description, color, emoji, subscription_id, sector, hidden_capability_ids)
+    VALUES (?, 'My Board', 'Personal workspace', '#6366f1', '🗂️', ?, 'personal', ?)
+  `).run(MY_BOARD_ID, DEFAULT_SUB_ID, JSON.stringify(hiddenCapsForSector('personal')));
 
   // Seed the client entity and link it to the demo project
   let client = db.prepare('SELECT id FROM clients WHERE name = ? AND subscription_id = ?')
@@ -172,6 +187,58 @@ function seedVelourAgents(db) {
   }
 }
 
+// ── Steel factory demo board ──────────────────────────────────────────────────
+
+function seedSteelFactory(db) {
+  // Client record
+  let client = db.prepare('SELECT id FROM clients WHERE name = ? AND subscription_id = ?')
+    .get(STEEL_CLIENT_NAME, DEFAULT_SUB_ID);
+  if (!client) {
+    const clientId = 'client_steel_' + crypto.randomBytes(4).toString('hex');
+    db.prepare('INSERT INTO clients (id, name, subscription_id) VALUES (?, ?, ?)')
+      .run(clientId, STEEL_CLIENT_NAME, DEFAULT_SUB_ID);
+    client = { id: clientId };
+  }
+
+  db.prepare(`
+    INSERT OR IGNORE INTO projects
+      (id, name, description, client_name, color, emoji, subscription_id, client_id, sector, hidden_capability_ids)
+    VALUES (?, 'Production Operations', ?, ?, '#f59e0b', '🏭', ?, ?, 'manufacturing', ?)
+  `).run(
+    STEEL_CLIENT_ID,
+    `Quality and compliance management for ${STEEL_CLIENT_NAME}`,
+    STEEL_CLIENT_NAME,
+    DEFAULT_SUB_ID,
+    client.id,
+    JSON.stringify(hiddenCapsForSector('manufacturing')),
+  );
+
+  db.prepare('UPDATE projects SET client_id = ? WHERE id = ? AND client_id IS NULL')
+    .run(client.id, STEEL_CLIENT_ID);
+
+  // Agents
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO agents
+      (id, name, role, model, description, permissions, personality_file,
+       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const a of agentTemplates.steel_agents) {
+    const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
+    if (!tpl) continue;
+    insert.run(
+      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      JSON.stringify(tpl.permissions),
+      tpl.personality_file || null,
+      tpl.template_system_prompt ? 1 : 0,
+      null,
+      a.color, a.template_id, STEEL_CLIENT_ID,
+      JSON.stringify(a.role_ids),
+    );
+  }
+}
+
 // ── Instruction folder scaffolding ────────────────────────────────────────────
 
 // Demo content for the seeded board's context files — kept as editable markdown
@@ -191,6 +258,26 @@ function scaffoldInstructionFolders() {
 
   try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, null, null, true); }
   catch (e) { console.warn('Could not scaffold My Board instructions:', e.message); }
+
+  try { scaffoldSteelInstructions(); }
+  catch (e) { console.warn('Could not scaffold Nordstahl instructions:', e.message); }
+}
+
+function scaffoldSteelInstructions() {
+  const projectDir = path.join(INSTRUCTIONS_ROOT, DEFAULT_SUB_ID, STEEL_CLIENT_ID);
+  if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
+
+  // Files written without CODER_CAPS front-matter — all agents on this board can read them
+  const files = [
+    ['client.md',   readSeedDoc('demo-steel-client.md')   || `# Client: ${STEEL_CLIENT_NAME}\n`],
+    ['project.md',  readSeedDoc('demo-steel-project.md')  || '# Project Context\n'],
+    ['sop-guide.md', readSeedDoc('demo-steel-sop-guide.md') || '# SOP Writer Guide\n'],
+  ];
+
+  for (const [filename, content] of files) {
+    const filePath = path.join(projectDir, filename);
+    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, content, 'utf8');
+  }
 }
 
 module.exports = { seedDefaults };

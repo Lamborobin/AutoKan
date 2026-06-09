@@ -92,6 +92,8 @@ function applySchema(db) {
       created_by TEXT REFERENCES users(id),
       repo_url TEXT,
       client_path TEXT,
+      sector TEXT DEFAULT 'software',
+      hidden_capability_ids TEXT DEFAULT '[]',
       archived_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
