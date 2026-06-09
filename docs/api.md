@@ -61,6 +61,7 @@ The `/api/docs` group serves the editable doc files driven by `agent.config.json
 | POST | /api/tasks/:id/request_human | Flag as blocked, move to Human Action |
 | POST | /api/tasks/:id/approve_pr | Approve the task's PR |
 | GET | /api/tasks/:id/check_pr | Check PR status |
+| POST | /api/tasks/:id/sync_github | Poll GitHub for new PR comments, reviews, inline comments, and CI check results since last sync. Inserts new entries as `task_log` rows (`action: github_comment` or `github_ci`). Returns `{ added, logs }`. Works from localhost — no webhook setup needed. |
 | POST | /api/tasks/:id/archive | Archive task |
 | POST | /api/tasks/:id/unarchive | Restore archived task |
 | POST | /api/tasks/:id/bypass_pm | Skip PM planning gate |

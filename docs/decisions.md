@@ -60,6 +60,12 @@ Update this file when a significant decision is made or reversed.
 
 ---
 
+## Single timing variable for all spam / dedup windows
+**Decided:** GitHub sync + notification dedup implementation
+**Context:** When implementing the GitHub PR sync cooldown we realised there were already two separate places controlling similar "don't do this too often" windows — notification dedup and email throttling — both reading `NOTIFICATION_DEDUP_SECONDS`. Rather than introduce a third variable for GitHub sync, we reused the same one for the manual sync button. The 24 h auto-sync cycle is a hardcoded multiple, not a new env var, because operators don't need to tune it independently. The principle: one env var per concept, not one per feature. New timeout needs should be justified against this variable first; if they're genuinely different they get a new constant, but that decision is made explicitly rather than by default.
+
+---
+
 ## Ownership & distribution — proprietary, company-owned
 **Decided:** Distribution model
 **Context:** AutoKan is developed under employment, so under a standard IP-assignment / work-for-hire arrangement the **employer owns the IP** (working assumption — confirm against the employment agreement and any company open-source/external-release policy). It is therefore proprietary, all-rights-reserved software — not an open-source project the author can license independently. Distribution is on the company's terms: the B2B model discussed (per-client installs, or a planned hosted variant). This repo doubles as the official demo, seeded with the default agents, their templates, and one sample client (Velour) so the full flow runs out of the box. Any public license or open-sourcing would require company approval; absent a `LICENSE` file the code is all-rights-reserved by default.

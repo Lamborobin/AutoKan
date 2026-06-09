@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check } from 'lucide-react';
+import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check, RotateCcw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useStore } from '../../store';
 import { tasksApi } from '../../api';
@@ -34,6 +34,8 @@ export default function TaskDetail() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [approvingPr, setApprovingPr] = useState(false);
   const [checkingPr, setCheckingPr] = useState(false);
+  const [syncingGithub, setSyncingGithub] = useState(false);
+  const [githubSyncedAt, setGithubSyncedAt] = useState(null);
   const [pendingEditAgent, setPendingEditAgent] = useState(null);
   const [savingClientContext, setSavingClientContext] = useState(false);
   const [clientContextEdit, setClientContextEdit] = useState(null);
@@ -84,6 +86,22 @@ export default function TaskDetail() {
           if (result.merged && result.task) setTask(result.task);
         } catch { /* GitHub unreachable — let user click manually */ }
         finally { if (!cancelled) setCheckingPr(false); }
+      }
+
+      // Initialise sync timestamp from metadata
+      const lastSync = t.metadata?.github_synced_at || null;
+      setGithubSyncedAt(lastSync);
+
+      // Auto-sync once per day — only if pr_url exists and last sync > 24 h ago (or never)
+      const oneDayMs = 86400 * 1000;
+      const needsAutoSync = t.pr_url && (!lastSync || Date.now() - new Date(lastSync).getTime() > oneDayMs);
+      if (needsAutoSync) {
+        tasksApi.syncGithub(t.id, false).then(result => {
+          if (cancelled) return;
+          if (result.added > 0) setLogs(result.logs);
+          if (result.synced_at) setGithubSyncedAt(result.synced_at);
+          if (result.merged && result.task) setTask(result.task);
+        }).catch(() => {});
       }
     })();
     return () => { cancelled = true; };
@@ -302,6 +320,19 @@ export default function TaskDetail() {
     }
   }
 
+  async function handleSyncGithub() {
+    if (syncingGithub || !task) return;
+    setSyncingGithub(true);
+    try {
+      const result = await tasksApi.syncGithub(task.id, true);
+      setLogs(result.logs);
+      if (result.synced_at) setGithubSyncedAt(result.synced_at);
+      if (result.merged && result.task) setTask(result.task);
+    } catch {} finally {
+      setSyncingGithub(false);
+    }
+  }
+
   async function handleAgentChange(agentId) {
     await updateTask(task.id, { assigned_agent_id: agentId || null });
     setTask(t => ({ ...t, assigned_agent_id: agentId || null }));
@@ -377,6 +408,16 @@ export default function TaskDetail() {
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            {task.pr_url && (
+              <button
+                onClick={handleSyncGithub}
+                disabled={syncingGithub}
+                title={githubSyncedAt ? `Sync GitHub — last synced ${formatDistanceToNow(new Date(githubSyncedAt), { addSuffix: true })}` : 'Sync GitHub activity'}
+                className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-blue-400 disabled:opacity-40 transition-colors"
+              >
+                <RotateCcw size={14} className={syncingGithub ? 'animate-spin' : ''} />
+              </button>
+            )}
             <div className="relative">
               <button
                 onClick={handleArchive}
@@ -1113,6 +1154,8 @@ export default function TaskDetail() {
                       case 'pr_created':                      return 'PR created — awaiting review';
                       case LOG_ACTION.PR_APPROVED:            return 'PR approved, moved to Testing';
                       case LOG_ACTION.HUMAN_ACTION_REQUESTED: return 'Human action required';
+                      case LOG_ACTION.GITHUB_COMMENT:         return log.message || 'GitHub: new comment on the PR';
+                      case LOG_ACTION.GITHUB_CI:              return log.message || 'GitHub CI result';
                       default: {
                         const msg = log.message || log.action;
                         return msg.length > 80 ? msg.slice(0, 80) + '…' : msg;

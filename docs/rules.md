@@ -111,3 +111,13 @@ This policy is local-dev only, and will be revisited once the app has real users
 
 ## Agent header rule
 Agents identify to the API via HTTP header: `X-Agent-Id: <agent_id>`
+
+---
+
+## Timing / cooldown constants
+
+**Never introduce a new env var or hardcoded number for a timeout, delay, or dedup window without first checking whether `NOTIFICATION_DEDUP_SECONDS` (or a future shared timing constant) already covers the need.**
+
+- `NOTIFICATION_DEDUP_SECONDS` is the canonical spam-prevention window. Default: 30 s in dev, 300 s in production. Set once in `.env`; applies everywhere.
+- If a new timing need is genuinely distinct (e.g. a 24 h auto-sync cycle), derive it from a clearly named multiplier (`86400` with a comment) rather than a second env var, unless the operator really needs to tune it independently — in which case add a note here.
+- When in doubt, ask the user before introducing a new configurable timeout. The goal is one knob per concept, not one knob per feature.

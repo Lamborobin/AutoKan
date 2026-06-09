@@ -45,6 +45,8 @@ export const LOG_ACTION = {
   BRANCH_CREATED:           'branch_created',
   PR_APPROVED:              'pr_approved',
   HUMAN_ACTION_REQUESTED:   'human_action_requested',
+  GITHUB_COMMENT:           'github_comment',
+  GITHUB_CI:                'github_ci',
 };
 
 // ── Priority display helpers ──────────────────────────────────

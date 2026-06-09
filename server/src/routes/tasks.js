@@ -449,6 +449,156 @@ router.get('/:id/check_pr', requirePermission('task:approve'), async (req, res, 
   }
 });
 
+// POST /tasks/:id/sync_github — poll GitHub for PR status, comments, and CI results.
+// Body: { manual: true } when triggered by the sync button (shorter cooldown).
+// Cooldown: 24 h for auto-sync on task open; NOTIFICATION_DEDUP_SECONDS for manual button.
+router.post('/:id/sync_github', requireAuth, async (req, res, next) => {
+  try {
+    const db = getDb();
+    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+    if (!task) return res.status(404).json({ error: 'Task not found' });
+
+    const getLogs = () => db.prepare(`
+      SELECT tl.*, a.name as agent_name, a.role as agent_role
+      FROM task_logs tl LEFT JOIN agents a ON tl.agent_id = a.id
+      WHERE tl.task_id = ? ORDER BY tl.created_at ASC
+    `).all(task.id);
+
+    if (!task.pr_url) return res.json({ added: 0, synced_at: null, logs: getLogs() });
+
+    const prMatch = task.pr_url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+    if (!prMatch) return res.json({ added: 0, synced_at: null, logs: getLogs() });
+
+    const [, owner, repo, prNumber] = prMatch;
+    let metadata = {};
+    try { metadata = JSON.parse(task.metadata || '{}'); } catch {}
+
+    // Cooldown — shared variable with notification dedup
+    const isManual = !!req.body?.manual;
+    const dedupSeconds = process.env.NOTIFICATION_DEDUP_SECONDS !== undefined
+      ? parseInt(process.env.NOTIFICATION_DEDUP_SECONDS, 10)
+      : process.env.NODE_ENV === 'production' ? 300 : 30;
+    const AUTO_COOLDOWN_SECONDS = 86400; // 24 h
+    const cooldown = isManual ? dedupSeconds : AUTO_COOLDOWN_SECONDS;
+
+    if (metadata.github_synced_at) {
+      const secsSince = (Date.now() - new Date(metadata.github_synced_at).getTime()) / 1000;
+      if (secsSince < cooldown) {
+        return res.json({ added: 0, skipped: true, synced_at: metadata.github_synced_at, logs: getLogs() });
+      }
+    }
+
+    const since = metadata.github_synced_at || task.created_at;
+    const sinceDate = new Date(since);
+    const sinceIso = sinceDate.toISOString();
+
+    const ghHeaders = { 'User-Agent': 'AutoKan', 'Accept': 'application/vnd.github.v3+json' };
+    if (process.env.GITHUB_TOKEN) ghHeaders['Authorization'] = `token ${process.env.GITHUB_TOKEN}`;
+
+    const ghGet = async (path) => {
+      try {
+        const resp = await fetch(`https://api.github.com${path}`, { headers: ghHeaders });
+        if (!resp.ok) return null;
+        return resp.json();
+      } catch { return null; }
+    };
+
+    let added = 0;
+    let merged = false;
+
+    // 1. PR status — check if merged, auto-advance task if needed
+    const prData = await ghGet(`/repos/${owner}/${repo}/pulls/${prNumber}`);
+    if (prData?.merged_at) {
+      merged = true;
+      const alreadyLogged = db.prepare(`SELECT id FROM task_logs WHERE task_id = ? AND action = 'pr_approved'`).get(task.id);
+      if (!alreadyLogged) {
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, NULL, ?, ?, ?, ?)`)
+          .run(uuidv4(), task.id, 'pr_approved', task.column_id, 'col_testing', 'PR merged on GitHub');
+        added++;
+      }
+      if (task.column_id === 'col_humanaction') {
+        db.prepare(`UPDATE tasks SET column_id = 'col_testing', requires_human_action = 0, human_action_reason = NULL WHERE id = ?`)
+          .run(task.id);
+        const advanced = db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id);
+        broadcast('task_updated', { task: fmt(advanced) });
+      }
+    }
+
+    // 2. Comments — collect unique commenters across thread, reviews, and inline comments.
+    //    Collapsed into one activity entry per sync to avoid log spam.
+    const commenters = new Set();
+
+    const threadComments = await ghGet(`/repos/${owner}/${repo}/issues/${prNumber}/comments?since=${sinceIso}&per_page=50`);
+    if (Array.isArray(threadComments)) {
+      for (const c of threadComments) {
+        if (new Date(c.created_at) <= sinceDate) continue;
+        if (c.user?.login) commenters.add(c.user.login);
+      }
+    }
+
+    const reviews = await ghGet(`/repos/${owner}/${repo}/pulls/${prNumber}/reviews?per_page=50`);
+    if (Array.isArray(reviews)) {
+      for (const r of reviews) {
+        if (r.state === 'PENDING') continue;
+        if (new Date(r.submitted_at) <= sinceDate) continue;
+        if (r.user?.login) commenters.add(r.user.login);
+      }
+    }
+
+    const inlineComments = await ghGet(`/repos/${owner}/${repo}/pulls/${prNumber}/comments?since=${sinceIso}&per_page=50`);
+    if (Array.isArray(inlineComments)) {
+      for (const c of inlineComments) {
+        if (new Date(c.created_at) <= sinceDate) continue;
+        if (c.user?.login) commenters.add(c.user.login);
+      }
+    }
+
+    if (commenters.size > 0) {
+      const names = [...commenters];
+      const who = names.length === 1
+        ? `@${names[0]}`
+        : names.length === 2
+          ? `@${names[0]}, @${names[1]}`
+          : `@${names[0]}, @${names[1]} and ${names.length - 2} other${names.length - 2 > 1 ? 's' : ''}`;
+      db.prepare('INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, NULL, ?, ?)')
+        .run(uuidv4(), task.id, 'github_comment', `GitHub: ${who} commented on the PR`);
+      added++;
+    }
+
+    // 3. CI check runs — one activity entry per completed run, deduped by run name+conclusion
+    if (prData?.head?.sha) {
+      const runsData = await ghGet(`/repos/${owner}/${repo}/commits/${prData.head.sha}/check-runs?per_page=50`);
+      if (Array.isArray(runsData?.check_runs)) {
+        const existingCiMessages = db.prepare(
+          "SELECT message FROM task_logs WHERE task_id = ? AND action = 'github_ci'"
+        ).all(task.id).map(l => l.message);
+
+        for (const run of runsData.check_runs) {
+          if (run.status !== 'completed') continue;
+          if (new Date(run.completed_at) <= sinceDate) continue;
+          const name = run.name || 'CI check';
+          const conclusion = run.conclusion || 'unknown';
+          const label = conclusion === 'success' ? 'passed' : conclusion === 'failure' ? 'failed' : conclusion;
+          const message = `GitHub CI: "${name}" ${label}`;
+          if (existingCiMessages.includes(message)) continue;
+          db.prepare('INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, NULL, ?, ?)')
+            .run(uuidv4(), task.id, 'github_ci', message);
+          added++;
+        }
+      }
+    }
+
+    const syncedAt = new Date().toISOString();
+    metadata.github_synced_at = syncedAt;
+    db.prepare('UPDATE tasks SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), task.id);
+
+    const updatedTask = merged ? fmt(db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id)) : null;
+    res.json({ added, synced_at: syncedAt, merged, logs: getLogs(), ...(updatedTask ? { task: updatedTask } : {}) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /tasks/:id/pm_question — PM posts a clarifying question
 router.post('/:id/pm_question', requirePermission('task:update'), (req, res) => {
   const db = getDb();

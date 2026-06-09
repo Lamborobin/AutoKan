@@ -52,6 +52,7 @@ export const tasksApi = {
   unarchive: (id) => api.post(`/tasks/${id}/unarchive`).then(r => r.data),
   approvePr: (id) => api.post(`/tasks/${id}/approve_pr`).then(r => r.data),
   checkPr: (id) => api.get(`/tasks/${id}/check_pr`).then(r => r.data),
+  syncGithub: (id, manual = false) => api.post(`/tasks/${id}/sync_github`, { manual }).then(r => r.data),
   bypassPm: (id) => api.post(`/tasks/${id}/bypass_pm`).then(r => r.data),
   toggleChecklistItem: (id, index) => api.post(`/tasks/${id}/toggle_checklist_item`, { index }).then(r => r.data),
   saveClientContext: (id, text) => api.post(`/tasks/${id}/save_client_context`, { text }).then(r => r.data),
