@@ -1,6 +1,9 @@
 # Client Context — Velour
 
-This file describes the client, their brand, and what they care about. Agents should use this when planning tasks to ensure work aligns with business goals and customer expectations.
+**Sector:** Fashion E-Commerce
+**Type of work on this board:** Software development — building and maintaining the Velour online store
+
+This file describes the client, their brand, and what they care about. Agents should use this when planning tasks to ensure work aligns with business goals and customer expectations. The vocabulary on this board is website, product pages, checkout, orders, customers — not spreadsheets, documents, or physical sites.
 
 ## About the Client
 
