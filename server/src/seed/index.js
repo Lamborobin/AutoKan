@@ -195,8 +195,8 @@ function seedSteelFactory(db) {
     .get(STEEL_CLIENT_NAME, DEFAULT_SUB_ID);
   if (!client) {
     const clientId = 'client_steel_' + crypto.randomBytes(4).toString('hex');
-    db.prepare('INSERT INTO clients (id, name, subscription_id) VALUES (?, ?, ?)')
-      .run(clientId, STEEL_CLIENT_NAME, DEFAULT_SUB_ID);
+    db.prepare('INSERT INTO clients (id, name, sector, subscription_id) VALUES (?, ?, ?, ?)')
+      .run(clientId, STEEL_CLIENT_NAME, 'manufacturing', DEFAULT_SUB_ID);
     client = { id: clientId };
   }
 

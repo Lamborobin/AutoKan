@@ -2,6 +2,10 @@
 capabilities: perm_coding,perm_coding_tester,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader
 ---
 
+---
+capabilities: perm_coding,perm_coding_tester,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader
+---
+
 # Project Context — Velour E-Commerce Platform
 
 **Sector:** Fashion E-Commerce

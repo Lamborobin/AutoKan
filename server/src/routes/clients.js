@@ -22,19 +22,19 @@ router.get('/', requireAuth, (req, res) => {
 
 // POST /api/clients
 router.post('/', requireAuth, (req, res) => {
-  const { name, description, website, color = '#6366f1' } = req.body;
+  const { name, description, website, color = '#6366f1', sector = 'software' } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
   const db = getDb();
   const existing = db.prepare('SELECT id FROM clients WHERE name = ? AND subscription_id = ? AND archived_at IS NULL').get(name.trim(), DEFAULT_SUB_ID);
   if (existing) return res.status(409).json({ error: 'A client with this name already exists' });
   const id = 'client_' + uuidv4().replace(/-/g, '').slice(0, 12);
-  db.prepare('INSERT INTO clients (id, name, description, website, color, subscription_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)').run(id, name.trim(), description || null, website || null, color, DEFAULT_SUB_ID, req.user?.sub || null);
+  db.prepare('INSERT INTO clients (id, name, description, website, color, sector, subscription_id, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(id, name.trim(), description || null, website || null, color, sector, DEFAULT_SUB_ID, req.user?.sub || null);
   res.status(201).json(db.prepare('SELECT * FROM clients WHERE id = ?').get(id));
 });
 
 // PATCH /api/clients/:id
 router.patch('/:id', requireAuth, (req, res) => {
-  const { name, description, website, color } = req.body;
+  const { name, description, website, color, sector } = req.body;
   const db = getDb();
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
   if (!client) return res.status(404).json({ error: 'Client not found' });
@@ -44,9 +44,10 @@ router.patch('/:id', requireAuth, (req, res) => {
       description = COALESCE(?, description),
       website = COALESCE(?, website),
       color = COALESCE(?, color),
+      sector = COALESCE(?, sector),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(name || null, description || null, website || null, color || null, req.params.id);
+  `).run(name || null, description || null, website || null, color || null, sector || null, req.params.id);
   // Also update client_name on linked projects for backward compat
   if (name) db.prepare('UPDATE projects SET client_name = ? WHERE client_id = ?').run(name, req.params.id);
   res.json(db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id));

@@ -71,6 +71,7 @@ function applySchema(db) {
       description TEXT,
       website TEXT,
       color TEXT DEFAULT '#6366f1',
+      sector TEXT DEFAULT 'software',
       subscription_id TEXT REFERENCES subscriptions(id),
       created_by TEXT REFERENCES users(id),
       archived_at DATETIME,

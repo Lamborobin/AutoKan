@@ -3,15 +3,23 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info, Search, Mail, UserPlus,
+  BookOpen, Info, Mail, UserPlus,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
 import InfoModal from './InfoModal';
 import TeamsPanel from './TeamsPanel';
 import BoardsPanel from './BoardsPanel';
+import SettingsTable from './SettingsTable';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi, invitesApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
+
+// Sector display metadata — kept in sync with sectors.json + BoardsPanel
+const SECTOR_META = {
+  personal:      { label: 'Personal',      color: '#6b7280' },
+  software:      { label: 'Software',      color: '#6366f1' },
+  manufacturing: { label: 'Manufacturing', color: '#f59e0b' },
+};
 
 // Mirror of the server's filename sanitisation — lets the user type a free-text
 // label and see the resulting filesystem-safe name before creating the file.
@@ -138,6 +146,7 @@ export default function SettingsPage() {
   // ── Clients state ───────────────────────────────────────────────────────
   const [clientName, setClientName]           = useState('');
   const [clientWebsite, setClientWebsite]     = useState('');
+  const [clientSector, setClientSector]       = useState('software');
   const [addingClient, setAddingClient]       = useState(false);
   const [creatingClient, setCreatingClient]   = useState(false);
   const [editingClientId, setEditingClientId] = useState(null);
@@ -738,89 +747,162 @@ export default function SettingsPage() {
         {/* Clients panel */}
         {section === 'sub_clients' && isSuperAdmin && (
           <div className="flex-1 overflow-y-auto px-8 py-8">
-            <div className="max-w-lg">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-sm font-semibold text-gray-200">Clients</h2>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-sm font-semibold text-gray-200">Clients</h2>
+              {!addingClient && (
                 <button onClick={() => setAddingClient(true)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors">
                   <Plus size={12} /> Add client
                 </button>
-              </div>
-
-              {addingClient && (
-                <form onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!clientName.trim()) return;
-                  setCreatingClient(true);
-                  try {
-                    await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null });
-                    setClientName(''); setClientWebsite(''); setAddingClient(false); setClientError('');
-                  } catch(err) {
-                    setClientError(err.response?.data?.error || 'Failed to create client');
-                  } finally { setCreatingClient(false); }
-                }} className="border border-border rounded-xl p-3 space-y-2 bg-surface-2 mb-4">
-                  <input value={clientName} onChange={e => setClientName(e.target.value)}
-                    placeholder="Client name" autoFocus
-                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
-                  <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
-                    placeholder="Website (optional)"
-                    className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
-                  {clientError && <p className="text-xs text-red-400">{clientError}</p>}
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientError(''); }}
-                      className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
-                    <button type="submit" disabled={creatingClient || !clientName.trim()}
-                      className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
-                      {creatingClient ? 'Creating…' : 'Create'}
-                    </button>
-                  </div>
-                </form>
               )}
-
-              <div className="space-y-1">
-                {clients.filter(c => !c.archived_at).map(client => (
-                  <div key={client.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2 group">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
-                      style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}30` }}>
-                      {client.name[0].toUpperCase()}
-                    </div>
-                    {editingClientId === client.id ? (
-                      <input value={editClientName} onChange={e => setEditClientName(e.target.value)}
-                        onBlur={async () => {
-                          if (editClientName.trim() && editClientName !== client.name) {
-                            await updateClient(client.id, { name: editClientName.trim() });
-                          }
-                          setEditingClientId(null);
-                        }}
-                        onKeyDown={async e => {
-                          if (e.key === 'Enter') e.currentTarget.blur();
-                          if (e.key === 'Escape') setEditingClientId(null);
-                        }}
-                        autoFocus
-                        className="flex-1 bg-surface-3 border border-accent/40 rounded-lg px-2 py-1 text-sm text-gray-200 outline-none" />
-                    ) : (
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-200 truncate">{client.name}</p>
-                        {client.website && <p className="text-xs text-gray-500 truncate">{client.website}</p>}
-                        <p className="text-xs text-gray-600">{client.board_count} board{client.board_count !== 1 ? 's' : ''}</p>
-                      </div>
-                    )}
-                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity shrink-0">
-                      <button onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
-                        className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors" title="Rename">
-                        <Pencil size={12} />
-                      </button>
-                      <button onClick={() => archiveClient(client.id)}
-                        className="p-1.5 rounded text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Archive">
-                        <Archive size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {clients.filter(c => !c.archived_at).length === 0 && !addingClient && (
-                  <p className="text-sm text-gray-600 text-center py-4">No clients yet</p>
-                )}
-              </div>
             </div>
+            <p className="text-xs text-gray-500 mb-6">Companies and organisations this workspace serves.</p>
+
+            {/* Add client form */}
+            {addingClient && (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!clientName.trim()) return;
+                setCreatingClient(true);
+                try {
+                  await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null, sector: clientSector });
+                  setClientName(''); setClientWebsite(''); setClientSector('software'); setAddingClient(false); setClientError('');
+                } catch(err) {
+                  setClientError(err.response?.data?.error || 'Failed to create client');
+                } finally { setCreatingClient(false); }
+              }} className="border border-border rounded-xl p-3 space-y-2 bg-surface-2 mb-4 max-w-md">
+                <input value={clientName} onChange={e => setClientName(e.target.value)}
+                  placeholder="Client name" autoFocus
+                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
+                  placeholder="Website (optional)"
+                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                <select value={clientSector} onChange={e => setClientSector(e.target.value)}
+                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/50">
+                  <option value="software">Software Development</option>
+                  <option value="manufacturing">Manufacturing</option>
+                  <option value="personal">Personal</option>
+                </select>
+                {clientError && <p className="text-xs text-red-400">{clientError}</p>}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientSector('software'); setClientError(''); }}
+                    className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
+                  <button type="submit" disabled={creatingClient || !clientName.trim()}
+                    className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
+                    {creatingClient ? 'Creating…' : 'Create'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Clients table — full width */}
+            <SettingsTable
+              columns={[
+                {
+                  key: 'name',
+                  label: 'Client',
+                  sortable: true,
+                  render: (client) => (
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold"
+                        style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}30` }}
+                      >
+                        {client.name[0].toUpperCase()}
+                      </div>
+                      {editingClientId === client.id ? (
+                        <input
+                          value={editClientName}
+                          onChange={e => setEditClientName(e.target.value)}
+                          onBlur={async () => {
+                            if (editClientName.trim() && editClientName !== client.name) {
+                              await updateClient(client.id, { name: editClientName.trim() });
+                            }
+                            setEditingClientId(null);
+                          }}
+                          onKeyDown={async e => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                            if (e.key === 'Escape') setEditingClientId(null);
+                          }}
+                          autoFocus
+                          onClick={e => e.stopPropagation()}
+                          className="flex-1 bg-surface-3 border border-accent/40 rounded-lg px-2 py-1 text-sm text-gray-200 outline-none"
+                        />
+                      ) : (
+                        <span className="text-sm font-medium text-gray-200 truncate">{client.name}</span>
+                      )}
+                    </div>
+                  ),
+                },
+                {
+                  key: 'website',
+                  label: 'Website',
+                  render: (client) => client.website
+                    ? <span className="text-sm text-gray-500 truncate block">{client.website}</span>
+                    : <span className="text-sm text-gray-600">—</span>,
+                },
+                {
+                  key: 'sector',
+                  label: 'Sector',
+                  width: '140px',
+                  render: (client) => {
+                    const meta = SECTOR_META[client.sector] ?? { label: client.sector || '—', color: '#6b7280' };
+                    return (
+                      <span
+                        className="text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                        style={{ background: meta.color + '18', color: meta.color, border: `1px solid ${meta.color}30` }}
+                      >
+                        {meta.label}
+                      </span>
+                    );
+                  },
+                },
+                {
+                  key: 'board_count',
+                  label: 'Boards',
+                  sortable: true,
+                  width: '80px',
+                  render: (client) => (
+                    <span className="text-sm text-gray-400 whitespace-nowrap">
+                      {client.board_count} {client.board_count === 1 ? 'board' : 'boards'}
+                    </span>
+                  ),
+                },
+              ]}
+              rows={clients.filter(c => !c.archived_at)}
+              rowKey="id"
+              searchKeys={['name', 'website']}
+              searchPlaceholder="Search clients…"
+              filters={[
+                {
+                  key: 'sector',
+                  label: 'Sector',
+                  options: [
+                    { value: 'software',      label: 'Software' },
+                    { value: 'manufacturing', label: 'Manufacturing' },
+                    { value: 'personal',      label: 'Personal' },
+                  ],
+                },
+              ]}
+              emptyMessage="No clients yet"
+              actions={(client) => (
+                <>
+                  <button
+                    onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
+                    title="Rename"
+                    className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={() => archiveClient(client.id)}
+                    title="Archive"
+                    className="p-1.5 rounded text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                  >
+                    <Archive size={12} />
+                  </button>
+                </>
+              )}
+            />
           </div>
         )}
 
@@ -1082,13 +1164,12 @@ function memberHashColor(email) {
 }
 
 function MembersPanel({ users, subscriptionAdmins, currentUser }) {
-  const [filter, setFilter]         = useState('');
-  const [invites, setInvites]       = useState([]);
+  const [invites, setInvites]               = useState([]);
   const [loadingInvites, setLoadingInvites] = useState(true);
-  const [inviteEmail, setInviteEmail]   = useState('');
-  const [inviting, setInviting]         = useState(false);
-  const [inviteError, setInviteError]   = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState('');
+  const [inviteEmail, setInviteEmail]       = useState('');
+  const [inviting, setInviting]             = useState(false);
+  const [inviteError, setInviteError]       = useState('');
+  const [inviteSuccess, setInviteSuccess]   = useState('');
   const [removingInvite, setRemovingInvite] = useState(null);
 
   useEffect(() => {
@@ -1102,13 +1183,11 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
     (subscriptionAdmins || []).map(a => a.email?.toLowerCase()).filter(Boolean)
   );
 
-  const q = filter.trim().toLowerCase();
-  const filteredUsers = q
-    ? users.filter(u => {
-        const name = `${u.first_name || ''} ${u.last_name || ''}`.trim().toLowerCase();
-        return name.includes(q) || u.email.toLowerCase().includes(q);
-      })
-    : users;
+  // Add a combined name field so search works across "John Smith" as one query
+  const rows = users.map(u => ({
+    ...u,
+    _display_name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+  }));
 
   async function handleInvite(e) {
     e.preventDefault();
@@ -1123,9 +1202,7 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
       setTimeout(() => setInviteSuccess(''), 3000);
     } catch (err) {
       setInviteError(err.response?.data?.error || 'Failed to send invite');
-    } finally {
-      setInviting(false);
-    }
+    } finally { setInviting(false); }
   }
 
   async function handleCancelInvite(inviteId) {
@@ -1135,67 +1212,42 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
       setInvites(prev => prev.filter(i => i.id !== inviteId));
     } catch (err) {
       alert(err.response?.data?.error || 'Failed to cancel invite');
-    } finally {
-      setRemovingInvite(null);
-    }
+    } finally { setRemovingInvite(null); }
   }
 
   return (
     <div className="flex-1 overflow-y-auto px-8 py-8">
-      <div className="max-w-lg">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-gray-200">Members</h2>
           <span className="text-xs text-gray-500 font-mono">{users.length}</span>
         </div>
         <p className="text-xs text-gray-500 mb-6">All users in this workspace.</p>
 
-        {/* Filter */}
-        <div className="relative mb-4">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-          <input
-            value={filter}
-            onChange={e => setFilter(e.target.value)}
-            placeholder="Filter by name or email…"
-            className="w-full bg-surface-2 border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-          />
-        </div>
-
-        {/* User list */}
-        <div className="space-y-1 mb-6">
-          {filteredUsers.length === 0 ? (
-            <p className="text-sm text-gray-600 text-center py-4">{filter ? 'No matching members' : 'No members yet'}</p>
-          ) : filteredUsers.map(u => {
-            const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
-            const isSelf = u.id === currentUser?.id;
-            const isAdmin = superAdminEmails.has(u.email.toLowerCase());
-            const color = memberHashColor(u.email);
-            return (
-              <div key={u.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-surface-2">
-                {u.picture ? (
-                  <img src={u.picture} className="w-7 h-7 rounded-full ring-1 ring-border shrink-0" alt="" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                    style={{ background: color + '20', color, border: `1px solid ${color}30` }}>
-                    {(name?.[0] || u.email[0]).toUpperCase()}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <p className="text-sm font-medium text-gray-200 truncate">{name || u.email}</p>
-                    {isSelf && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
-                    )}
-                    {isAdmin && (
-                      <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
-                        <Crown size={8} /> Super
-                      </span>
-                    )}
-                  </div>
-                  {name && <p className="text-xs text-gray-500 truncate">{u.email}</p>}
-                </div>
-              </div>
-            );
-          })}
+        {/* Invite form */}
+        <div className="mb-6">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Invite member</p>
+          <form onSubmit={handleInvite} className="flex gap-2">
+            <div className="relative flex-1">
+              <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+              <input
+                value={inviteEmail}
+                onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
+                placeholder="someone@example.com"
+                type="email"
+                className="w-full bg-surface-2 border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={inviting || !inviteEmail.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
+            >
+              <UserPlus size={13} />
+              {inviting ? '…' : 'Invite'}
+            </button>
+          </form>
+          {inviteError   && <p className="text-xs text-red-400 mt-1.5">{inviteError}</p>}
+          {inviteSuccess && <p className="text-xs text-green-400 mt-1.5">{inviteSuccess}</p>}
         </div>
 
         {/* Pending invites */}
@@ -1228,33 +1280,62 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
           </div>
         )}
 
-        {/* Invite form */}
-        <div>
-          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Invite member</p>
-          <form onSubmit={handleInvite} className="flex gap-2">
-            <div className="relative flex-1">
-              <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-              <input
-                value={inviteEmail}
-                onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
-                placeholder="someone@example.com"
-                type="email"
-                className="w-full bg-surface-2 border border-border rounded-lg pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={inviting || !inviteEmail.trim()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-accent hover:bg-accent/80 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
-            >
-              <UserPlus size={13} />
-              {inviting ? '…' : 'Invite'}
-            </button>
-          </form>
-          {inviteError   && <p className="text-xs text-red-400 mt-1.5">{inviteError}</p>}
-          {inviteSuccess && <p className="text-xs text-green-400 mt-1.5">{inviteSuccess}</p>}
-        </div>
-      </div>
+        {/* Members table */}
+        <SettingsTable
+          columns={[
+            {
+              key: '_display_name',
+              label: 'Member',
+              sortable: true,
+              render: (u) => {
+                const name  = u._display_name;
+                const isSelf  = u.id === currentUser?.id;
+                const isAdmin = superAdminEmails.has(u.email.toLowerCase());
+                const color   = memberHashColor(u.email);
+                return (
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {u.picture ? (
+                      <img src={u.picture} className="w-7 h-7 rounded-full ring-1 ring-border shrink-0" alt="" />
+                    ) : (
+                      <div
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                        style={{ background: color + '20', color, border: `1px solid ${color}30` }}
+                      >
+                        {(name?.[0] || u.email[0]).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-medium text-gray-200 truncate">{name || u.email}</span>
+                        {isSelf && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
+                        )}
+                        {isAdmin && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
+                            <Crown size={8} /> Super
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              },
+            },
+            {
+              key: 'email',
+              label: 'Email',
+              sortable: true,
+              render: (u) => (
+                <span className="text-sm text-gray-500 truncate block">{u.email}</span>
+              ),
+            },
+          ]}
+          rows={rows}
+          rowKey="id"
+          searchKeys={['_display_name', 'email']}
+          searchPlaceholder="Search members…"
+          emptyMessage="No members yet"
+        />
     </div>
   );
 }

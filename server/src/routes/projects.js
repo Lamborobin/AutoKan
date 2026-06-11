@@ -9,6 +9,17 @@ const { TEST_CLIENT_ID } = require('../config/constants');
 const { requireAuth } = require('../middleware/auth');
 const { scaffoldProjectInstructions } = require('../utils/instructions');
 const runnersRegistry = require('../seed/runners.json');
+const sectorsRegistry = require('../seed/sectors.json');
+
+// Derive which capability IDs to hide for a given sector.
+// Mirrors the same helper in seed/index.js — sector allow-list is the source of truth.
+function hiddenCapsForSector(sectorId) {
+  const sector = sectorsRegistry.sectors.find(s => s.id === sectorId);
+  if (!sector || !sector.capabilities) return [];          // null allow-list = expose all
+  return runnersRegistry.capabilities
+    .map(c => c.id)
+    .filter(id => !sector.capabilities.includes(id));
+}
 
 const router = express.Router();
 
@@ -35,11 +46,15 @@ function enrichProject(p) {
   return { ...p, path_exists: pathExists, pr_workflow: boardHasPrWorkflow(p.hidden_capability_ids) };
 }
 
+// Sector comes from the client when a client is linked (sector is a client-level property).
+// Personal boards fall back to p.sector. The COALESCE at the end overrides the p.sector
+// value from p.* — duplicate column names resolve to last value in better-sqlite3.
 const PROJECT_SELECT = `
   SELECT p.*,
     u.first_name || ' ' || u.last_name AS owner_name, u.picture AS owner_picture,
     COALESCE(c.name, p.client_name) AS client_name, c.color AS client_color, c.id AS client_id,
-    cb.first_name || ' ' || cb.last_name AS created_by_name, cb.picture AS created_by_picture, cb.email AS created_by_email
+    cb.first_name || ' ' || cb.last_name AS created_by_name, cb.picture AS created_by_picture, cb.email AS created_by_email,
+    COALESCE(c.sector, p.sector) AS sector
   FROM projects p
   LEFT JOIN users u ON p.owner_id = u.id
   LEFT JOIN clients c ON p.client_id = c.id
@@ -125,19 +140,27 @@ router.post('/', requireAuth, (req, res) => {
   const userId = req.user?.sub || null;
   const userEmail = req.user?.email || null;
 
-  // Resolve client_name from client_id if provided
+  // Resolve client name + sector from client_id.
+  // Sector is a client-level property — boards inherit it, never set it independently.
   let resolvedClientName = client_name || null;
   let resolvedClientId = client_id || null;
+  let boardSector = 'personal';
   if (client_id) {
-    const clientRow = db.prepare('SELECT name FROM clients WHERE id = ?').get(client_id);
-    if (clientRow) resolvedClientName = clientRow.name;
+    const clientRow = db.prepare('SELECT name, sector FROM clients WHERE id = ?').get(client_id);
+    if (clientRow) {
+      resolvedClientName = clientRow.name;
+      boardSector = clientRow.sector || 'software';
+    }
   }
+
+  // Compute which capabilities to hide based on the inherited sector
+  const hiddenCaps = JSON.stringify(hiddenCapsForSector(boardSector));
 
   const id = generateProjectId();
   db.prepare(`
-    INSERT INTO projects (id, name, description, client_name, client_id, color, emoji, owner_id, created_by, subscription_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name.trim(), description || null, resolvedClientName, resolvedClientId, color, emoji, userId, userId, 'sub_default');
+    INSERT INTO projects (id, name, description, client_name, client_id, color, emoji, sector, hidden_capability_ids, owner_id, created_by, subscription_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name.trim(), description || null, resolvedClientName, resolvedClientId, color, emoji, boardSector, hiddenCaps, userId, userId, 'sub_default');
 
   // Add creator as the sole member (owner role, immediately accepted)
   if (userId && userEmail) {
