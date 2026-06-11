@@ -56,6 +56,35 @@ export const createBoardSlice = (set, get) => ({
     return task;
   },
 
+  // Merge a list of full task objects into the board, adding any that are new.
+  // Used when an action returns tasks the acting client should see immediately
+  // without waiting on the SSE echo (e.g. a task split creating draft tasks).
+  upsertTasks(list) {
+    set(s => {
+      let tasks = s.tasks;
+      for (const task of list) {
+        if (!task) continue;
+        tasks = tasks.some(t => t.id === task.id)
+          ? tasks.map(t => t.id === task.id ? task : t)
+          : [task, ...tasks];
+      }
+      return { tasks };
+    });
+  },
+
+  // Move a task into the archived list locally (the server action already ran).
+  // Used when an action archives a task and the acting client shouldn't wait on
+  // the SSE echo (e.g. abandoning an out-of-scope task).
+  markArchivedLocal(id) {
+    set(s => ({
+      tasks: s.tasks.filter(t => t.id !== id),
+      archivedTasks: s.archivedTasks.some(t => t.id === id)
+        ? s.archivedTasks
+        : [...s.archivedTasks, { ...s.tasks.find(t => t.id === id), archived_at: new Date().toISOString() }].filter(Boolean),
+      selectedTask: s.selectedTask?.id === id ? null : s.selectedTask,
+    }));
+  },
+
   async updateTask(id, data) {
     const updated = await tasksApi.update(id, data);
     set(s => ({ tasks: s.tasks.map(t => t.id === id ? updated : t) }));

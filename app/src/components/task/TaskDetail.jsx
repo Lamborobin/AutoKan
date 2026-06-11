@@ -167,6 +167,8 @@ export default function TaskDetail() {
     : rawConversationLogs;
   const pmDone = task.pm_approval_status === PM_STATUS.APPROVED;
   const fullyReady = pmDone && task.human_approval_status === HUMAN_STATUS.APPROVED;
+  const splitProposal = task.metadata?.split_proposal || null;
+  const abandonProposal = task.metadata?.abandon_proposal || null;
 
   const resolvedCount = checklist.filter(i => i.resolved).length;
   const allItemsChecked = checklist.length > 0 && resolvedCount === checklist.length;
@@ -293,6 +295,31 @@ export default function TaskDetail() {
     setLogs(prev => [...prev, tempLog]);
     setTask(t => ({ ...t, pm_pending_question: null, pm_approval_status: PM_STATUS.QUESTIONING }));
     setAgentThinking(true);
+  }
+
+  async function handleSplit(accept) {
+    setTask(t => ({ ...t, pm_pending_question: null, metadata: { ...(t.metadata || {}), split_proposal: undefined } }));
+    setAgentThinking(true);
+    const res = await tasksApi.split(task.id, { accept });
+    if (res?.task) setTask(t => ({ ...t, ...res.task }));
+    // Add the renamed original + any new draft tasks to the board immediately,
+    // rather than waiting on the SSE echo (which the acting client may miss).
+    const ingest = [res?.task, ...(res?.created || [])].filter(Boolean);
+    if (ingest.length) useStore.getState().upsertTasks(ingest);
+  }
+
+  async function handleAbandon(accept) {
+    if (accept) {
+      // Archive the task and remove it from the board immediately, then close the panel.
+      await tasksApi.abandon(task.id, { accept: true });
+      useStore.getState().markArchivedLocal(task.id);
+      return;
+    }
+    // Keep — clear the prompt and let the planner continue planning.
+    setTask(t => ({ ...t, pm_pending_question: null, metadata: { ...(t.metadata || {}), abandon_proposal: undefined } }));
+    setAgentThinking(true);
+    const res = await tasksApi.abandon(task.id, { accept: false });
+    if (res?.task) setTask(t => ({ ...t, ...res.task }));
   }
 
   async function handleApprove() {
@@ -723,6 +750,63 @@ export default function TaskDetail() {
                         <MarkdownText text={task.pm_pending_question} />
                       </div>
                     </div>
+                    {splitProposal ? (
+                      <div className="pl-7 space-y-2.5">
+                        <p className="text-[11px] font-medium text-gray-300">Would you like to split into smaller tasks?</p>
+                        <ul className="space-y-1">
+                          {splitProposal.parts.map((p, i) => (
+                            <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+                              <span className={`shrink-0 mt-px text-[10px] px-1.5 py-0.5 rounded ${i === 0 ? 'bg-purple-500/15 text-purple-300' : 'bg-amber-500/10 text-amber-400'}`}>
+                                {i === 0 ? 'This task' : 'New'}
+                              </span>
+                              <span className="leading-tight">{p.title}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="text-[10px] text-gray-600">
+                          Yes keeps the first as this task and creates the rest as drafts that need a description. No keeps everything as one task.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSplit(true)}
+                            className="px-3 py-1.5 text-xs font-medium bg-amber-500/90 text-white rounded-lg hover:bg-amber-500 transition-colors"
+                          >
+                            Yes, split into {splitProposal.parts.length}
+                          </button>
+                          <button
+                            onClick={() => handleSplit(false)}
+                            className="px-3 py-1.5 text-xs font-medium bg-surface-3 text-gray-300 border border-surface-4 rounded-lg hover:bg-surface-4 transition-colors"
+                          >
+                            No, keep as one
+                          </button>
+                        </div>
+                      </div>
+                    ) : abandonProposal ? (
+                      <div className="pl-7 space-y-2.5">
+                        {abandonProposal.reason && (
+                          <p className="text-[11px] text-gray-400">
+                            Reason: <span className="text-gray-300">{abandonProposal.reason}</span>
+                          </p>
+                        )}
+                        <p className="text-[10px] text-gray-600">
+                          Abandon archives this task (you can restore it later from the archive). Keep means it does belong here and planning continues.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleAbandon(true)}
+                            className="px-3 py-1.5 text-xs font-medium bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors"
+                          >
+                            Abandon task
+                          </button>
+                          <button
+                            onClick={() => handleAbandon(false)}
+                            className="px-3 py-1.5 text-xs font-medium bg-surface-3 text-gray-300 border border-surface-4 rounded-lg hover:bg-surface-4 transition-colors"
+                          >
+                            Keep & continue
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
                     <div className="flex gap-2 pl-7">
                       <textarea
                         value={answerText}
@@ -740,6 +824,7 @@ export default function TaskDetail() {
                         Send
                       </button>
                     </div>
+                    )}
                   </div>
                 )}
 

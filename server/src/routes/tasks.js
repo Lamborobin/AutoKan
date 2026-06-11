@@ -650,6 +650,112 @@ router.post('/:id/answer', requirePermission('task:update'), (req, res) => {
   triggerRunner(task.id);
 });
 
+// POST /tasks/:id/split — human accepts or declines the PM's split suggestion
+router.post('/:id/split', requirePermission('task:update'), (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  let metadata = {};
+  try { metadata = JSON.parse(task.metadata || '{}'); } catch {}
+  const proposal = metadata.split_proposal;
+  if (!proposal || !Array.isArray(proposal.parts) || proposal.parts.length < 2) {
+    return res.status(400).json({ error: 'No split proposal on this task' });
+  }
+
+  const { accept } = req.body;
+  const agentId = req.agent && db.prepare('SELECT id FROM agents WHERE id = ?').get(req.agent.id) ? req.agent.id : null;
+
+  // Clear the proposal either way — the decision is being made now.
+  delete metadata.split_proposal;
+
+  if (!accept) {
+    // Keep as one task — clear the prompt and let the planner continue normally.
+    db.prepare(`UPDATE tasks SET metadata = ?, pm_pending_question = NULL WHERE id = ?`)
+      .run(JSON.stringify(metadata), task.id);
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), task.id, agentId, 'human_answer', 'Keep this as a single task — please continue planning it as one.');
+    const updated = fmt(db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id));
+    res.json({ task: updated, created: [] });
+    broadcast('task_updated', { task: updated });
+    triggerRunner(task.id);
+    return;
+  }
+
+  // Accept — the first part stays as this task; the rest become Backlog drafts
+  // with a title but no description ("needs attention") for the human to flesh out.
+  const [first, ...rest] = proposal.parts;
+  const insert = db.prepare(`
+    INSERT INTO tasks (id, title, description, column_id, project_id, priority, complexity, pm_approval_status, metadata)
+    VALUES (?, ?, '', 'col_backlog', ?, ?, ?, NULL, '{}')
+  `);
+  const created = [];
+  for (const part of rest) {
+    const newId = 'task_' + uuidv4().replace(/-/g, '').slice(0, 12);
+    insert.run(newId, part.title, task.project_id, task.priority || 'medium', task.complexity || 'medium');
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, to_column, message) VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(uuidv4(), newId, agentId, 'created', 'col_backlog', `Split from "${task.title}" — add a description to start planning.`);
+    created.push(fmt(db.prepare('SELECT * FROM tasks WHERE id = ?').get(newId)));
+  }
+
+  // Original becomes Part 1 — retitle it to that part (so it no longer reads as the
+  // whole umbrella), keep its description, clear the split prompt, continue planning.
+  db.prepare(`UPDATE tasks SET title = ?, metadata = ?, pm_pending_question = NULL WHERE id = ?`)
+    .run(first.title, JSON.stringify(metadata), task.id);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agentId, 'human_answer',
+      `Split accepted — created ${rest.length} new draft task(s): ${rest.map(p => p.title).join('; ')}. This task was renamed to "${first.title}" and now covers only that scope. Please continue planning just that.`);
+
+  const updated = fmt(db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id));
+  res.json({ task: updated, created });
+  broadcast('task_updated', { task: updated });
+  for (const ct of created) {
+    broadcast('task_updated', { task: ct });
+  }
+  triggerRunner(task.id);
+});
+
+// POST /tasks/:id/abandon — human accepts or declines the PM's out-of-scope suggestion
+router.post('/:id/abandon', requirePermission('task:update'), (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  let metadata = {};
+  try { metadata = JSON.parse(task.metadata || '{}'); } catch {}
+  const proposal = metadata.abandon_proposal;
+  if (!proposal) return res.status(400).json({ error: 'No abandon proposal on this task' });
+
+  const { accept } = req.body;
+  const agentId = req.agent && db.prepare('SELECT id FROM agents WHERE id = ?').get(req.agent.id) ? req.agent.id : null;
+
+  // Clear the proposal either way — the decision is being made now.
+  delete metadata.abandon_proposal;
+
+  if (!accept) {
+    // It does belong — clear the prompt and let the planner continue normally.
+    db.prepare(`UPDATE tasks SET metadata = ?, pm_pending_question = NULL WHERE id = ?`)
+      .run(JSON.stringify(metadata), task.id);
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), task.id, agentId, 'human_answer', 'This does belong on this board — please continue planning it.');
+    const updated = fmt(db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id));
+    res.json({ task: updated, archived: false });
+    broadcast('task_updated', { task: updated });
+    triggerRunner(task.id);
+    return;
+  }
+
+  // Abandon — archive the task with the planner's reason (recoverable via unarchive).
+  const reason = proposal.reason || 'Abandoned — out of scope for this board';
+  db.prepare(`UPDATE tasks SET archived_at = CURRENT_TIMESTAMP, metadata = ?, pm_pending_question = NULL WHERE id = ?`)
+    .run(JSON.stringify(metadata), task.id);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agentId, 'archived', `Abandoned — ${reason}`);
+
+  res.json({ archived: true, id: task.id });
+  broadcast('task_archived', { id: task.id });
+});
+
 // POST /tasks/:id/request_pm_review — request PM review (human initiates)
 router.post('/:id/request_pm_review', requirePermission('task:update'), (req, res) => {
   const db = getDb();

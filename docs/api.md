@@ -75,6 +75,8 @@ The `/api/docs` group serves the editable doc files driven by `agent.config.json
 |--------|----------|-----|-------------|
 | POST | /api/tasks/:id/pm_question | Planning agent | Post a clarifying question |
 | POST | /api/tasks/:id/answer | Human | Answer planning agent's pending question |
+| POST | /api/tasks/:id/split | Human | Accept/decline the planning agent's split suggestion. `{ accept: true }` keeps the first part as this task and creates the rest as description-less Backlog drafts ("needs attention"); `{ accept: false }` continues as one task |
+| POST | /api/tasks/:id/abandon | Human | Accept/decline the planning agent's out-of-scope suggestion. `{ accept: true }` archives the task with the agent's reason (recoverable); `{ accept: false }` keeps it and continues planning |
 | POST | /api/tasks/:id/request_pm_review | Human | Manually trigger planning review |
 | POST | /api/tasks/:id/pm_review | Planning agent | Approve or reject spec |
 

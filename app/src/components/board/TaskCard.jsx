@@ -30,6 +30,12 @@ export default function TaskCard({ task }) {
   const assignedAgent = agents.find(a => a.id === task.assigned_agent_id);
   const tags = Array.isArray(task.tags) ? task.tags : [];
 
+  // A description-less Backlog task is a "needs attention" draft (e.g. from a task
+  // split) — it can't be planned until someone says what it actually covers.
+  const needsAttention = task.column_id === 'col_backlog'
+    && !(task.description && task.description.trim())
+    && task.pm_approval_status !== 'approved';
+
   return (
     <div
       ref={node => { setSortableRef(node); setDropRef(node); }}
@@ -61,6 +67,14 @@ export default function TaskCard({ task }) {
         <div className="flex items-center gap-1.5 mb-2.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
           <Lock size={9} className="text-amber-400 shrink-0" />
           <span className="text-[10px] font-medium text-amber-400">Locked · Planning phase</span>
+        </div>
+      )}
+
+      {/* Needs-attention banner — draft task awaiting a description */}
+      {needsAttention && !isLocked && (
+        <div className="flex items-center gap-1.5 mb-2.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <AlertTriangle size={9} className="text-amber-400 shrink-0" />
+          <span className="text-[10px] font-medium text-amber-400">Needs attention · add a description</span>
         </div>
       )}
 

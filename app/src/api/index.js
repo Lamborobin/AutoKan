@@ -46,6 +46,8 @@ export const tasksApi = {
   pmReview: (id, data) => api.post(`/tasks/${id}/pm_review`, data).then(r => r.data),
   pmQuestion: (id, data) => api.post(`/tasks/${id}/pm_question`, data).then(r => r.data),
   answer: (id, data) => api.post(`/tasks/${id}/answer`, data).then(r => r.data),
+  split: (id, data) => api.post(`/tasks/${id}/split`, data).then(r => r.data),
+  abandon: (id, data) => api.post(`/tasks/${id}/abandon`, data).then(r => r.data),
   approve: (id, data) => api.post(`/tasks/${id}/approve`, data).then(r => r.data),
   reject: (id, data) => api.post(`/tasks/${id}/reject`, data).then(r => r.data),
   archive: (id) => api.post(`/tasks/${id}/archive`).then(r => r.data),

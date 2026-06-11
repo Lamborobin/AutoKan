@@ -100,6 +100,39 @@
     }
   ],
 
+  "health_agents": [
+    {
+      "id": "agent_pm_health",
+      "template_id": "tpl_pm",
+      "name": "Clinical Planner",
+      "role": "pm",
+      "model": "claude-opus-4-5",
+      "color": "#6366f1",
+      "description": "Plans and structures tasks for Norvik Health. Clarifies clinical intent, audience, and what 'done' looks like before any document is drafted.",
+      "role_ids": ["perm_planning", "role_access_backlog"]
+    },
+    {
+      "id": "agent_producer_health",
+      "template_id": "tpl_producer",
+      "name": "Clinical Writer",
+      "role": "producer",
+      "model": "claude-sonnet-4-6",
+      "color": "#f59e0b",
+      "description": "Writes clinical protocols, care pathways, patient information, and safety documents for Norvik Health following the Norvik clinical document standard.",
+      "role_ids": ["perm_producing", "role_access_inprogress"]
+    },
+    {
+      "id": "agent_verifier_health",
+      "template_id": "tpl_verifier",
+      "name": "Clinical Governance Checker",
+      "role": "verifier",
+      "model": "claude-sonnet-4-6",
+      "color": "#10b981",
+      "description": "Verifies documents against Norvik Health's clinical document standard and patient-safety criteria. Produces a structured pass/fail report.",
+      "role_ids": ["perm_verifying", "role_access_testing"]
+    }
+  ],
+
   "velour_agents": [
     {
       "id": "agent_pm_velour",

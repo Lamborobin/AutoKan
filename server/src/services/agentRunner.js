@@ -296,6 +296,49 @@ If nothing genuinely reusable was learned in this conversation, omit this field 
       },
       required: ['comment', 'checklist']
     }
+  },
+  {
+    name: 'suggest_split',
+    description: "Use this INSTEAD of ask_question when the task clearly spans several distinct pieces of work that should each be planned and delivered separately. Do NOT also raise the split inside a checklist item — this tool IS the split question. Propose the breakdown as parts named in plain, client-facing outcome language (what the person gets or can do), no internal/system jargon. The human sees a Yes/No prompt: YES keeps the FIRST part as this task and creates the rest as separate draft tasks; NO keeps everything as one task and you continue planning it normally with a single checklist (never more than 20 items). Do not send a checklist with this tool — planning resumes after the human decides.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: "Your message to the human: a one-sentence summary of what's being asked, a short line noting it spans several distinct pieces, and then ask — would you like to split this into smaller tasks? Do NOT list the parts inline in this message; they are rendered separately from the `parts` field."
+        },
+        parts: {
+          type: 'array',
+          description: 'The proposed pieces in order. The FIRST stays as this task; the rest become new draft tasks. 2–8 parts.',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string', description: 'Short plain-language title — what the person gets or can do. No internal/system/jargon names.' }
+            },
+            required: ['title']
+          }
+        }
+      },
+      required: ['message', 'parts']
+    }
+  },
+  {
+    name: 'suggest_abandon',
+    description: "Use this when you are confident the task fundamentally does NOT belong on this board — it's outside this board's domain/sector or unrelated to what this board produces, and there is no document deliverable hidden inside it that this board could own. Do NOT use it merely because a task is vague, large, or hard — only for a genuine scope mismatch. The human sees an Abandon / Keep prompt: ABANDON archives the task with your reason; KEEP means it does belong and you continue planning it normally. When unsure whether it fits, ask_question instead.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: "Your message to the human: a one-sentence summary of the task, then plainly explain why it doesn't match this board's scope (name what this board actually covers), and suggest abandoning it / sending it to the right team. Keep it respectful — you're flagging a mismatch, not refusing to help."
+        },
+        reason: {
+          type: 'string',
+          description: 'A short one-line reason recorded on the task if it is abandoned (e.g. "Out of scope — software/performance work, belongs with the digital services team").'
+        }
+      },
+      required: ['message', 'reason']
+    }
   }
 ];
 
@@ -561,8 +604,10 @@ async function runClarifyAndApprove(task, agent, runner) {
 
     if (block.name === 'ask_question') {
       const { question, checklist = [] } = block.input;
+      // Hard cap — a kept-as-one large task may grow its checklist, but never past 20.
+      const cappedChecklist = Array.isArray(checklist) ? checklist.slice(0, 20) : [];
       db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ?, pm_checklist = ? WHERE id = ?`)
-        .run(question, JSON.stringify(checklist), taskId);
+        .run(question, JSON.stringify(cappedChecklist), taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'pm_question', question);
       console.log(`[AgentRunner][${runner.id}][${taskId}] asked clarifying question`);
@@ -592,6 +637,38 @@ async function runClarifyAndApprove(task, agent, runner) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'pm_reviewed', `Approved — ${comment}`);
       console.log(`[AgentRunner][${runner.id}][${taskId}] approved task`);
+      broadcastTask(db, taskId);
+
+    } else if (block.name === 'suggest_split') {
+      const { message, parts = [] } = block.input;
+      const cleanParts = (Array.isArray(parts) ? parts : [])
+        .filter(p => p && typeof p.title === 'string' && p.title.trim())
+        .map(p => ({ title: p.title.trim() }))
+        .slice(0, 8);
+      // A real split needs at least 2 parts — otherwise fall back to a normal question.
+      if (cleanParts.length < 2) {
+        db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ? WHERE id = ?`)
+          .run(message, taskId);
+      } else {
+        const metadata = JSON.parse(task.metadata || '{}');
+        metadata.split_proposal = { message, parts: cleanParts };
+        db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ?, metadata = ? WHERE id = ?`)
+          .run(message, JSON.stringify(metadata), taskId);
+      }
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'pm_question', message);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] suggested split into ${cleanParts.length} parts`);
+      broadcastTask(db, taskId);
+
+    } else if (block.name === 'suggest_abandon') {
+      const { message, reason = '' } = block.input;
+      const metadata = JSON.parse(task.metadata || '{}');
+      metadata.abandon_proposal = { message, reason: String(reason || '').trim() };
+      db.prepare(`UPDATE tasks SET pm_approval_status = 'questioning', pm_pending_question = ?, metadata = ? WHERE id = ?`)
+        .run(message, JSON.stringify(metadata), taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'pm_question', message);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] suggested abandon (out of scope)`);
       broadcastTask(db, taskId);
     }
   }
@@ -1168,6 +1245,13 @@ async function dispatch(taskId) {
 
   // Optional named trigger guards (skip dispatch under specific conditions)
   if (runner.trigger_guard === 'no_pm_approval_yet' && task.pm_approval_status === 'approved') return;
+
+  // A description-less Backlog task is a "needs attention" draft (e.g. created by a
+  // task split) — don't plan it until a human fills in what it actually covers.
+  if (capability === 'perm_planning' && !(task.description && task.description.trim())) {
+    console.log(`[AgentRunner] Skipping planning for ${taskId} — no description yet (needs attention).`);
+    return;
+  }
 
   const handler = HANDLERS[runner.handler];
   if (!handler) {

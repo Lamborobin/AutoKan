@@ -9,6 +9,9 @@ const DEFAULT_SUB_ID   = 'sub_default';    // single-tenant default subscription
 const STEEL_CLIENT_ID   = 'prj_steel001';          // fictional steel factory demo board
 const STEEL_CLIENT_NAME = 'Nordstahl Industries';  // fictional steel manufacturer
 
+const HEALTH_CLIENT_ID   = 'prj_health01';     // fictional hospital network demo board
+const HEALTH_CLIENT_NAME = 'Norvik Health';    // fictional regional hospital network
+
 module.exports = {
   TEST_CLIENT_ID,
   TEST_CLIENT_NAME,
@@ -16,4 +19,6 @@ module.exports = {
   DEFAULT_SUB_ID,
   STEEL_CLIENT_ID,
   STEEL_CLIENT_NAME,
+  HEALTH_CLIENT_ID,
+  HEALTH_CLIENT_NAME,
 };
