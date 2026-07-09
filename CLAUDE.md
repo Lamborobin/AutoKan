@@ -24,14 +24,14 @@ Theirs 3 different audiences, apply the one that suits you:
 ### For app agents (running INSIDE AutoKan on a board task)
 | File | Load | Read when… |
 |---|---|---|
-| `docs/rules.md` | Read | Hard constraints that apply to every task — **MUST follow** |
+| `docs/rules.md` | Read | The global rules every agent follows (the System Rules layer, layer 3 above) — **MUST follow** |
 
 Everything else you need as an app agent (board context, workspace context, capability persona, task brief) is auto-injected by the runner before you start. If a task asks you to consult a file outside this scope, call `request_human` for additional planning rather than guessing.
 
 ### For dev-assistant work (the human operator + AI assistant evolving the platform)
 | File | Read when… |
 |---|---|
-| `docs/rules.md` | Hard constraints apply to dev work too |
+| `docs/rules.md` | The global agent-rules layer; dev-only constraints for changing AutoKan's code live in README's "Development conventions" |
 | `docs/agents.md` | Agent logic, flows, instruction file layering, escalation behavior |
 | `docs/frontend.md` | Any file under `app/src/` |
 | `docs/api.md` | Implementing, modifying, or calling API routes |
@@ -43,8 +43,8 @@ Everything else you need as an app agent (board context, workspace context, capa
 | File | Update when | Tone |
 |---|---|---|
 | `CLAUDE.md` | A new context file is added to `docs/`, or this index needs to change | Terse, directive — bullets and tables, no prose buildup |
-| `README.md` | Tech stack, quick start steps, quick information about architecture & use case | Welcoming, informational — written for someone first opening the repo |
-| `docs/rules.md` | A new hard constraint is agreed on | Imperative ("never X", "always Y"). Short, scannable. No backstory. |
+| `README.md` | Tech stack, quick start, architecture/use case, or a development convention for changing AutoKan's code | Welcoming, informational — written for someone first opening the repo |
+| `docs/rules.md` | A new global agent rule is agreed on (behavioural rules, not app-dev constraints) | Imperative ("never X", "always Y"). Short, scannable. No backstory. |
 | `docs/agents.md` | Agent behavior, flows, or the instruction file system changes | Explanatory. Describes how agents behave, partially commands to follow. |
 | `docs/frontend.md` | A new component pattern, threshold, or store structure is established | Descriptive patterns with examples, rules, patterns, decisions only related to frontend or src folder |
 | `docs/api.md` | An API route is added, removed, or its behavior changes | Structured reference — tables of method / endpoint / description. Minimal prose. |
@@ -55,3 +55,18 @@ Everything else you need as an app agent (board context, workspace context, capa
 **What is this project**: Autonomous AI agent task orchestration system — a kanban board where AI agents (PM, Developer, Tester) work through tasks autonomously with or without human involvement.
 
 **Purpose**: This tool manages the full lifecycle of a client's project through a kanban board operated by AI agents and humans together.
+
+## Context layer model
+
+Every agent's behaviour is assembled from a fixed stack of layers — most general at the top, most specific at the bottom. **The stack and its order are wired in code and never change.** Each layer is *additive*: it may tighten or extend the layers above it, but **a lower layer can never loosen, contradict, or reorder a higher one.** That is the waterfall invariant — the property to validate whenever context files change. Only a code change can alter the flow itself.
+
+| # | Layer | Editable by | What it may do |
+|---|---|---|---|
+| 1 | **Code mechanics** | Developer (code only) | The flow itself — which tool fires, which column a task moves to, what an agent may write, and the order of these layers. Immutable from any prompt. |
+| 2 | **Runner prompts** | Developer (code only) | Per-capability methodology baked into the runner. System-owned. |
+| 3 | **System Rules** (AI Context) | Superadmin / dev | Global, cross-subscription rules with technical depth. The **only** layer that may invoke code-exposed actions/hooks (e.g. "at 100 units → call the email endpoint") on top of plain rules ("reply in Spanish", "never reveal business secrets"). Cannot change the flow. |
+| 4 | **Workspace rules** | Admin | Declarative boundaries shared across a workspace's boards — no new actions ("don't generate reports about X — GDPR"). |
+| 5 | **Board rules** | Board owner / admin | The same, scoped to one board ("don't send the PR-ready email here — it spams person X"). |
+| 6 | **Personality** (template / agent) | UI editor | Cosmetic traits only — tone, sign-off, phrasing. Effectively no effect on logic. |
+
+The gradient is **actions → constraints → cosmetics**: layer 3 can add new actions (within code-exposed extension points); layers 4–5 can only add constraints; layer 6 is cosmetic. These layers are the **extension surface** — a fork or tenant customises behaviour through them without touching core code.

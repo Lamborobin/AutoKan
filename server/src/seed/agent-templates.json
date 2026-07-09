@@ -133,6 +133,39 @@
     }
   ],
 
+  "finance_agents": [
+    {
+      "id": "agent_pm_finance",
+      "template_id": "tpl_pm",
+      "name": "Finance Planner",
+      "role": "pm",
+      "model": "claude-opus-4-5",
+      "color": "#6366f1",
+      "description": "Plans and structures tasks for Meridian Capital. Clarifies the intent, audience, and regulatory context of a document before any drafting begins.",
+      "role_ids": ["perm_planning", "role_access_backlog"]
+    },
+    {
+      "id": "agent_producer_finance",
+      "template_id": "tpl_producer",
+      "name": "Policy Writer",
+      "role": "producer",
+      "model": "claude-sonnet-4-6",
+      "color": "#f59e0b",
+      "description": "Writes credit policies, AML/KYC procedures, risk frameworks, and disclosures for Meridian Capital following the Meridian document standard.",
+      "role_ids": ["perm_producing", "role_access_inprogress"]
+    },
+    {
+      "id": "agent_verifier_finance",
+      "template_id": "tpl_verifier",
+      "name": "Compliance Reviewer",
+      "role": "verifier",
+      "model": "claude-sonnet-4-6",
+      "description": "Verifies documents against Meridian Capital's document standard and regulatory criteria. Produces a structured pass/fail report.",
+      "color": "#10b981",
+      "role_ids": ["perm_verifying", "role_access_testing"]
+    }
+  ],
+
   "velour_agents": [
     {
       "id": "agent_pm_velour",

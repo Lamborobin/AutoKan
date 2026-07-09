@@ -12,9 +12,9 @@
     {
       "id": "software",
       "label": "Software Development",
-      "description": "A software engineering board. The deliverable is code: agents work inside the client repository, open pull requests, and run automated tests. Exposes every capability.",
+      "description": "A software engineering board. The deliverable is code: agents work inside the client repository, open pull requests, and run automated tests. Exposes the code, ops, and analysis capabilities; the document Producer/Verifier capabilities are hidden (those belong to document sectors).",
       "team": true,
-      "capabilities": null
+      "capabilities": ["perm_planning", "perm_coding", "perm_coding_tester", "perm_frontend", "perm_backend", "perm_ux", "perm_architect", "perm_code_reader", "perm_migrate", "perm_network", "perm_cloud", "perm_security_control", "perm_log_reader", "perm_data_analytic"]
     },
     {
       "id": "manufacturing",
@@ -27,6 +27,13 @@
       "id": "healthcare",
       "label": "Healthcare",
       "description": "Clinical and care operations — clinical protocols, care pathways, patient information, safety and governance documentation. The deliverable is a document, not code. Agents read client-supplied files, produce structured clinical documents, and verify them against the client's clinical document standard and safety criteria. Read-only on source files.",
+      "team": true,
+      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"]
+    },
+    {
+      "id": "finance",
+      "label": "Finance",
+      "description": "Financial services operations — credit and lending policies, risk frameworks, AML/KYC procedures, investment and product disclosures, regulatory compliance documentation. The deliverable is a document, not code. Agents read client-supplied files, produce structured policy and compliance documents, and verify them against the client's document standard and regulatory criteria. Read-only on source files.",
       "team": true,
       "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"]
     }

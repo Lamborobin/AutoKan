@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Info } from 'lucide-react';
 import { useStore } from '../../store';
 import { DEFAULT_AGENT_MODEL, MODELS, COLORS } from '../../constants/agents';
+import InfoModal from '../settings/InfoModal';
 
 export { MODELS, COLORS };
 
@@ -106,12 +107,8 @@ export function ColorField({ value, onChange }) {
   );
 }
 
-const BEHAVIOUR_PROMPT_TOOLTIP = `Additional personality and context for this agent — plain text, not markdown.
-
-Example: "You are the Project Manager agent called Alex. You help the client and the team reach the project goal. You have an extroverted personality with an interest for shoes and like comedy shows. You are also very analytical and empathic."`;
-
 export function TemplatePromptField({ form, onChange }) {
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const charCount = (form.system_prompt || '').length;
 
   return (
@@ -119,21 +116,15 @@ export function TemplatePromptField({ form, onChange }) {
       <div className="flex items-center gap-1.5">
         <label className="text-xs font-medium text-gray-400">Behaviour Prompt</label>
         <span className="text-[10px] text-gray-600">· plain text, not markdown</span>
-        <div className="relative ml-auto">
-          <button
-            type="button"
-            onMouseEnter={() => setShowTooltip(true)}
-            onMouseLeave={() => setShowTooltip(false)}
-            className="text-gray-600 hover:text-gray-400 transition-colors"
-          >
-            <Info size={11} />
-          </button>
-          {showTooltip && (
-            <div className="absolute right-0 bottom-full mb-2 z-30 w-72 bg-surface-1 border border-border rounded-xl px-3 py-2.5 text-[10px] text-gray-400 leading-relaxed shadow-xl whitespace-pre-wrap">
-              {BEHAVIOUR_PROMPT_TOOLTIP}
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowInfo(true)}
+          className="ml-auto text-gray-600 hover:text-gray-400 transition-colors"
+          aria-label="What is the Behaviour Prompt?"
+        >
+          <Info size={11} />
+        </button>
+        <InfoModal openKey={showInfo ? 'agent' : null} onClose={() => setShowInfo(false)} />
       </div>
       <textarea
         value={form.system_prompt || ''}

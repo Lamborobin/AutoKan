@@ -93,7 +93,7 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
             optional
           </span>
         </div>
-        <p className="text-[10px] text-gray-600">A behavioural framework injected into agents created from this template. Leave empty to skip.</p>
+        <p className="text-[10px] text-gray-600">The persona and working style injected into every agent created from this template — independent of the board's domain. Leave empty to skip.</p>
         <textarea
           value={form.template_system_prompt}
           onChange={e => set('template_system_prompt', e.target.value)}
@@ -250,7 +250,7 @@ export default function TemplatesModal() {
         <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
           <div>
             <h2 className="text-base font-semibold text-gray-100">Agent Templates</h2>
-            <p className="text-[11px] text-gray-600 mt-0.5">Reusable blueprints that prefill new agent forms</p>
+            <p className="text-[11px] text-gray-600 mt-0.5">Reusable agent blueprints — a role, capability, and behaviour you can drop onto any board in any sector</p>
           </div>
           <button onClick={() => setShowTemplates(false)} className="btn-ghost p-1.5 rounded-lg">
             <X size={16} />

@@ -26,28 +26,28 @@ const LAYERS = [
   {
     key: 'ai_context',
     label: 'AI Context',
-    sub: 'System-wide rules the AI follows on every board. Edited by admins.',
+    sub: 'Global rules with technical depth — the only layer that can invoke code-exposed actions, not just state rules. Edited by superadmins/devs.',
     Icon: BookOpen,
     tone: 'system',
   },
   {
     key: 'workspace',
     label: 'Workspace Context',
-    sub: 'Shared by every board in this workspace — who the client is, how your team likes to work.',
+    sub: 'Declarative boundaries shared by every board in this workspace — rules only, no new actions.',
     Icon: FolderTree,
     tone: 'personality/rules/domain-specific',
   },
   {
     key: 'board',
     label: 'Board Context',
-    sub: 'For this board only — its domain, priorities, and board-specific preferences.',
+    sub: 'Declarative boundaries for this board only — its domain and rules, no new actions.',
     Icon: FileText,
     tone: 'personality/rules/domain-specific',
   },
   {
     key: 'agent',
     label: 'Template + Agent personality',
-    sub: 'An individual agent\'s personality and area of focus.',
+    sub: 'Cosmetic personality — tone, sign-off, phrasing. No effect on the flow.',
     Icon: Sparkles,
     tone: 'personality/specialization',
   },
@@ -61,7 +61,7 @@ const LAYERS = [
 export function HierarchyDiagram({ highlight }) {
   return (
     <div className="space-y-1">
-      <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Authority order — top is absolute, bottom is additive</p>
+      <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Waterfall order — top is immutable; each layer may tighten, never loosen or contradict, the ones above</p>
       {LAYERS.map((layer, i) => {
         const isHighlight = layer.key === highlight;
         const { Icon } = layer;
@@ -101,18 +101,19 @@ export function HierarchyDiagram({ highlight }) {
 export const CONTEXT_INFO = {
   board: {
     title: 'Board Context',
-    intro: "Files that add personality and domain context for this board only.",
+    intro: "Domain knowledge and rules that apply to this board only — constraints, not new actions.",
     highlight: 'board',
     body: (
       <>
         <p>
           Notes that apply to <span className="text-gray-300 font-medium">this board only</span> — its domain,
           the client's priorities, and any preferences for how work here should be done. Agents read these
-          when planning and working on tasks on this board.
+          when planning and working on tasks on this board, whatever the board's sector.
         </p>
         <p className="text-gray-500 italic">
-          Examples: "When working on the cart, always ask a human before changing payment logic." ·
-          "The client prefers concise commit messages." · "Always test in Safari."
+          Examples: "Every document must follow the seven-section structure and cite the relevant standard." ·
+          "Never guess a clinical figure or dose — flag it as missing." ·
+          "On the website, ask a human before changing payment logic."
         </p>
       </>
     ),
@@ -120,18 +121,19 @@ export const CONTEXT_INFO = {
 
   workspace: {
     title: 'Workspace Context',
-    intro: 'Files that add personality and context for every board in this workspace.',
+    intro: 'Rules and context shared by every board in this workspace — constraints, not new actions.',
     highlight: 'workspace',
     body: (
       <>
         <p>
           Notes shared by <span className="text-gray-300 font-medium">every board in this workspace</span> —
-          things like who the client is and how your team likes to work. Useful when the same guidance should
-          apply everywhere instead of repeating it on each board.
+          things like who the organisation is and how your team likes to work. Useful when the same guidance
+          should apply everywhere instead of repeating it on each board.
         </p>
         <p className="text-gray-500 italic">
-          Examples: "We use Clean Architecture — don't bypass the service layer." ·
-          "Always ask before modifying database schemas." · "Prefer TypeScript for new files."
+          Examples: "We're ISO 9001 certified — every procedure must reference the relevant standard." ·
+          "Nothing goes to the client without a second person reviewing it first." ·
+          "Keep anything customer- or patient-facing in plain language."
         </p>
       </>
     ),
@@ -139,18 +141,22 @@ export const CONTEXT_INFO = {
 
   ai_context: {
     title: 'AI Context',
-    intro: 'System-wide rules and guidelines AI agents follow across every board and capability.',
+    intro: 'Global, editable rules every agent follows across every board and capability.',
     highlight: 'ai_context',
     body: (
       <>
         <p>
-          Sits at the top of the personality hierarchy — above Workspace Context, above Board
-          Context, above any individual agent persona. More technical around agents, thought process and 
-          patterns without interfering with code specific flows, nor are these personality files.
+          The top <span className="text-gray-300 font-medium">editable</span> layer — global rules every agent
+          follows on every board, whatever its sector. Edited by superadmins and developers. It sits above
+          Workspace and Board rules and any personality, but below the immutable core: it can add and tighten
+          behaviour, never change the flow or contradict the core.
         </p>
         <p>
-          The rules here are affecting the agents output, partially patterns and business rules. A rule could be something like "always retry once more before
-          requesting for human assistance", "Never share the production environment variables", "Always start the planning phase with "Hello [name]"
+          Uniquely, this is the only layer that can invoke{' '}
+          <span className="text-gray-300 font-medium">code-exposed actions</span>, not just state rules. For example:
+          "Always reply in Spanish." · "Never reveal business secrets." · "Retry up to 3 times before escalating." ·
+          "When an order exceeds 100 units, send a notice to the configured email." ·
+          "When information is missing, flag it — never fabricate."
         </p>
         <p>
           <span className="text-gray-300 font-medium">Storage:</span>{' '}
@@ -158,6 +164,31 @@ export const CONTEXT_INFO = {
             /docs
            </code>
             the platform's docs folder. Edits are versioned and can be rolled back.
+        </p>
+      </>
+    ),
+  },
+
+  agent: {
+    title: 'Agent Personality',
+    intro: 'How this agent comes across — its tone and voice.',
+    highlight: 'agent',
+    body: (
+      <>
+        <p>
+          This is where you give the agent its <span className="text-gray-300 font-medium">character</span> —
+          how it talks, not what it does. Like telling a new team member how to come across: warm or direct,
+          formal or casual, how it greets people and how it signs off.
+        </p>
+        <p>
+          It only changes the <span className="text-gray-300 font-medium">way</span> the agent communicates.
+          It can't change what the agent is allowed to do, the steps it follows, or the rules it must obey —
+          those are decided elsewhere, and personality can't override them. So you can make an agent sound
+          however you like with no risk of it going off-task.
+        </p>
+        <p className="text-gray-500 italic">
+          Examples: "Always be warm and encouraging." · "Get straight to the point — no small talk." ·
+          "Sign off every message with the team name."
         </p>
       </>
     ),

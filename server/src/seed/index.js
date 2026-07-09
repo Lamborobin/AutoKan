@@ -2,7 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
-const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME, HEALTH_CLIENT_ID, HEALTH_CLIENT_NAME } = require('../config/constants');
+const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME, HEALTH_CLIENT_ID, HEALTH_CLIENT_NAME, FINANCE_CLIENT_ID, FINANCE_CLIENT_NAME } = require('../config/constants');
 const INSTRUCTIONS_ROOT = path.join(__dirname, '../../../instructions');
 const agentTemplates = require('./agent-templates.json');
 const runnersRegistry = require('./runners.json');
@@ -38,10 +38,10 @@ function seedDefaults(db) {
   seedColumns(db);
   seedProjects(db);
   seedAgentTemplates(db);
-  seedAgents(db);
   seedVelourAgents(db);
   seedSteelFactory(db);
   seedHealthcare(db);
+  seedFinance(db);
   scaffoldInstructionFolders();
 }
 
@@ -137,31 +137,9 @@ function seedAgentTemplates(db) {
   }
 }
 
-// ── Default agents ────────────────────────────────────────────────────────────
-
-function seedAgents(db) {
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
-       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const t of agentTemplates.templates) {
-    // is_template = 1 whenever the template defines a personality (it also drives
-    // the template "T" badge in the UI). system_prompt left null — the agent has
-    // no per-instance override until a user edits it via the UI.
-    const inheritsFromTemplate = !!t.template_system_prompt;
-    insert.run(
-      t.agent_id, t.name, t.role, t.model, t.description,
-      JSON.stringify(t.permissions),
-      t.personality_file || null,
-      inheritsFromTemplate ? 1 : 0,
-      null,
-      t.color, t.id, MY_BOARD_ID,
-      JSON.stringify(t.role_ids),
-    );
-  }
-}
+// The personal board (My Board) is seeded with NO agents — it starts empty so the
+// owner builds their own. Agent templates are still seeded into the template library
+// (seedAgentTemplates) for instantiation; they're just not auto-placed on any board.
 
 // ── Velour board agents ───────────────────────────────────────────────────────
 
@@ -292,6 +270,58 @@ function seedHealthcare(db) {
   }
 }
 
+// ── Finance demo board ────────────────────────────────────────────────────────
+
+function seedFinance(db) {
+  // Client record
+  let client = db.prepare('SELECT id FROM clients WHERE name = ? AND subscription_id = ?')
+    .get(FINANCE_CLIENT_NAME, DEFAULT_SUB_ID);
+  if (!client) {
+    const clientId = 'client_finance_' + crypto.randomBytes(4).toString('hex');
+    db.prepare('INSERT INTO clients (id, name, sector, subscription_id) VALUES (?, ?, ?, ?)')
+      .run(clientId, FINANCE_CLIENT_NAME, 'finance', DEFAULT_SUB_ID);
+    client = { id: clientId };
+  }
+
+  db.prepare(`
+    INSERT OR IGNORE INTO projects
+      (id, name, description, client_name, color, emoji, subscription_id, client_id, sector, hidden_capability_ids)
+    VALUES (?, 'Risk, Credit & Compliance', ?, ?, '#22c55e', '🏦', ?, ?, 'finance', ?)
+  `).run(
+    FINANCE_CLIENT_ID,
+    `Risk, credit, and compliance documentation for ${FINANCE_CLIENT_NAME}`,
+    FINANCE_CLIENT_NAME,
+    DEFAULT_SUB_ID,
+    client.id,
+    JSON.stringify(hiddenCapsForSector('finance')),
+  );
+
+  db.prepare('UPDATE projects SET client_id = ? WHERE id = ? AND client_id IS NULL')
+    .run(client.id, FINANCE_CLIENT_ID);
+
+  // Agents
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO agents
+      (id, name, role, model, description, permissions, personality_file,
+       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const a of agentTemplates.finance_agents) {
+    const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
+    if (!tpl) continue;
+    insert.run(
+      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      JSON.stringify(tpl.permissions),
+      tpl.personality_file || null,
+      tpl.template_system_prompt ? 1 : 0,
+      null,
+      a.color, a.template_id, FINANCE_CLIENT_ID,
+      JSON.stringify(a.role_ids),
+    );
+  }
+}
+
 // ── Instruction folder scaffolding ────────────────────────────────────────────
 
 // Demo content for the seeded board's context files — kept as editable markdown
@@ -317,6 +347,9 @@ function scaffoldInstructionFolders() {
 
   try { scaffoldHealthInstructions(); }
   catch (e) { console.warn('Could not scaffold Norvik Health instructions:', e.message); }
+
+  try { scaffoldFinanceInstructions(); }
+  catch (e) { console.warn('Could not scaffold Meridian Capital instructions:', e.message); }
 }
 
 function scaffoldSteelInstructions() {
@@ -347,6 +380,24 @@ function scaffoldHealthInstructions() {
     ['client.md',    readSeedDoc('demo-health-client.md')    || `# Client: ${HEALTH_CLIENT_NAME}\n`],
     ['project.md',   readSeedDoc('demo-health-project.md')   || '# Project Context\n'],
     ['doc-guide.md', readSeedDoc('demo-health-doc-guide.md') || '# Clinical Document Writer Guide\n'],
+  ];
+
+  for (const [filename, content] of files) {
+    const filePath = path.join(projectDir, filename);
+    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, content, 'utf8');
+  }
+}
+
+function scaffoldFinanceInstructions() {
+  const projectDir = path.join(INSTRUCTIONS_ROOT, DEFAULT_SUB_ID, FINANCE_CLIENT_ID);
+  if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
+
+  // doc-guide.md carries `capabilities: perm_producing` so it only loads for the
+  // Policy Writer; client.md / project.md stay front-matter-free for all agents.
+  const files = [
+    ['client.md',    readSeedDoc('demo-finance-client.md')    || `# Client: ${FINANCE_CLIENT_NAME}\n`],
+    ['project.md',   readSeedDoc('demo-finance-project.md')   || '# Project Context\n'],
+    ['doc-guide.md', readSeedDoc('demo-finance-doc-guide.md') || '# Policy & Documentation Writer Guide\n'],
   ];
 
   for (const [filename, content] of files) {

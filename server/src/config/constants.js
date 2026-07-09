@@ -12,6 +12,9 @@ const STEEL_CLIENT_NAME = 'Nordstahl Industries';  // fictional steel manufactur
 const HEALTH_CLIENT_ID   = 'prj_health01';     // fictional hospital network demo board
 const HEALTH_CLIENT_NAME = 'Norvik Health';    // fictional regional hospital network
 
+const FINANCE_CLIENT_ID   = 'prj_finance01';   // fictional financial group demo board
+const FINANCE_CLIENT_NAME = 'Meridian Capital'; // fictional lending + investment group
+
 module.exports = {
   TEST_CLIENT_ID,
   TEST_CLIENT_NAME,
@@ -21,4 +24,6 @@ module.exports = {
   STEEL_CLIENT_NAME,
   HEALTH_CLIENT_ID,
   HEALTH_CLIENT_NAME,
+  FINANCE_CLIENT_ID,
+  FINANCE_CLIENT_NAME,
 };
