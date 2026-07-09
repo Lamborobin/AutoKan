@@ -15,6 +15,9 @@ const HEALTH_CLIENT_NAME = 'Norvik Health';    // fictional regional hospital ne
 const FINANCE_CLIENT_ID   = 'prj_finance01';   // fictional financial group demo board
 const FINANCE_CLIENT_NAME = 'Meridian Capital'; // fictional lending + investment group
 
+const NORDVIK_CLIENT_ID   = 'prj_nordvik01';   // fictional Swedish credit-market firm demo board
+const NORDVIK_CLIENT_NAME = 'Nordvik Kredit';   // fictional Swedish lending + savings institution (Swedish-language board)
+
 module.exports = {
   TEST_CLIENT_ID,
   TEST_CLIENT_NAME,
@@ -26,4 +29,6 @@ module.exports = {
   HEALTH_CLIENT_NAME,
   FINANCE_CLIENT_ID,
   FINANCE_CLIENT_NAME,
+  NORDVIK_CLIENT_ID,
+  NORDVIK_CLIENT_NAME,
 };

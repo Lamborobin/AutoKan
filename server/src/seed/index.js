@@ -2,7 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
-const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME, HEALTH_CLIENT_ID, HEALTH_CLIENT_NAME, FINANCE_CLIENT_ID, FINANCE_CLIENT_NAME } = require('../config/constants');
+const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME, HEALTH_CLIENT_ID, HEALTH_CLIENT_NAME, FINANCE_CLIENT_ID, FINANCE_CLIENT_NAME, NORDVIK_CLIENT_ID, NORDVIK_CLIENT_NAME } = require('../config/constants');
 const INSTRUCTIONS_ROOT = path.join(__dirname, '../../../instructions');
 const agentTemplates = require('./agent-templates.json');
 const runnersRegistry = require('./runners.json');
@@ -42,6 +42,7 @@ function seedDefaults(db) {
   seedSteelFactory(db);
   seedHealthcare(db);
   seedFinance(db);
+  seedNordvik(db);
   scaffoldInstructionFolders();
 }
 
@@ -322,6 +323,61 @@ function seedFinance(db) {
   }
 }
 
+// ── Nordvik Kredit demo board (Swedish-language finance board) ─────────────────
+
+// A second finance-sector demo client whose board context is written entirely in
+// Swedish — used to check that agents mirror the board/prompt language and handle
+// Swedish regulatory terminology rather than defaulting to English.
+function seedNordvik(db) {
+  // Client record
+  let client = db.prepare('SELECT id FROM clients WHERE name = ? AND subscription_id = ?')
+    .get(NORDVIK_CLIENT_NAME, DEFAULT_SUB_ID);
+  if (!client) {
+    const clientId = 'client_nordvik_' + crypto.randomBytes(4).toString('hex');
+    db.prepare('INSERT INTO clients (id, name, sector, subscription_id) VALUES (?, ?, ?, ?)')
+      .run(clientId, NORDVIK_CLIENT_NAME, 'finance', DEFAULT_SUB_ID);
+    client = { id: clientId };
+  }
+
+  db.prepare(`
+    INSERT OR IGNORE INTO projects
+      (id, name, description, client_name, color, emoji, subscription_id, client_id, sector, hidden_capability_ids)
+    VALUES (?, 'Risk, Kredit & Regelefterlevnad', ?, ?, '#0ea5e9', '🏦', ?, ?, 'finance', ?)
+  `).run(
+    NORDVIK_CLIENT_ID,
+    `Risk-, kredit- och regelefterlevnadsdokumentation för ${NORDVIK_CLIENT_NAME}`,
+    NORDVIK_CLIENT_NAME,
+    DEFAULT_SUB_ID,
+    client.id,
+    JSON.stringify(hiddenCapsForSector('finance')),
+  );
+
+  db.prepare('UPDATE projects SET client_id = ? WHERE id = ? AND client_id IS NULL')
+    .run(client.id, NORDVIK_CLIENT_ID);
+
+  // Agents
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO agents
+      (id, name, role, model, description, permissions, personality_file,
+       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const a of agentTemplates.nordvik_agents) {
+    const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
+    if (!tpl) continue;
+    insert.run(
+      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      JSON.stringify(tpl.permissions),
+      tpl.personality_file || null,
+      tpl.template_system_prompt ? 1 : 0,
+      null,
+      a.color, a.template_id, NORDVIK_CLIENT_ID,
+      JSON.stringify(a.role_ids),
+    );
+  }
+}
+
 // ── Instruction folder scaffolding ────────────────────────────────────────────
 
 // Demo content for the seeded board's context files — kept as editable markdown
@@ -350,6 +406,9 @@ function scaffoldInstructionFolders() {
 
   try { scaffoldFinanceInstructions(); }
   catch (e) { console.warn('Could not scaffold Meridian Capital instructions:', e.message); }
+
+  try { scaffoldNordvikInstructions(); }
+  catch (e) { console.warn('Could not scaffold Nordvik Kredit instructions:', e.message); }
 }
 
 function scaffoldSteelInstructions() {
@@ -398,6 +457,25 @@ function scaffoldFinanceInstructions() {
     ['client.md',    readSeedDoc('demo-finance-client.md')    || `# Client: ${FINANCE_CLIENT_NAME}\n`],
     ['project.md',   readSeedDoc('demo-finance-project.md')   || '# Project Context\n'],
     ['doc-guide.md', readSeedDoc('demo-finance-doc-guide.md') || '# Policy & Documentation Writer Guide\n'],
+  ];
+
+  for (const [filename, content] of files) {
+    const filePath = path.join(projectDir, filename);
+    if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, content, 'utf8');
+  }
+}
+
+function scaffoldNordvikInstructions() {
+  const projectDir = path.join(INSTRUCTIONS_ROOT, DEFAULT_SUB_ID, NORDVIK_CLIENT_ID);
+  if (!fs.existsSync(projectDir)) fs.mkdirSync(projectDir, { recursive: true });
+
+  // Swedish-language board context. doc-guide.md carries `capabilities: perm_producing`
+  // so it only loads for the Policyförfattare; client.md / project.md stay
+  // front-matter-free for all agents on the board.
+  const files = [
+    ['client.md',    readSeedDoc('demo-nordvik-client.md')    || `# Klient: ${NORDVIK_CLIENT_NAME}\n`],
+    ['project.md',   readSeedDoc('demo-nordvik-project.md')   || '# Projektkontext\n'],
+    ['doc-guide.md', readSeedDoc('demo-nordvik-doc-guide.md') || '# Guide för policy- och dokumentförfattare\n'],
   ];
 
   for (const [filename, content] of files) {

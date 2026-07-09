@@ -166,6 +166,39 @@
     }
   ],
 
+  "nordvik_agents": [
+    {
+      "id": "agent_pm_nordvik",
+      "template_id": "tpl_pm",
+      "name": "Finansplanerare",
+      "role": "pm",
+      "model": "claude-opus-4-5",
+      "color": "#6366f1",
+      "description": "Planerar och strukturerar uppgifter för Nordvik Kredit. Klargör syfte, målgrupp och regulatorisk kontext för ett dokument innan skrivandet börjar.",
+      "role_ids": ["perm_planning", "role_access_backlog"]
+    },
+    {
+      "id": "agent_producer_nordvik",
+      "template_id": "tpl_producer",
+      "name": "Policyförfattare",
+      "role": "producer",
+      "model": "claude-sonnet-4-6",
+      "color": "#f59e0b",
+      "description": "Skriver kreditpolicyer, rutiner för kundkännedom och penningtvätt, riskramverk och produktinformation för Nordvik Kredit enligt Nordviks dokumentstandard.",
+      "role_ids": ["perm_producing", "role_access_inprogress"]
+    },
+    {
+      "id": "agent_verifier_nordvik",
+      "template_id": "tpl_verifier",
+      "name": "Regelefterlevnadsgranskare",
+      "role": "verifier",
+      "model": "claude-sonnet-4-6",
+      "description": "Granskar dokument mot Nordvik Kredits dokumentstandard och regulatoriska kriterier. Tar fram en strukturerad godkänd/underkänd-rapport.",
+      "color": "#10b981",
+      "role_ids": ["perm_verifying", "role_access_testing"]
+    }
+  ],
+
   "velour_agents": [
     {
       "id": "agent_pm_velour",
