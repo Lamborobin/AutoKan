@@ -1,6 +1,6 @@
 {
   "version": "2",
-  "description": "AutoKan AI Context panel config. Only `ai_context` is consumed (by server/src/routes/docs.js — the Settings → AI Context panel). Capabilities and runners live in server/src/seed/runners.json; default agents in server/src/seed/agent-templates.json. Earlier versions of this file held `models`, `agents`, `columns`, and `pipeline` sections — all superseded by the registry and removed.",
+  "description": "AutoKan System Rules panel config. Only `ai_context` is consumed (by server/src/routes/docs.js — the Settings → System Rules panel). Capabilities and runners live in server/src/seed/runners.json; default agents in server/src/seed/agent-templates.json. Earlier versions of this file held `models`, `agents`, `columns`, and `pipeline` sections — all superseded by the registry and removed.",
 
   "ai_context": {
     "groups": [
@@ -8,19 +8,7 @@
         "key": "behavior",
         "label": "Agent Behavior",
         "files": [
-          { "key": "agents",   "label": "Agents",   "file": "docs/agents.md" },
-          { "key": "frontend", "label": "Frontend", "file": "docs/frontend.md" },
-          { "key": "rules",    "label": "Rules",    "file": "docs/rules.md" }
-        ]
-      },
-      {
-        "key": "references",
-        "label": "Agent References",
-        "files": [
-          { "key": "architecture", "label": "Architecture",     "file": "docs/architecture.md" },
-          { "key": "api",          "label": "API",              "file": "docs/api.md" },
-          { "key": "decisions",    "label": "Decisions",        "file": "docs/decisions.md" },
-          { "key": "upcoming",     "label": "Upcoming Changes", "file": "docs/upcoming-changes.md" }
+          { "key": "rules", "label": "Rules", "file": "docs/rules.md" }
         ]
       }
     ]

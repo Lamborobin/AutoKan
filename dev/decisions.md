@@ -70,3 +70,21 @@ Update this file when a significant decision is made or reversed.
 **Decided:** Distribution model
 **Context:** AutoKan is developed under employment, so under a standard IP-assignment / work-for-hire arrangement the **employer owns the IP** (working assumption — confirm against the employment agreement and any company open-source/external-release policy). It is therefore proprietary, all-rights-reserved software — not an open-source project the author can license independently. Distribution is on the company's terms: the B2B model discussed (per-client installs, or a planned hosted variant). This repo doubles as the official demo, seeded with the default agents, their templates, and one sample client (Velour) so the full flow runs out of the box. Any public license or open-sourcing would require company approval; absent a `LICENSE` file the code is all-rights-reserved by default.
 
+---
+
+## Dev-only reference material moved out of `docs/`, out of the System Rules panel
+**Decided:** Documentation architecture pass, entry-point restructure
+**Context:** The System Rules panel is driven by a config file that lists which docs are editable through it — meant for an admin tuning *their* deployed instance's agent behaviour. This file (decisions) and the upcoming-changes log had been sitting in that same config, which meant any superadmin of any deployed AutoKan instance — including a client's own install — could see internal build decisions and roadmap that have nothing to do with configuring their agents. Neither file is read by any agent at runtime either, so nothing was gained by exposing them there. Both moved out of `docs/` into a sibling folder reserved for dev-assistant-only material, and out of the panel's config entirely. The remaining `docs/` files split the same way in spirit going forward: only content genuinely meant for admin configuration or agent runtime belongs in `docs/` and the panel; pure build-reference material doesn't.
+
+---
+
+## Docs never name another markdown file by filename
+**Decided:** Entry-point restructure (`CLAUDE.md` split into role-specific files)
+**Context:** Hardcoded filename references between docs broke repeatedly during the entry-point restructure — several docs files and a code comment pointed at the old master file by name, and every one went stale or broke the moment its role changed. Docs now refer to other content by *concept* ("the folder-creation convention," "the layer model"), never by filename, so a future rename or restructure can't silently break prose elsewhere. Only the files whose actual job is indexing may name a real path — the root entry-point files and the two JSON registries that drive the System Rules panel and per-capability context injection. The same rule extends to app code and UI text: no hardcoded doc paths there either, for the same rename-coupling reason.
+
+---
+
+## Dev-assistant edits stay in the file's lane
+**Decided:** Documentation architecture pass
+**Context:** Each doc file has an owner and a tone. When editing markdown, match the target file's tone, don't restate facts that already live elsewhere, and prefer net-shrink or net-equal diffs over additions — push back on edits, including user-requested ones, that would violate this. Without this discipline, doc content drifts and duplicates with no memory of why: an escalation example was found copy-pasted verbatim between two docs, and a board-specific example had leaked into a non-board-scoped file — both caught and fixed in the same pass that established this rule.
+

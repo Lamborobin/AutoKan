@@ -4,6 +4,23 @@ Read this file when working on: agent logic, behavior prompts, the instruction f
 
 ---
 
+## Context layer model
+
+Every agent's behaviour is assembled from a fixed stack of layers — most general at the top, most specific at the bottom. **The stack and its order are wired in code and never change.** Each layer is *additive*: it may tighten or extend the layers above it, but **a lower layer can never loosen, contradict, or reorder a higher one.** That is the waterfall invariant — the property to validate whenever context files change. Only a code change can alter the flow itself.
+
+| # | Layer | Editable by | What it may do |
+|---|---|---|---|
+| 1 | **Code mechanics** | Developer (code only) | The flow itself — which tool fires, which column a task moves to, what an agent may write, and the order of these layers. Immutable from any prompt. |
+| 2 | **Runner prompts** | Developer (code only) | Per-capability methodology baked into the runner. System-owned. |
+| 3 | **System Rules** | Superadmin / dev | Global, cross-subscription rules with technical depth. The **only** layer that may invoke code-exposed actions/hooks (e.g. "at 100 units → call the email endpoint") on top of plain rules ("reply in Spanish", "never reveal business secrets"). Cannot change the flow. |
+| 4 | **Workspace rules** | Admin | Declarative boundaries shared across a workspace's boards — no new actions ("don't generate reports about X — GDPR"). |
+| 5 | **Board rules** | Board owner / admin | The same, scoped to one board ("don't send the PR-ready email here — it spams person X"). |
+| 6 | **Personality** (template / agent) | UI editor | Cosmetic traits only — tone, sign-off, phrasing. Effectively no effect on logic. |
+
+The gradient is **actions → constraints → cosmetics**: layer 3 can add new actions (within code-exposed extension points); layers 4–5 can only add constraints; layer 6 is cosmetic. These layers are the **extension surface** — a fork or tenant customises behaviour through them without touching core code.
+
+---
+
 ## Default Seeded Agents
 
 Agents are server-side processes triggered automatically by the pipeline — they fire when a task lands in the right column, not when invoked directly.
@@ -78,11 +95,11 @@ Every agent's behaviour is shaped by stacked personality layers — each layer i
 | 1 — Baseline | (auto, used only if everything else is empty) "You are an agent operating in AutoKan with capability perm_coding…" |
 | 2 — Capability (`dev-implement.md`) | "You're a professional coder. Read before you change. Smallest change that satisfies the spec. Don't fake completion." |
 | 3 — Subscription (`coding-standards.md`) | "We use Clean Architecture. Never bypass the service layer." |
-| 4 — Board (`project.md` for Velour) | "When touching the cart, always ask for human verification before merging." |
+| 4 — Board (`project.md` for a client board) | "When touching the cart, always ask for human verification before merging." |
 | 5 — Template (`agent_templates.template_system_prompt` for "Senior Backend Coder") | "[STYLE] direct, no hedging. [CONSTRAINTS] Never reveal business logic in PR descriptions." |
 | 6 — Agent (`agents.system_prompt` for "Camila") | "Your name is Camila. You write commit messages in Spanish." (overrides layer 5) |
 
-These layers, plus the always-loaded files below, are assembled **once** into the agent's starting context when a run begins — the personality layers (1, 2, 5, 6) form the system prompt; the context files (layers 3 & 4, plus CLAUDE.md / README) are injected as the agent's initial message. Where each piece lands is just SDK placement — conceptually it is **one bundle**: everything the agent knows for that run. From there the agent works the task within that single session, on that context alone — it does not re-read instruction or doc files mid-run.
+These layers, plus the always-loaded files below, are assembled **once** into the agent's starting context when a run begins — the personality layers (1, 2, 5, 6) form the system prompt; the context files (layers 3 & 4, plus the always-loaded base files) are injected as the agent's initial message. Where each piece lands is just SDK placement — conceptually it is **one bundle**: everything the agent knows for that run. From there the agent works the task within that single session, on that context alone — it does not re-read instruction or doc files mid-run.
 
 None of these layers can change which tool fires, which column a task moves to, or what files the agent can write — those are enforced at the runner/tool layer.
 
@@ -100,7 +117,7 @@ Assembled once into the agent's starting context bundle (see the layering note a
 - **Capability docs** — the `docs/` files mapped to the agent's capability, picked up from `context_docs` in `runners.json` (the registry holds the mapping — not listed here).
 - **Subscription files** — every top-level `.md` in `instructions/{sub}/` (excluding runner personality files, already in the system prompt).
 - **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring.
-- **Always** — `CLAUDE.md` for every agent; `README.md` additionally for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
+- **Always** — the app agent's base instruction file, for every agent; the project's human-facing setup file, additionally, for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
 
 ### Path resolution
 
