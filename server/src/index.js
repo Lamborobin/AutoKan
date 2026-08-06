@@ -15,6 +15,7 @@ const subscriptionsRouter = require('./routes/subscriptions');
 const clientsRouter = require('./routes/clients');
 const docsRouter = require('./routes/docs');
 const notificationsRouter = require('./routes/notifications');
+const benchmarkRouter = require('./routes/benchmark');
 const { addClient } = require('./sse');
 
 const app = express();
@@ -44,6 +45,7 @@ app.use('/api/subscriptions', subscriptionsRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/docs', docsRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/benchmark', benchmarkRouter);
 
 // SSE — real-time push to connected browsers
 app.get('/api/events', (req, res) => addClient(res, req.user?.sub));

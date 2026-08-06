@@ -105,6 +105,19 @@ export const instructionsApi = {
     api.delete(`/instructions/${filename}`, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
 };
 
+export const benchmarkApi = {
+  listCases: (params) => api.get('/benchmark/cases', { params }).then(r => r.data),
+  createCase: (data) => api.post('/benchmark/cases', data).then(r => r.data),
+  draftCase: (data) => api.post('/benchmark/cases/draft', data).then(r => r.data),
+  updateCase: (id, data) => api.patch(`/benchmark/cases/${id}`, data).then(r => r.data),
+  deleteCase: (id) => api.delete(`/benchmark/cases/${id}`).then(r => r.data),
+  runCase: (id, projectId) => api.post(`/benchmark/cases/${id}/run`, { project_id: projectId }).then(r => r.data),
+  listRuns: (caseId) => api.get('/benchmark/runs', { params: { case_id: caseId } }).then(r => r.data),
+  getRun: (id) => api.get(`/benchmark/runs/${id}`).then(r => r.data),
+  reviewWithAI: (runId) => api.post(`/benchmark/runs/${runId}/review-ai`).then(r => r.data),
+  reviewManually: (runId, level, notes) => api.post(`/benchmark/runs/${runId}/review-manual`, { level, notes }).then(r => r.data),
+};
+
 export const rolesApi = {
   list: () => api.get('/roles').then(r => r.data),
 };
