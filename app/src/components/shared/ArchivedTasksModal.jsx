@@ -113,7 +113,7 @@ export default function ArchivedTasksModal({ onClose }) {
                     <div className="mb-2.5">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-[10px] text-gray-600">Progress</span>
-                        <span className="text-[10px] font-mono text-gray-500">{task.progress}%</span>
+                        <span className="text-[10px] text-gray-500">{task.progress}%</span>
                       </div>
                       <div className="h-1 bg-surface-4 rounded-full overflow-hidden">
                         <div

@@ -105,7 +105,7 @@ export default function InviteModal({ onClose }) {
                     <input
                       readOnly
                       value={feedback.link}
-                      className="flex-1 bg-surface-3 border border-border rounded px-2 py-1 text-[10px] text-gray-400 font-mono outline-none"
+                      className="flex-1 bg-surface-3 border border-border rounded px-2 py-1 text-[10px] text-gray-400 outline-none"
                       onClick={e => e.target.select()}
                     />
                     <button

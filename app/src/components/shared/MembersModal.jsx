@@ -260,8 +260,8 @@ export default function MembersModal({ onClose }) {
               }`}
             >
               {label}
-              {id === 'members' && boardMembers.length > 0 && <span className="ml-1.5 text-xs font-mono text-gray-600">{boardMembers.length}</span>}
-              {id === 'teams'   && teams.length > 0           && <span className="ml-1.5 text-xs font-mono text-gray-600">{teams.length}</span>}
+              {id === 'members' && boardMembers.length > 0 && <span className="ml-1.5 text-xs text-gray-600">{boardMembers.length}</span>}
+              {id === 'teams'   && teams.length > 0           && <span className="ml-1.5 text-xs text-gray-600">{teams.length}</span>}
             </button>
           ))}
         </div>

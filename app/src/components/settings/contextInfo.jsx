@@ -14,42 +14,36 @@ const LAYERS = [
     label: 'Code mechanics',
     sub: 'How the system actually works — fixed, set by developers. Not editable here.',
     Icon: ShieldCheck,
-    tone: 'immutable',
   },
   {
     key: 'runner',
     label: 'Runner prompts',
     sub: 'Built-in instructions for how agents carry out their work. System-owned, not user-editable.',
     Icon: Layers,
-    tone: 'system',
   },
   {
     key: 'ai_context',
-    label: 'AI Context',
+    label: 'System Rules',
     sub: 'Global rules with technical depth — the only layer that can invoke code-exposed actions, not just state rules. Edited by superadmins/devs.',
     Icon: BookOpen,
-    tone: 'system',
   },
   {
     key: 'workspace',
     label: 'Workspace Context',
     sub: 'Declarative boundaries shared by every board in this workspace — rules only, no new actions.',
     Icon: FolderTree,
-    tone: 'personality/rules/domain-specific',
   },
   {
     key: 'board',
     label: 'Board Context',
     sub: 'Declarative boundaries for this board only — its domain and rules, no new actions.',
     Icon: FileText,
-    tone: 'personality/rules/domain-specific',
   },
   {
     key: 'agent',
     label: 'Template + Agent personality',
     sub: 'Cosmetic personality — tone, sign-off, phrasing. No effect on the flow.',
     Icon: Sparkles,
-    tone: 'personality/specialization',
   },
 ];
 
@@ -61,7 +55,6 @@ const LAYERS = [
 export function HierarchyDiagram({ highlight }) {
   return (
     <div className="space-y-1">
-      <p className="text-[10px] uppercase tracking-widest text-gray-600 mb-2">Waterfall order — top is immutable; each layer may tighten, never loosen or contradict, the ones above</p>
       {LAYERS.map((layer, i) => {
         const isHighlight = layer.key === highlight;
         const { Icon } = layer;
@@ -74,7 +67,7 @@ export function HierarchyDiagram({ highlight }) {
                 : 'bg-surface-0/50 border-border text-gray-500'
             }`}
           >
-            <div className={`w-4 text-[9px] font-mono ${isHighlight ? 'text-accent' : 'text-gray-700'}`}>
+            <div className={`w-4 text-[9px] ${isHighlight ? 'text-accent' : 'text-gray-700'}`}>
               {i + 1}
             </div>
             <Icon size={12} className={isHighlight ? 'text-accent' : 'text-gray-600'} />
@@ -82,7 +75,7 @@ export function HierarchyDiagram({ highlight }) {
               <p className={`text-[11px] font-medium truncate ${isHighlight ? 'text-accent' : 'text-gray-400'}`}>
                 {layer.label}
               </p>
-              <p className="text-[9px] text-gray-600 truncate font-mono">{layer.sub}</p>
+              <p className="text-[9px] text-gray-600 truncate">{layer.sub}</p>
             </div>
             {isHighlight && (
               <span className="text-[8px] font-semibold uppercase tracking-wider text-accent/80 px-1.5 py-0.5 rounded bg-accent/10">
@@ -140,7 +133,7 @@ export const CONTEXT_INFO = {
   },
 
   ai_context: {
-    title: 'AI Context',
+    title: 'System Rules',
     intro: 'Global, editable rules every agent follows across every board and capability.',
     highlight: 'ai_context',
     body: (
@@ -151,19 +144,16 @@ export const CONTEXT_INFO = {
           Workspace and Board rules and any personality, but below the immutable core: it can add and tighten
           behaviour, never change the flow or contradict the core.
         </p>
+        <p>This layer isn't limited to plain rules — it can hold guardrails, information, hard constraints, or actions, shaped as:</p>
+        <ul className="list-disc pl-5 space-y-1">
+          <li><span className="text-gray-300 font-medium">Behavioural</span> — "Always reply in Spanish." · "Never reveal business secrets." · "Retry up to 3 times before escalating to a human."</li>
+          <li><span className="text-gray-300 font-medium">Conditional / business logic</span> — "When an order exceeds 100 units, summarise the impact before proceeding."</li>
+          <li><span className="text-gray-300 font-medium">Informational</span> — plain context the agent should know, not a directive: "Support tickets route through Zendesk, not email."</li>
+          <li><span className="text-gray-300 font-medium">Action hook</span> — unique to this layer: if this install exposes an email action, "When an order exceeds 100 units, send a notice to the configured email with the amount."</li>
+        </ul>
         <p>
-          Uniquely, this is the only layer that can invoke{' '}
-          <span className="text-gray-300 font-medium">code-exposed actions</span>, not just state rules. For example:
-          "Always reply in Spanish." · "Never reveal business secrets." · "Retry up to 3 times before escalating." ·
-          "When an order exceeds 100 units, send a notice to the configured email." ·
-          "When information is missing, flag it — never fabricate."
-        </p>
-        <p>
-          <span className="text-gray-300 font-medium">Storage:</span>{' '}
-           <code className="text-[11px] bg-surface-0 px-1.5 py-0.5 rounded font-mono">
-            /docs
-           </code>
-            the platform's docs folder. Edits are versioned and can be rolled back.
+          Keep each entry a single, checkable statement so an agent can follow it without interpretation. It
+          applies everywhere it isn't overridden by a tighter Workspace or Board constraint.
         </p>
       </>
     ),

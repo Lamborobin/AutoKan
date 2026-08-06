@@ -985,7 +985,7 @@ export default function TaskDetail() {
               <div className="bg-surface-2 rounded-lg p-2.5">
                 <div className="flex justify-between items-center mb-2">
                   <p className="text-xs text-gray-600 font-medium">Progress</p>
-                  <span className="text-xs font-mono text-gray-400">{task.progress}%</span>
+                  <span className="text-xs text-gray-400">{task.progress}%</span>
                 </div>
                 <div className="h-1.5 bg-surface-4 rounded-full overflow-hidden">
                   <div

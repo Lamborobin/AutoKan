@@ -3,9 +3,10 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info, Mail, UserPlus,
+  BookOpen, Info, Mail, UserPlus, FlaskConical,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
+import BenchmarkPanel from './BenchmarkPanel';
 import InfoModal from './InfoModal';
 import TeamsPanel from './TeamsPanel';
 import BoardsPanel from './BoardsPanel';
@@ -458,6 +459,7 @@ export default function SettingsPage() {
           <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
           <div className="space-y-0.5">
             {navBtn('files', 'Board Context', FileText, null, 'board')}
+            {navBtn('benchmark', 'Rule Benchmark', FlaskConical)}
           </div>
         </div>
 
@@ -498,7 +500,7 @@ export default function SettingsPage() {
                     />
                     {newFileName.trim() && (
                       safeFileName(newFileName)
-                        ? <p className="text-[9px] text-gray-600 px-0.5">Saved as <span className="font-mono text-gray-500">{safeFileName(newFileName)}.md</span></p>
+                        ? <p className="text-[9px] text-gray-600 px-0.5">Saved as <span className="text-gray-500">{safeFileName(newFileName)}.md</span></p>
                         : <p className="text-[9px] text-amber-500/80 px-0.5">Needs at least one letter or number</p>
                     )}
                     {newFileError && <p className="text-[9px] text-red-400">{newFileError}</p>}
@@ -576,6 +578,7 @@ export default function SettingsPage() {
               {navBtn('sub_overview', 'Overview', Settings2)}
               {navBtn('sub_clients',  'Clients',  Building2)}
               {navBtn('sub_files',    'Workspace Context', FileText, null, 'workspace')}
+              {navBtn('sub_benchmark', 'Rule Benchmark', FlaskConical)}
             </div>
           </div>
         )}
@@ -652,7 +655,7 @@ export default function SettingsPage() {
         <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
           <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">System</p>
           <div className="space-y-0.5">
-            {navBtn('ai_context', 'AI Context', BookOpen, null, 'ai_context')}
+            {navBtn('ai_context', 'System Rules', BookOpen, null, 'ai_context')}
           </div>
         </div>
       </div>
@@ -737,7 +740,7 @@ export default function SettingsPage() {
                 {/* Subscription ID (read-only info) */}
                 <div className="bg-surface-2 border border-border rounded-xl p-4 mt-3 space-y-1">
                   <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Subscription ID</p>
-                  <p className="font-mono text-xs text-gray-500">{subscription?.id || '—'}</p>
+                  <p className="text-xs text-gray-500">{subscription?.id || '—'}</p>
                 </div>
               </div>
             </div>
@@ -1007,8 +1010,12 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* AI Context panel */}
+        {/* System Rules panel */}
         {section === 'ai_context' && <AiContextPanel />}
+
+        {/* Rule-compliance benchmark panels */}
+        {section === 'benchmark' && <BenchmarkPanel scope="board" />}
+        {section === 'sub_benchmark' && isSuperAdmin && <BenchmarkPanel scope="workspace" />}
 
         {/* Editor panel — shared by board files ('files') and subscription files ('sub_files') */}
         {(section === 'files' || section === 'sub_files') && (<>
@@ -1080,7 +1087,7 @@ export default function SettingsPage() {
                 <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">Loading…</div>
               ) : (
                 <textarea
-                  className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] font-mono leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
+                  className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
                   value={content}
                   onChange={e => handleContentChange(e.target.value)}
                   spellCheck={false}
@@ -1111,7 +1118,7 @@ export default function SettingsPage() {
         </>)}
       </div>
 
-      {/* Section info modal (Board Context / Workspace Context / AI Context explainer) */}
+      {/* Section info modal (Board Context / Workspace Context / System Rules explainer) */}
       <InfoModal openKey={openInfoKey} onClose={() => setOpenInfoKey(null)} />
 
       {/* ── Action errors ───────────────────────────────────────────────── */}
@@ -1219,7 +1226,7 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
     <div className="flex-1 overflow-y-auto px-8 py-8">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-gray-200">Members</h2>
-          <span className="text-xs text-gray-500 font-mono">{users.length}</span>
+          <span className="text-xs text-gray-500">{users.length}</span>
         </div>
         <p className="text-xs text-gray-500 mb-6">All users in this workspace.</p>
 
@@ -1455,10 +1462,10 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           </div>
           {/* Show the connected URL or path */}
           {displayUrl && (
-            <p className="font-mono text-xs text-gray-500 pl-4">{displayUrl}</p>
+            <p className="text-xs text-gray-500 pl-4">{displayUrl}</p>
           )}
           {!project.repo_url && project.client_path && (
-            <p className="font-mono text-xs text-gray-500 pl-4">{project.client_path}</p>
+            <p className="text-xs text-gray-500 pl-4">{project.client_path}</p>
           )}
         </div>
       )}
@@ -1495,7 +1502,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
               onChange={e => setRepoUrl(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleClone()}
               placeholder="https://github.com/user/repo"
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
             <button
               onClick={handleClone}
@@ -1507,7 +1514,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
             </button>
           </div>
           <p className="text-[11px] text-gray-600">
-            The repository will be cloned into <span className="font-mono">client/</span> and connected to this board.
+            The repository will be cloned into <span>client/</span> and connected to this board.
           </p>
         </div>
       )}
@@ -1538,7 +1545,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           {basePath && (
             <div className="flex items-center gap-1.5">
               <FolderOpen size={11} className="text-gray-600 shrink-0" />
-              <span className="font-mono text-[11px] text-gray-600 truncate">{basePath}</span>
+              <span className="text-[11px] text-gray-600 truncate">{basePath}</span>
             </div>
           )}
 
@@ -1568,7 +1575,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
                       }`}
                     >
                       <FolderOpen size={13} className="shrink-0" />
-                      <span className="font-mono text-xs text-gray-200 flex-1 truncate">{f.name}</span>
+                      <span className="text-xs text-gray-200 flex-1 truncate">{f.name}</span>
                       {f.is_git && (
                         <span className="text-[10px] text-gray-600 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded border border-border">git</span>
                       )}

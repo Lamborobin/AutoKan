@@ -209,7 +209,7 @@ export default function BoardsModal({ onClose }) {
           <div className="flex items-center gap-2 mb-2">
             {color && <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />}
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">{title}</p>
-            <span className="text-xs text-gray-600 font-mono">{boards.length}</span>
+            <span className="text-xs text-gray-600">{boards.length}</span>
           </div>
         )}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

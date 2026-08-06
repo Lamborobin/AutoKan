@@ -154,7 +154,7 @@ export default function Column({ column, tasks }) {
               {column.name}
             </h3>
           )}
-          <span className="text-xs font-mono text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md shrink-0">
+          <span className="text-xs text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md shrink-0">
             {tasks.length}
           </span>
         </div>
@@ -257,7 +257,7 @@ export default function Column({ column, tasks }) {
 
         {tasks.length === 0 && (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-xs text-gray-700 font-mono">empty</p>
+            <p className="text-xs text-gray-700">empty</p>
           </div>
         )}
       </div>

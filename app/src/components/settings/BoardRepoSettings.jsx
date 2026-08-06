@@ -117,7 +117,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
           {project.path_exists
             ? <Check size={11} />
             : <AlertTriangle size={11} />}
-          <span className="font-mono flex-1 truncate">{project.client_path}</span>
+          <span className="flex-1 truncate">{project.client_path}</span>
           {project.path_exists
             ? <span className="shrink-0">Connected</span>
             : <span className="shrink-0">Folder not found</span>}
@@ -159,7 +159,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
             value={repoUrl}
             onChange={e => setRepoUrl(e.target.value)}
             placeholder="https://github.com/user/repo.git"
-            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
           />
           <div className="flex items-center gap-2">
             <span className="text-gray-600 shrink-0">client/</span>
@@ -167,7 +167,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
               value={folderName}
               onChange={e => setFolderName(e.target.value)}
               placeholder="folder-name"
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
           </div>
           <button
@@ -190,7 +190,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
               <span>Scanning client/ folder…</span>
             </div>
           ) : clientRepos.length === 0 ? (
-            <p className="text-gray-600 py-1">No folders found in <span className="font-mono">client/</span></p>
+            <p className="text-gray-600 py-1">No folders found in <span>client/</span></p>
           ) : (
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {clientRepos.map(r => (
@@ -204,7 +204,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
                   }`}
                 >
                   <FolderOpen size={11} />
-                  <span className="font-mono flex-1">{r.client_path}</span>
+                  <span className="flex-1">{r.client_path}</span>
                   {r.is_git && <span className="text-[10px] text-gray-600">git</span>}
                 </button>
               ))}
@@ -218,7 +218,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
               value={localPath.replace(/^client\//, '')}
               onChange={e => setLocalPath(e.target.value ? `client/${e.target.value}` : '')}
               placeholder="folder-name"
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
           </div>
 

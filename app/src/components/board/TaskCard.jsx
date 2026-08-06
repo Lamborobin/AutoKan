@@ -100,7 +100,7 @@ export default function TaskCard({ task }) {
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1">
             <span className="text-xs text-gray-500">Progress</span>
-            <span className="text-xs font-mono text-gray-400">{task.progress}%</span>
+            <span className="text-xs text-gray-400">{task.progress}%</span>
           </div>
           <div className="h-1 bg-surface-4 rounded-full overflow-hidden">
             <div

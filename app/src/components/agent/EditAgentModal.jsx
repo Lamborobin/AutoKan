@@ -248,7 +248,7 @@ export default function EditAgentModal() {
                   <ul className="mt-1.5 space-y-0.5 max-h-32 overflow-y-auto">
                     {displacementWarning.tasks.map(t => (
                       <li key={t.id} className="text-[10px] text-amber-400 flex items-center gap-2">
-                        <span className="font-mono text-[9px] text-amber-500/70 shrink-0">{columns.find(c => c.id === t.column_id)?.name || t.column_id}</span>
+                        <span className="text-[9px] text-amber-500/70 shrink-0">{columns.find(c => c.id === t.column_id)?.name || t.column_id}</span>
                         <span className="truncate">{t.title}</span>
                       </li>
                     ))}
