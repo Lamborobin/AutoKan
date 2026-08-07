@@ -33,19 +33,81 @@ function StatusBadge({ status }) {
   );
 }
 
+const TOOL_LABELS = {
+  ask_question: 'asked a clarifying question',
+  approve_task: 'approved the task',
+  suggest_split: 'suggested splitting the task',
+  suggest_abandon: 'suggested abandoning the task',
+};
+
+function toolLabel(tool) {
+  return TOOL_LABELS[tool] || (tool ? `did "${tool}"` : "didn't take a recognized action");
+}
+
+// Turns backend rubric-check internals (check names + pre-formatted comparison
+// strings) into a plain-language line — see dev/frontend.md's "Audience-appropriate
+// UI". Falls back to the raw detail for any check shape this doesn't recognize, so
+// nothing silently disappears.
+function friendlySummary(check) {
+  if (check.name === 'expected_tool') {
+    const m = check.detail.match(/expected "([^"]+)", got "([^"]+)"/);
+    if (!m) return check.detail;
+    const [, expected, got] = m;
+    return check.passed
+      ? `Correctly ${toolLabel(expected)}`
+      : `Expected the planner to have ${toolLabel(expected)} — instead it ${toolLabel(got)}`;
+  }
+  if (check.name === 'checklist_count_min' || check.name === 'checklist_count_max') {
+    const m = check.detail.match(/got (\d+)/);
+    const count = m ? m[1] : '?';
+    return check.passed
+      ? `Checklist had an appropriate number of items (${count})`
+      : `Checklist length was off (${count} items)`;
+  }
+  if (check.name.startsWith('required:')) {
+    const field = check.name.slice('required:'.length);
+    return check.passed ? `Covered "${field}"` : `Missed "${field}"`;
+  }
+  if (check.name.startsWith('forbidden:')) {
+    const field = check.name.slice('forbidden:'.length);
+    return check.passed ? `Correctly avoided saying "${field}"` : `Incorrectly said "${field}"`;
+  }
+  return check.detail;
+}
+
 function DeterministicChecks({ result }) {
+  const [showDetails, setShowDetails] = useState(false);
   if (!result) return <p className="text-xs text-gray-600">Pending…</p>;
+  const checks = result.checks || [];
+  const passedCount = checks.filter(c => c.passed).length;
+
   return (
     <div className="space-y-1">
-      <p className="text-xs font-medium text-gray-300">
-        Automated check: {result.passed ? <span className="text-green-400">passed</span> : <span className="text-red-400">failed</span>}
-      </p>
-      {result.checks?.map((c, i) => (
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-medium text-gray-300">
+          Automated check: {result.passed ? <span className="text-green-400">passed</span> : <span className="text-red-400">failed</span>}
+          {checks.length > 0 && <span className="text-gray-600"> ({passedCount}/{checks.length})</span>}
+        </p>
+        {checks.length > 0 && (
+          <button onClick={() => setShowDetails(v => !v)}
+            className="text-[9px] text-gray-600 hover:text-gray-400 transition-colors shrink-0">
+            {showDetails ? 'Hide technical detail' : 'Show technical detail'}
+          </button>
+        )}
+      </div>
+      {checks.map((c, i) => (
         <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500 pl-1">
           {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
-          <span>{c.detail}</span>
+          <span>{friendlySummary(c)}</span>
         </div>
       ))}
+      {showDetails && (
+        <div className="mt-1 pt-1.5 border-t border-border/50 space-y-0.5">
+          {checks.map((c, i) => (
+            <p key={i} className="text-[10px] text-gray-600">{c.name}: {c.detail}</p>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

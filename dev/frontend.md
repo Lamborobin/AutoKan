@@ -73,6 +73,10 @@ Split at 400 lines — when splitting, one file per resource group, re-export fr
 
 ---
 
+## Audience-appropriate UI
+
+Settings/admin surfaces are used by non-technical roles (PMs, admins), not only developers. Never render raw backend output — rubric field names, comparison strings, internal check identifiers, JSON shapes — directly in these views. The backend can return whatever's useful for debugging; translating it into something a non-technical reader can act on is the frontend's job, not something pushed onto the viewer.
+
 ## Settings Page
 
 Single full-page view (`app/src/components/settings/SettingsPage.jsx`) — left nav + right panel. The left nav has three groups:
