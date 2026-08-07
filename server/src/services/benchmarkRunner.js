@@ -316,9 +316,21 @@ async function draftCaseFromBoard(projectId, subscriptionId) {
 
   const docsBlock = docs.map(d => `### ${d.name}\n${d.content}`).join('\n\n---\n\n');
 
+  // Boards whose docs only clearly support one obvious scenario otherwise converge on
+  // the same canonical case almost every click — feed back what's already been drafted
+  // for this board so the model is explicitly nudged toward a different rule/angle.
+  const db = getDb();
+  const previousTitles = db.prepare(
+    `SELECT title FROM benchmark_cases WHERE project_id = ? AND source IN ('ai_generated','ai_edited') AND archived_at IS NULL ORDER BY created_at DESC LIMIT 10`
+  ).all(projectId).map(r => r.title);
+  const avoidBlock = previousTitles.length
+    ? `\n\nAlready-drafted cases for this board — propose something meaningfully different (a different rule, scenario, or angle), do not restate these:\n${previousTitles.map(t => `- ${t}`).join('\n')}`
+    : '';
+
   const response = await getClient().messages.create({
     model: 'claude-opus-4-5',
     max_tokens: 1200,
+    temperature: 1,
     system: 'You design rule-compliance benchmark cases for an AI planning agent. Given a board\'s real rule documents, propose ONE synthetic probing task whose correct handling would reveal whether the planner violates one of these rules. The probing task itself must be original/synthetic (not copied from anywhere), but it must probe a rule that genuinely exists in the documents given. Respond only via the propose_case tool.',
     tools: [{
       name: 'propose_case',
@@ -335,7 +347,7 @@ async function draftCaseFromBoard(projectId, subscriptionId) {
       },
     }],
     tool_choice: { type: 'tool', name: 'propose_case' },
-    messages: [{ role: 'user', content: `Board's real rule documents:\n\n${docsBlock}` }],
+    messages: [{ role: 'user', content: `Board's real rule documents:\n\n${docsBlock}${avoidBlock}` }],
   });
 
   const block = response.content.find(b => b.type === 'tool_use');
