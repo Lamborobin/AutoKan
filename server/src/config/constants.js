@@ -18,9 +18,6 @@ const FINANCE_CLIENT_NAME = 'Meridian Capital'; // fictional lending + investmen
 const NORDVIK_CLIENT_ID   = 'prj_nordvik01';   // fictional Swedish credit-market firm demo board
 const NORDVIK_CLIENT_NAME = 'Nordvik Kredit';   // fictional Swedish lending + savings institution (Swedish-language board)
 
-const BENCH_SANDBOX_ID   = 'prj_bench0001';       // neutral board for the rule-compliance benchmark's global/workspace-layer cases
-const BENCH_SANDBOX_NAME = 'Benchmark Sandbox';   // no client, no board-level docs — only docs/rules.md + workspace docs apply
-
 module.exports = {
   TEST_CLIENT_ID,
   TEST_CLIENT_NAME,
@@ -34,6 +31,4 @@ module.exports = {
   FINANCE_CLIENT_NAME,
   NORDVIK_CLIENT_ID,
   NORDVIK_CLIENT_NAME,
-  BENCH_SANDBOX_ID,
-  BENCH_SANDBOX_NAME,
 };

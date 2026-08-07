@@ -2,7 +2,7 @@ const fs   = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { scaffoldProjectInstructions, scaffoldSubscriptionInstructions } = require('../utils/instructions');
-const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME, HEALTH_CLIENT_ID, HEALTH_CLIENT_NAME, FINANCE_CLIENT_ID, FINANCE_CLIENT_NAME, NORDVIK_CLIENT_ID, NORDVIK_CLIENT_NAME, BENCH_SANDBOX_ID, BENCH_SANDBOX_NAME } = require('../config/constants');
+const { TEST_CLIENT_ID, TEST_CLIENT_NAME, MY_BOARD_ID, DEFAULT_SUB_ID, STEEL_CLIENT_ID, STEEL_CLIENT_NAME, HEALTH_CLIENT_ID, HEALTH_CLIENT_NAME, FINANCE_CLIENT_ID, FINANCE_CLIENT_NAME, NORDVIK_CLIENT_ID, NORDVIK_CLIENT_NAME } = require('../config/constants');
 const INSTRUCTIONS_ROOT = path.join(__dirname, '../../../instructions');
 const agentTemplates = require('./agent-templates.json');
 const runnersRegistry = require('./runners.json');
@@ -43,7 +43,6 @@ function seedDefaults(db) {
   seedHealthcare(db);
   seedFinance(db);
   seedNordvik(db);
-  seedBenchmarkSandbox(db);
   scaffoldInstructionFolders();
 }
 
@@ -379,40 +378,6 @@ function seedNordvik(db) {
   }
 }
 
-// ── Rule-compliance benchmark sandbox board ───────────────────────────────────
-
-// Neutral substrate for the benchmark's global-baseline and workspace-layer cases:
-// a real board with a real planning agent, but zero board-level docs (client.md/
-// project.md are never scaffolded here — see scaffoldInstructionFolders below) so
-// the only thing in force is docs/rules.md plus whatever workspace-level docs exist
-// under instructions/{DEFAULT_SUB_ID}/. Sector 'personal' keeps every capability
-// visible; only a planner is seeded since that's the only capability under test.
-function seedBenchmarkSandbox(db) {
-  db.prepare(`
-    INSERT OR IGNORE INTO projects
-      (id, name, description, color, emoji, subscription_id, sector, hidden_capability_ids)
-    VALUES (?, ?, 'Neutral board for the rule-compliance benchmark — no board-level docs, used to test the System Rules and workspace layers in isolation.', '#71717a', '🧪', ?, 'personal', ?)
-  `).run(BENCH_SANDBOX_ID, BENCH_SANDBOX_NAME, DEFAULT_SUB_ID, JSON.stringify(hiddenCapsForSector('personal')));
-
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
-       is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const tpl = agentTemplates.templates.find(t => t.id === 'tpl_pm');
-  insert.run(
-    'agent_pm_bench', 'Project Manager', 'pm', tpl.model,
-    'Plans and manages probing tasks for the rule-compliance benchmark sandbox.',
-    JSON.stringify(tpl.permissions),
-    tpl.personality_file || null,
-    tpl.template_system_prompt ? 1 : 0,
-    null,
-    tpl.color, tpl.id, BENCH_SANDBOX_ID,
-    JSON.stringify(['perm_planning', 'role_access_backlog']),
-  );
-}
-
 // ── Instruction folder scaffolding ────────────────────────────────────────────
 
 // Demo content for the seeded board's context files — kept as editable markdown
@@ -432,9 +397,6 @@ function scaffoldInstructionFolders() {
 
   try { scaffoldProjectInstructions(MY_BOARD_ID, DEFAULT_SUB_ID, null, null, true); }
   catch (e) { console.warn('Could not scaffold My Board instructions:', e.message); }
-
-  try { scaffoldProjectInstructions(BENCH_SANDBOX_ID, DEFAULT_SUB_ID, null, null, true); }
-  catch (e) { console.warn('Could not scaffold Benchmark Sandbox instructions:', e.message); }
 
   try { scaffoldSteelInstructions(); }
   catch (e) { console.warn('Could not scaffold Nordstahl instructions:', e.message); }
