@@ -153,6 +153,10 @@ async function createRunAndDispatch(caseRow, { projectId, userId } = {}) {
       column_id: 'col_backlog',
       assigned_agent_id: agent.id,
       project_id: projectId,
+      // Probing tasks go through the real creation/dispatch pipeline (that's what
+      // makes the blind test trustworthy) but must never show up as real board work —
+      // tasks.js's list route and other.js's column-count query both exclude this flag.
+      metadata: { is_benchmark_probe: true },
     }),
   });
   if (!res.ok) throw new Error(`Probing task creation failed (${res.status})`);
@@ -170,47 +174,14 @@ async function createRunAndDispatch(caseRow, { projectId, userId } = {}) {
   return db.prepare('SELECT * FROM benchmark_runs WHERE id = ?').get(runId);
 }
 
-async function pollAndScore(runId, { timeoutMs = 90000, intervalMs = 2000 } = {}) {
-  const db = getDb();
-  const run = db.prepare('SELECT * FROM benchmark_runs WHERE id = ?').get(runId);
-  if (!run) return;
-
-  const deadline = Date.now() + timeoutMs;
-  let task, logs, settled = false;
-  while (Date.now() < deadline) {
-    task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(run.probing_task_id);
-    logs = db.prepare('SELECT * FROM task_logs WHERE task_id = ? ORDER BY created_at ASC').all(run.probing_task_id);
-    settled = logs.some(l => ['pm_question', 'pm_reviewed'].includes(l.action));
-    if (settled) break;
-    await sleep(intervalMs);
-  }
-
-  if (!settled) {
-    db.prepare(`UPDATE benchmark_runs SET status = 'timeout', completed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(runId);
-    return;
-  }
-
-  const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
-  const rubric = JSON.parse(caseRow.rubric || '{}');
-  const deterministic = scoreDeterministic(task, logs, rubric.deterministic || {});
-
-  db.prepare(`
-    UPDATE benchmark_runs SET status = 'completed', deterministic_result = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?
-  `).run(JSON.stringify(deterministic), runId);
-}
-
-// ── On-demand review actions ────────────────────────────────────────────────
-// Two alternatives the user picks between per run — neither is automatic.
-
-async function reviewWithAI(runId) {
-  const db = getDb();
-  const run = db.prepare('SELECT * FROM benchmark_runs WHERE id = ?').get(runId);
-  if (!run) throw new Error('Run not found');
-  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(run.probing_task_id);
-  const logs = db.prepare('SELECT * FROM task_logs WHERE task_id = ? ORDER BY created_at ASC').all(run.probing_task_id);
-  const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
-  const judgeRubric = (JSON.parse(caseRow.rubric || '{}')).judge || {};
-
+// Shared by the automatic post-run judging below and the manual re-review action —
+// this is the ONLY check that actually reads the board's real rule docs and judges
+// whether the planner's output respects them in substance. The deterministic check
+// (scoreDeterministic, above) is intentionally mechanical — tool used, item counts,
+// exact substrings — it cannot tell you whether a rule was actually followed, only
+// whether the shape of the output looked roughly right. This is why judging runs
+// automatically on completion instead of staying a manual "maybe later" action.
+async function callJudge(task, logs, judgeRubric) {
   const outputSummary = [
     `Tool fired: ${firedTool(task, logs) || '(none)'}`,
     `Question/message: ${task.pm_pending_question || '(none)'}`,
@@ -242,7 +213,66 @@ async function reviewWithAI(runId) {
   });
 
   const block = response.content.find(b => b.type === 'tool_use');
-  const verdict = block ? block.input : { passed: false, rationale: 'Judge model did not return a verdict.' };
+  return block ? block.input : { passed: false, rationale: 'Judge model did not return a verdict.' };
+}
+
+async function pollAndScore(runId, { timeoutMs = 90000, intervalMs = 2000 } = {}) {
+  const db = getDb();
+  const run = db.prepare('SELECT * FROM benchmark_runs WHERE id = ?').get(runId);
+  if (!run) return;
+
+  const deadline = Date.now() + timeoutMs;
+  let task, logs, settled = false;
+  while (Date.now() < deadline) {
+    task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(run.probing_task_id);
+    logs = db.prepare('SELECT * FROM task_logs WHERE task_id = ? ORDER BY created_at ASC').all(run.probing_task_id);
+    settled = logs.some(l => ['pm_question', 'pm_reviewed'].includes(l.action));
+    if (settled) break;
+    await sleep(intervalMs);
+  }
+
+  if (!settled) {
+    db.prepare(`UPDATE benchmark_runs SET status = 'timeout', completed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(runId);
+    return;
+  }
+
+  const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
+  const rubric = JSON.parse(caseRow.rubric || '{}');
+  const deterministic = scoreDeterministic(task, logs, rubric.deterministic || {});
+
+  // Judge automatically whenever the case has a judge rubric to grade against —
+  // a run isn't meaningfully "done" until the substance has been checked, not just
+  // the shape. If the model call itself fails, leave judge_result null rather than
+  // failing the whole run — the deterministic result and raw output are still there.
+  let judgeResult = null;
+  const judgeRubric = rubric.judge || {};
+  if (judgeRubric.instructions || judgeRubric.pass_criteria) {
+    try { judgeResult = await callJudge(task, logs, judgeRubric); }
+    catch (err) { console.error('[benchmarkRunner] auto-judge failed:', err.message); }
+  }
+
+  db.prepare(`
+    UPDATE benchmark_runs SET status = 'completed', deterministic_result = ?, judge_result = ?,
+      review_provenance = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(JSON.stringify(deterministic), judgeResult ? JSON.stringify(judgeResult) : null,
+    judgeResult ? 'ai' : 'unreviewed', runId);
+}
+
+// ── On-demand review actions ────────────────────────────────────────────────
+// Manual re-review — the run is already auto-judged on completion (see pollAndScore
+// above); this re-runs the same judge call for when the reviewer wants a fresh pass
+// (e.g. after tightening the case's judge rubric) or the auto-judge failed.
+
+async function reviewWithAI(runId) {
+  const db = getDb();
+  const run = db.prepare('SELECT * FROM benchmark_runs WHERE id = ?').get(runId);
+  if (!run) throw new Error('Run not found');
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(run.probing_task_id);
+  const logs = db.prepare('SELECT * FROM task_logs WHERE task_id = ? ORDER BY created_at ASC').all(run.probing_task_id);
+  const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
+  const judgeRubric = (JSON.parse(caseRow.rubric || '{}')).judge || {};
+
+  const verdict = await callJudge(task, logs, judgeRubric);
 
   db.prepare(`UPDATE benchmark_runs SET judge_result = ?, review_provenance = 'ai' WHERE id = ?`)
     .run(JSON.stringify(verdict), runId);
@@ -292,16 +322,25 @@ const RUBRIC_SCHEMA = {
   properties: {
     deterministic: {
       type: 'object',
+      description: 'Mechanical substring/count checks — no judgment involved, so keep every check something you are certain correct handling produces. When in doubt, leave a field out and rely on the judge rubric below instead of guessing.',
       properties: {
         expected_tool: { type: 'string', enum: ['ask_question', 'approve_task', 'suggest_split', 'suggest_abandon'] },
         checklist_count_min: { type: 'integer' },
-        checklist_count_max: { type: 'integer' },
-        required_fields: { type: 'array', items: { type: 'string' } },
+        checklist_count_max: {
+          type: 'integer',
+          description: 'Upper bound on checklist length. Leave generous headroom above checklist_count_min — a thorough planner reasonably adds items for already-confirmed facts alongside open questions, not just the bare-minimum questions. Prefer min + 4 or more, or omit this field entirely if unsure.',
+        },
+        required_fields: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Exact substrings checked case-insensitively against the planner\'s raw message text. Never use a generic word describing the MESSAGE TYPE itself (e.g. "question", "message", "note", "concern") — a planner can correctly ask a question without ever typing the word "question". Only add an entry for a specific, concrete term from the task or rule doc that correct handling would plausibly quote verbatim (a named field, a number, a specific policy term).',
+        },
         forbidden_substrings_in_message: { type: 'array', items: { type: 'string' } },
       },
     },
     judge: {
       type: 'object',
+      description: 'The AI-judge rubric — this is where nuanced, substance-based pass/fail judgment belongs. Prefer putting anything uncertain here rather than forcing it into a brittle deterministic check.',
       properties: {
         instructions: { type: 'string' },
         pass_criteria: { type: 'string' },

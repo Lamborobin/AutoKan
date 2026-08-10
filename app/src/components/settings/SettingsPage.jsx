@@ -370,12 +370,12 @@ export default function SettingsPage() {
         <FileText size={11} className="shrink-0" />
         <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
         {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
+        {/* All actions stay visible (and tinted) always — none hidden behind hover */}
         {actions && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
             {actions}
           </div>
         )}
-        {/* Delete stays visible (and red) always — not hidden behind hover like the other actions */}
         {deleteAction && (
           <div className="flex items-center" onClick={e => e.stopPropagation()}>
             {deleteAction}
@@ -470,11 +470,11 @@ export default function SettingsPage() {
                     actions={
                       <>
                         <button onClick={() => selectFile(f, 'board')} title="Edit content & visibility"
-                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
                           <Pencil size={10} />
                         </button>
                         <button onClick={() => setArchiveConfirm({ file: f, scope: 'board' })} title="Archive"
-                          className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                          className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
                           <Archive size={10} />
                         </button>
                       </>
@@ -542,7 +542,7 @@ export default function SettingsPage() {
                     <FileRow key={f.name} file={f} scope="board"
                       actions={
                         <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
-                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
                           <RotateCcw size={10} />
                         </button>
                       }
@@ -597,7 +597,7 @@ export default function SettingsPage() {
                   <FileRow key={f.name} file={f} scope="subscription"
                     actions={f.protected ? null : (
                       <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
-                        className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                        className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
                         <Archive size={10} />
                       </button>
                     )}
@@ -626,7 +626,7 @@ export default function SettingsPage() {
                     <FileRow key={f.name} file={f} scope="subscription"
                       actions={
                         <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
-                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
                           <RotateCcw size={10} />
                         </button>
                       }

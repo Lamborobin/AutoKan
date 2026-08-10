@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, X, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles } from 'lucide-react';
+import { Check, X, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { useStore } from '../../store';
 import { tasksApi } from '../../api';
+import MarkdownText from '../shared/MarkdownText';
 import NewBenchmarkTaskModal from './NewBenchmarkTaskModal';
 
 const REVIEW_LEVELS = [
@@ -96,23 +97,57 @@ function mergeChecklistCountChecks(checks) {
   return rest;
 }
 
+// Collapsed by default — this is mechanical scaffolding (tool used, item counts,
+// exact substrings), not a rule-compliance verdict. It can't know whether client.md
+// was actually respected, only whether the output's shape looked roughly right, so
+// it stays a secondary, opt-in detail rather than the headline result (that's
+// RuleCompliance below, which is grounded in the board's real rule docs).
 function DeterministicChecks({ result }) {
+  const [open, setOpen] = useState(false);
   if (!result) return <p className="text-xs text-gray-600">Pending…</p>;
   const checks = mergeChecklistCountChecks(result.checks || []);
   const passedCount = checks.filter(c => c.passed).length;
 
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-medium text-gray-300">
-        Structural check <span className="text-gray-600 font-normal">(automatic, no AI)</span>: {result.passed ? <span className="text-green-400">passed</span> : <span className="text-red-400">failed</span>}
-        {checks.length > 0 && <span className="text-gray-600"> ({passedCount}/{checks.length})</span>}
-      </p>
-      {checks.map((c, i) => (
-        <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500 pl-1">
-          {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
-          <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
+    <div>
+      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        Technical check — {result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
+        {checks.length > 0 && <span className="text-gray-600">({passedCount}/{checks.length})</span>}
+      </button>
+      {!open && (
+        <p className="text-[10px] text-gray-600 mt-0.5 pl-[15px]">Tool used &amp; output shape only — not whether the rule itself was followed.</p>
+      )}
+      {open && (
+        <div className="mt-1.5 space-y-1 pl-[15px]">
+          {checks.map((c, i) => (
+            <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500">
+              {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
+              <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
+    </div>
+  );
+}
+
+// The headline result — grounded in the board's real rule docs, this is the actual
+// answer to "did the output respect the rule under test." Auto-populated on
+// completion when the case has a judge rubric (see benchmarkRunner.js's
+// pollAndScore); the "Re-check with AI" button below re-runs it on demand.
+function RuleCompliance({ result }) {
+  return (
+    <div className={`rounded-lg border p-2.5 text-xs ${result.passed ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+      <p className="font-medium text-gray-300 flex items-center gap-1.5">
+        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${
+          result.passed ? 'bg-green-500/15 text-green-400 border-green-500/25' : 'bg-red-500/15 text-red-400 border-red-500/25'
+        }`}>
+          {result.passed ? 'Passed' : 'Failed'}
+        </span>
+        Rule compliance
+      </p>
+      <MarkdownText text={result.rationale} className="text-gray-500 mt-1.5" />
     </div>
   );
 }
@@ -137,41 +172,38 @@ function PlannerOutput({ taskId }) {
 
   // tasksApi.get() already returns pm_checklist parsed (server/src/routes/tasks.js) — don't re-parse it.
   const checklist = task?.pm_checklist || [];
+  const hasContent = task?.pm_pending_question || task?.pm_review_comment || checklist.length > 0;
 
   return (
-    <div className="pt-1">
-      <button onClick={handleToggle} className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1">
-        {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />} Planner output
+    <div>
+      <button onClick={handleToggle} className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-300 transition-colors">
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} What the planner said
       </button>
+
       {open && (
-        <div className="mt-1.5 space-y-2 text-xs text-gray-400 bg-surface-2 rounded-lg p-2.5">
-          {loading && <p className="text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
-          {!loading && task?.pm_pending_question && (
-            <div><p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">Question to the human</p><p>{task.pm_pending_question}</p></div>
+        <div className="mt-2 space-y-2.5">
+          {loading && <p className="text-xs text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
+
+          {!loading && (task?.pm_pending_question || task?.pm_review_comment) && (
+            <MarkdownText text={task.pm_pending_question || task.pm_review_comment} className="text-xs text-gray-400" />
           )}
-          {!loading && task?.pm_review_comment && (
-            <div><p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">Review comment</p><p>{task.pm_review_comment}</p></div>
-          )}
+
           {!loading && checklist.length > 0 && (
-            <div>
-              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">Checklist</p>
-              <ul className="space-y-0.5">
-                {checklist.map((entry, i) => {
-                  const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
-                  const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
-                  return (
-                    <li key={i} className="flex items-start gap-1.5">
-                      {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
-                      <span>{text}</span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+            <ul className="space-y-1">
+              {checklist.map((entry, i) => {
+                const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
+                const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
+                return (
+                  <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500">
+                    {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
+                    <MarkdownText text={text} className="text-[11px] text-gray-500" />
+                  </li>
+                );
+              })}
+            </ul>
           )}
-          {!loading && !task?.pm_pending_question && !task?.pm_review_comment && checklist.length === 0 && (
-            <p className="text-gray-600">Nothing recorded for this run.</p>
-          )}
+
+          {!loading && !hasContent && <p className="text-xs text-gray-600">Nothing recorded for this run.</p>}
         </div>
       )}
     </div>
@@ -210,73 +242,71 @@ function RunCard({ run, caseId }) {
   }
 
   return (
-    <div className="border border-border rounded-lg p-3 space-y-2 bg-surface-1">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] text-gray-500">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
+    <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 bg-surface-2/40 border-b border-border/60">
+        <span className="text-[10px] text-gray-500 font-mono">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
         <StatusBadge status={run.status} />
       </div>
 
-      {['pending', 'dispatched'].includes(run.status) && (
-        <p className="text-xs text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the planner…</p>
-      )}
+      <div className="p-3 space-y-2.5">
+        {['pending', 'dispatched'].includes(run.status) && (
+          <p className="text-xs text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the planner…</p>
+        )}
 
-      {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
+        {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
 
-      {run.judge_result && (
-        <div className="text-xs border-l-2 border-accent/30 ml-1 pl-2">
-          <p className="font-medium text-gray-300">AI review: {run.judge_result.passed ? <span className="text-green-400">passed</span> : <span className="text-red-400">failed</span>}</p>
-          <p className="text-gray-500">{run.judge_result.rationale}</p>
-        </div>
-      )}
+        {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
 
-      {run.manual_review && (
-        <div className="text-xs border-l-2 border-purple-500/30 ml-1 pl-2">
-          <p className="font-medium text-gray-300">Manual review: {REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</p>
-          {run.manual_review.notes && <p className="text-gray-500">{run.manual_review.notes}</p>}
-        </div>
-      )}
+        {run.manual_review && (
+          <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5 text-xs">
+            <p className="font-medium text-gray-300">Manual review — {REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</p>
+            {run.manual_review.notes && <MarkdownText text={run.manual_review.notes} className="text-gray-500 mt-1" />}
+          </div>
+        )}
 
-      {run.status === 'completed' && <PlannerOutput taskId={run.probing_task_id} />}
+        {run.status === 'completed' && <PlannerOutput taskId={run.probing_task_id} />}
 
-      {run.status === 'completed' && (
-        <div className="flex items-center gap-2 pt-1">
-          <button onClick={handleAiReview} disabled={reviewing}
-            className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
-            {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Review with AI
-          </button>
-          <button onClick={() => setShowManual(v => !v)}
-            className="text-[10px] px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
-            Mark reviewed manually
-          </button>
-        </div>
-      )}
-
-      {showManual && (
-        <div className="space-y-1.5 pt-1">
-          <select value={level} onChange={e => setLevel(e.target.value)}
-            className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 outline-none focus:border-accent/50">
-            {REVIEW_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
-          </select>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note…" rows={2}
-            className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 resize-none" />
-          <div className="flex items-center gap-2">
-            <button onClick={handleManualSubmit} disabled={submitting}
-              className="text-[10px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
-              {submitting ? '…' : 'Save'}
+        {run.status === 'completed' && (
+          <div className="flex items-center gap-2 border-t border-border/50 mt-1 pt-2.5">
+            <button onClick={handleAiReview} disabled={reviewing}
+              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
+              {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} {run.judge_result ? 'Re-check with AI' : 'Check rule compliance'}
             </button>
-            <button onClick={handleManualCancel} disabled={submitting}
-              className="text-[10px] px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
-              Cancel
+            <button onClick={() => setShowManual(v => !v)}
+              className="text-[10px] px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
+              Mark reviewed manually
             </button>
           </div>
-        </div>
-      )}
+        )}
+
+        {showManual && (
+          <div className="space-y-1.5 pt-1">
+            <select value={level} onChange={e => setLevel(e.target.value)}
+              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 outline-none focus:border-accent/50">
+              {REVIEW_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+            </select>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note…" rows={2}
+              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 resize-none" />
+            <div className="flex items-center gap-2">
+              <button onClick={handleManualSubmit} disabled={submitting}
+                className="text-[10px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
+                {submitting ? '…' : 'Save'}
+              </button>
+              <button onClick={handleManualCancel} disabled={submitting}
+                className="text-[10px] px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
   const [expanded, setExpanded] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
   const [running, setRunning] = useState(false);
 
   async function handleRun() {
@@ -290,35 +320,43 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
     <div className="border border-border rounded-xl p-4 space-y-3 bg-surface-1">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-gray-200">{c.title}</p>
-          <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-3">{c.description}</p>
+          <p className="text-sm font-medium text-gray-200 truncate">{c.title}</p>
+          <button onClick={() => setShowDescription(v => !v)}
+            className="mt-1 flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-400 transition-colors">
+            {showDescription ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {showDescription ? 'Hide description' : 'Show description'}
+          </button>
+          {showDescription && <MarkdownText text={c.description} className="text-xs text-gray-500 mt-1.5" />}
         </div>
         <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
           {SOURCE_LABEL[c.source] || c.source}
         </span>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <button onClick={handleRun} disabled={running || !targetProjectId}
           className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
           {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
         </button>
-        <button onClick={() => onDelete(c.id)}
-          className="text-xs px-2 py-1.5 rounded-lg text-red-400/80 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-          Delete
-        </button>
         {runs?.length > 0 && (
           <button onClick={() => setExpanded(v => !v)}
-            className="ml-auto flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+            className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {expanded ? 'Hide' : 'Show'} {runs.length} run{runs.length === 1 ? '' : 's'}
           </button>
         )}
+        <button onClick={() => onDelete(c.id)} title="Delete this benchmark task"
+          className="ml-auto p-1.5 rounded-lg text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          <Trash2 size={13} />
+        </button>
       </div>
 
       {expanded && runs?.length > 0 && (
-        <div className="space-y-2 pt-1">
-          {runs.map(run => <RunCard key={run.id} run={run} caseId={c.id} />)}
+        <div className="pt-3 mt-0.5 border-t border-border/60">
+          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Runs</p>
+          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+            {runs.map(run => <RunCard key={run.id} run={run} caseId={c.id} />)}
+          </div>
         </div>
       )}
     </div>
