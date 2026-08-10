@@ -52,7 +52,7 @@ export default function NotificationPopover({ anchorRef, onClose }) {
           <Bell size={14} className="text-gray-400" />
           <span className="text-sm font-semibold text-gray-200">Notifications</span>
           {unreadCount > 0 && (
-            <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded-full font-mono">
+            <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">
               {unreadCount}
             </span>
           )}

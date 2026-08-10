@@ -26,7 +26,7 @@ app/src/
     └── shared/             # BoardsModal, InviteModal, MembersModal, ArchivedTasksModal, MarkdownText
 ```
 
-Feature subdirectories are created **on demand** — only when 3+ related files exist (see the Folder Creation Rule in `CLAUDE.md`).
+Feature subdirectories are created **on demand** — only when 3+ related files exist (see this repo's folder-creation convention).
 
 ## File Size Thresholds
 | Lines | Action |
@@ -73,6 +73,10 @@ Split at 400 lines — when splitting, one file per resource group, re-export fr
 
 ---
 
+## Audience-appropriate UI
+
+Settings/admin surfaces are used by non-technical roles (PMs, admins), not only developers. Never render raw backend output — rubric field names, comparison strings, internal check identifiers, JSON shapes — directly in these views. The backend can return whatever's useful for debugging; translating it into something a non-technical reader can act on is the frontend's job, not something pushed onto the viewer.
+
 ## Settings Page
 
 Single full-page view (`app/src/components/settings/SettingsPage.jsx`) — left nav + right panel. The left nav has three groups:
@@ -88,7 +92,7 @@ Single full-page view (`app/src/components/settings/SettingsPage.jsx`) — left 
 - **Team**, **Boards**, **Members** (placeholder), **Superadmins**.
 
 **System**:
-- **AI Context** — edits the governance docs surfaced from `agent.config.json`'s `ai_context` groups (component: `AiContextPanel`); edits are versioned server-side.
+- **System Rules** — edits the governance docs surfaced from `agent.config.json`'s `ai_context` groups (component: `AiContextPanel`); edits are versioned server-side.
 
 The right-panel **instruction-file editor** is shared by Board Context and Workspace Context: auto-saves (1.5s debounce), archived files are read-only, and a delete that would orphan an agent reference returns `409` → the UI nudges toward archive. An `InfoModal` gives a per-section "what is this?" explainer.
 

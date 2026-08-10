@@ -297,10 +297,12 @@ columnsRouter.get('/', attachAgent, (req, res) => {
         ORDER BY position ASC
       `).all();
 
-  // Attach task counts (scoped to project if provided)
+  // Attach task counts (scoped to project if provided) — excludes benchmark
+  // probing tasks, which are fictional and must never show up as real board work.
+  const probeFilter = `(metadata IS NULL OR metadata NOT LIKE '%"is_benchmark_probe":true%')`;
   const counts = projectId
-    ? db.prepare('SELECT column_id, COUNT(*) as count FROM tasks WHERE project_id = ? GROUP BY column_id').all(projectId)
-    : db.prepare('SELECT column_id, COUNT(*) as count FROM tasks GROUP BY column_id').all();
+    ? db.prepare(`SELECT column_id, COUNT(*) as count FROM tasks WHERE project_id = ? AND ${probeFilter} GROUP BY column_id`).all(projectId)
+    : db.prepare(`SELECT column_id, COUNT(*) as count FROM tasks WHERE ${probeFilter} GROUP BY column_id`).all();
   const countMap = Object.fromEntries(counts.map(c => [c.column_id, c.count]));
 
   res.json(columns.map(c => ({ ...c, task_count: countMap[c.id] || 0 })));

@@ -407,7 +407,7 @@ function safeListMd(folder, excludeBasenames = new Set()) {
 
 // Build the context block that goes into every agent's initial user message.
 // Sources, all optional, all dedup'd:
-//   1. Global files (CLAUDE.md always; README.md for coder capabilities)
+//   1. Global files (APP-AGENT.md always; README.md for coder capabilities)
 //   2. Capability docs — docs/ files mapped to the agent's capability via
 //      context_docs in runners.json (every app agent gets docs/rules.md)
 //   3. Workspace context — auto-scan top-level .md in instructions/{sub}/
@@ -428,7 +428,7 @@ function buildContextBlock(agent, subscriptionId, projectId) {
   }
 
   // 1. Global files
-  for (const name of ['CLAUDE.md', ...(isCoderAgent ? ['README.md'] : [])]) {
+  for (const name of ['APP-AGENT.md', ...(isCoderAgent ? ['README.md'] : [])]) {
     pushFromAbs(path.join(PROJECT_ROOT, name), name.replace('.md', '').toUpperCase());
   }
 

@@ -182,7 +182,7 @@ export default function TaskComments({ taskId }) {
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Comments</span>
         {comments.length > 0 && (
-          <span className="text-[10px] font-mono text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md">{comments.length}</span>
+          <span className="text-[10px] text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md">{comments.length}</span>
         )}
       </div>
 

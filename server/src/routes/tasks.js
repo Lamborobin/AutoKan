@@ -71,13 +71,18 @@ router.get('/', attachAgent, (req, res) => {
   query += ' ORDER BY created_at DESC';
   const tasks = db.prepare(query).all(...params);
 
-  res.json(tasks.map(t => ({
-    ...t,
-    tags: JSON.parse(t.tags || '[]'),
-    metadata: JSON.parse(t.metadata || '{}'),
-    pm_checklist: t.pm_checklist ? JSON.parse(t.pm_checklist) : null,
-    is_locked: isTaskLocked(t),
-  })));
+  res.json(tasks
+    // Benchmark probing tasks use the real creation pipeline but are fictional —
+    // never show them as real board work. Fetched individually by ID instead
+    // (see BenchmarkPanel's "Planner output"), which bypasses this list route.
+    .filter(t => !JSON.parse(t.metadata || '{}').is_benchmark_probe)
+    .map(t => ({
+      ...t,
+      tags: JSON.parse(t.tags || '[]'),
+      metadata: JSON.parse(t.metadata || '{}'),
+      pm_checklist: t.pm_checklist ? JSON.parse(t.pm_checklist) : null,
+      is_locked: isTaskLocked(t),
+    })));
 });
 
 // GET /tasks/:id

@@ -159,7 +159,7 @@ function RoleCheckbox({ checked, onToggle, color, label, badge }) {
       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
       <span className="text-xs text-gray-400 group-hover:text-gray-300 flex-1">{label}</span>
       {badge && (
-        <span className="text-[9px] font-mono text-gray-600 bg-surface-1 border border-border px-1.5 py-0.5 rounded shrink-0">
+        <span className="text-[9px] text-gray-600 bg-surface-1 border border-border px-1.5 py-0.5 rounded shrink-0">
           {badge}
         </span>
       )}
@@ -231,7 +231,7 @@ export function RoleField({ selectedRoleIds, onToggle }) {
           <label className="text-xs font-medium text-gray-400">Capability *</label>
           <span className="text-[10px] text-gray-600">· what this agent does (pick exactly one)</span>
           {capabilityCount > 0 && (
-            <span className="ml-auto text-[10px] font-mono text-accent">{capabilityCount} selected</span>
+            <span className="ml-auto text-[10px] text-accent">{capabilityCount} selected</span>
           )}
         </div>
         <div className="bg-surface-3 border border-border rounded-lg p-3 space-y-1.5 max-h-64 overflow-y-auto">

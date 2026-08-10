@@ -5,7 +5,7 @@ const { TEST_CLIENT_ID, MY_BOARD_ID, DEFAULT_SUB_ID } = require('../config/const
 const { seedDefaults } = require('../seed');
 
 // No migrations. Schema changes require dropping autokan.db (local dev only) —
-// see CLAUDE.md → Database section.
+// see this repo's development conventions, Database section.
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../../data/autokan.db');
 
@@ -285,6 +285,41 @@ function applySchema(db) {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- ── Benchmark cases (rule-compliance probes) ────────────
+    CREATE TABLE IF NOT EXISTS benchmark_cases (
+      id TEXT PRIMARY KEY,
+      subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+      project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+      layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
+      rule_reference TEXT,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      rubric TEXT NOT NULL DEFAULT '{}',
+      source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ai_generated','ai_edited','cloned_task')),
+      created_by TEXT REFERENCES users(id),
+      archived_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    -- ── Benchmark runs (one row per execution, never overwritten) ─
+    CREATE TABLE IF NOT EXISTS benchmark_runs (
+      id TEXT PRIMARY KEY,
+      case_id TEXT NOT NULL REFERENCES benchmark_cases(id) ON DELETE CASCADE,
+      project_id TEXT REFERENCES projects(id),
+      probing_task_id TEXT REFERENCES tasks(id),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','dispatched','completed','error','timeout')),
+      deterministic_result TEXT,
+      judge_result TEXT,
+      manual_review TEXT,
+      review_provenance TEXT NOT NULL DEFAULT 'unreviewed' CHECK(review_provenance IN ('unreviewed','ai','human')),
+      context_version TEXT,
+      error_message TEXT,
+      triggered_by TEXT REFERENCES users(id),
+      started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME
+    );
+
     -- ── Triggers (updated_at) ────────────────────────────────
     CREATE TRIGGER IF NOT EXISTS tasks_updated_at
       AFTER UPDATE ON tasks
@@ -297,6 +332,10 @@ function applySchema(db) {
     CREATE TRIGGER IF NOT EXISTS agent_templates_updated_at
       AFTER UPDATE ON agent_templates
       BEGIN UPDATE agent_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+
+    CREATE TRIGGER IF NOT EXISTS benchmark_cases_updated_at
+      AFTER UPDATE ON benchmark_cases
+      BEGIN UPDATE benchmark_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
   `);
 
 }

@@ -10,7 +10,7 @@ Read this file when making structural changes, or when the reason behind a syste
 AutoKan/
 ├── client/                  # Live client repos — one subfolder per connected board
 │   └── {clientName}/        # one subfolder per board — the actual code agents work in
-├── docs/                    # Extended documentation — read on demand via CLAUDE.md
+├── docs/                    # Extended documentation — read on demand, per the entry-point routing
 ├── instructions/            # Instruction files — scoped by subscription and board
 │   └── {subscriptionId}/    # e.g. sub_default/
 │       ├── planning.md          # Shared planner methodology — all boards
@@ -23,7 +23,7 @@ AutoKan/
 │           └── archived/
 ├── server/
 │   └── src/
-│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (AI Context panel groups)
+│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (System Rules panel groups)
 │       ├── db/              # Schema only — CREATE TABLE definitions, calls seed/ on init
 │       ├── middleware/      # JWT verification, isSuperAdmin, agent header passthrough
 │       ├── routes/          # One file per resource group (tasks, agents, projects, members…)

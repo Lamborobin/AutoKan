@@ -3,9 +3,10 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info, Mail, UserPlus,
+  BookOpen, Info, Mail, UserPlus, FlaskConical,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
+import BenchmarkPanel from './BenchmarkPanel';
 import InfoModal from './InfoModal';
 import TeamsPanel from './TeamsPanel';
 import BoardsPanel from './BoardsPanel';
@@ -357,31 +358,27 @@ export default function SettingsPage() {
     );
   }
 
-  function FileRow({ file, scope, actions }) {
+  function FileRow({ file, scope, actions, deleteAction }) {
     const isSelected = selectedFile?.name === file.name && selectedFile?.scope === scope;
-    const caps = file.capabilities || [];
     return (
       <div
-        className={`group flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
+        className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
           isSelected ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
         onClick={() => selectFile(file, scope)}
       >
-        <div className="flex items-center gap-2">
-          <FileText size={11} className="shrink-0" />
-          <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
-          {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
-          {actions && (
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-              {actions}
-            </div>
-          )}
-        </div>
-        {scope === 'board' && (
-          <div className="flex flex-wrap gap-1 pl-[19px]">
-            {caps.length > 0
-              ? caps.map(c => <CapBadge key={c} cap={c} />)
-              : <span className="text-[8px] px-1 py-0.5 rounded-full font-medium bg-surface-3 text-gray-500">All agents</span>}
+        <FileText size={11} className="shrink-0" />
+        <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
+        {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
+        {/* All actions stay visible (and tinted) always — none hidden behind hover */}
+        {actions && (
+          <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+            {actions}
+          </div>
+        )}
+        {deleteAction && (
+          <div className="flex items-center" onClick={e => e.stopPropagation()}>
+            {deleteAction}
           </div>
         )}
       </div>
@@ -442,13 +439,15 @@ export default function SettingsPage() {
           {currentProject && (
             <button
               onClick={() => setCurrentPage('board')}
-              className="flex items-center gap-1.5 mt-2 w-full text-left group"
+              className="flex flex-col mt-2 w-full text-left group"
               title="Go to board"
             >
-              <span className="text-sm shrink-0">{currentProject.emoji || '📋'}</span>
               <span className="text-xs font-medium text-gray-300 truncate group-hover:text-accent transition-colors">
                 {currentProject.name}
               </span>
+              {currentProject.client_name && (
+                <span className="text-[10px] text-gray-600 truncate">{currentProject.client_name}</span>
+              )}
             </button>
           )}
         </div>
@@ -471,18 +470,20 @@ export default function SettingsPage() {
                     actions={
                       <>
                         <button onClick={() => selectFile(f, 'board')} title="Edit content & visibility"
-                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
                           <Pencil size={10} />
                         </button>
                         <button onClick={() => setArchiveConfirm({ file: f, scope: 'board' })} title="Archive"
-                          className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                          className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
                           <Archive size={10} />
                         </button>
-                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
-                          className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                          <Trash2 size={10} />
-                        </button>
                       </>
+                    }
+                    deleteAction={
+                      <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
+                        className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                        <Trash2 size={10} />
+                      </button>
                     }
                   />
                 ))}
@@ -498,7 +499,7 @@ export default function SettingsPage() {
                     />
                     {newFileName.trim() && (
                       safeFileName(newFileName)
-                        ? <p className="text-[9px] text-gray-600 px-0.5">Saved as <span className="font-mono text-gray-500">{safeFileName(newFileName)}.md</span></p>
+                        ? <p className="text-[9px] text-gray-600 px-0.5">Saved as <span className="text-gray-500">{safeFileName(newFileName)}.md</span></p>
                         : <p className="text-[9px] text-amber-500/80 px-0.5">Needs at least one letter or number</p>
                     )}
                     {newFileError && <p className="text-[9px] text-red-400">{newFileError}</p>}
@@ -540,16 +541,16 @@ export default function SettingsPage() {
                   {showArchived && customArchived.map(f => (
                     <FileRow key={f.name} file={f} scope="board"
                       actions={
-                        <>
-                          <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
-                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
-                            <RotateCcw size={10} />
-                          </button>
-                          <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
-                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                            <Trash2 size={10} />
-                          </button>
-                        </>
+                        <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
+                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
+                          <RotateCcw size={10} />
+                        </button>
+                      }
+                      deleteAction={
+                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
+                          className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                          <Trash2 size={10} />
+                        </button>
                       }
                     />
                   ))}
@@ -558,6 +559,13 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* Board-level Benchmark Tasks — after the Board Context file list, not sandwiched inside it */}
+        <div className="px-2 pb-1 shrink-0">
+          <div className="space-y-0.5">
+            {navBtn('benchmark', 'Benchmark Tasks', FlaskConical)}
+          </div>
+        </div>
 
         {/* Connections nav item — only visible for client boards */}
         {isClientBoard && (
@@ -588,16 +596,16 @@ export default function SettingsPage() {
                 {subFilesActive.map(f => (
                   <FileRow key={f.name} file={f} scope="subscription"
                     actions={f.protected ? null : (
-                      <>
-                        <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
-                          className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
-                          <Archive size={10} />
-                        </button>
-                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
-                          className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                          <Trash2 size={10} />
-                        </button>
-                      </>
+                      <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
+                        className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
+                        <Archive size={10} />
+                      </button>
+                    )}
+                    deleteAction={f.protected ? null : (
+                      <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
+                        className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                        <Trash2 size={10} />
+                      </button>
                     )}
                   />
                 ))}
@@ -617,16 +625,16 @@ export default function SettingsPage() {
                   {showArchived && subFilesArchived.map(f => (
                     <FileRow key={f.name} file={f} scope="subscription"
                       actions={
-                        <>
-                          <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
-                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
-                            <RotateCcw size={10} />
-                          </button>
-                          <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
-                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                            <Trash2 size={10} />
-                          </button>
-                        </>
+                        <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
+                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
+                          <RotateCcw size={10} />
+                        </button>
+                      }
+                      deleteAction={
+                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
+                          className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                          <Trash2 size={10} />
+                        </button>
                       }
                     />
                   ))}
@@ -636,10 +644,11 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Remaining subscription nav items */}
+        {/* Remaining subscription nav items — after the Workspace Context file list, not sandwiched inside it */}
         {isSuperAdmin && (
           <div className="px-2 pb-3 shrink-0">
             <div className="space-y-0.5">
+              {navBtn('sub_benchmark',   'Benchmark Tasks', FlaskConical)}
               {navBtn('sub_team',        'Team',         Users)}
               {navBtn('sub_boards',      'Boards',       LayoutGrid)}
               {navBtn('sub_members',     'Members',      UserCheck)}
@@ -652,7 +661,7 @@ export default function SettingsPage() {
         <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
           <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">System</p>
           <div className="space-y-0.5">
-            {navBtn('ai_context', 'AI Context', BookOpen, null, 'ai_context')}
+            {navBtn('ai_context', 'System Rules', BookOpen, null, 'ai_context')}
           </div>
         </div>
       </div>
@@ -737,7 +746,7 @@ export default function SettingsPage() {
                 {/* Subscription ID (read-only info) */}
                 <div className="bg-surface-2 border border-border rounded-xl p-4 mt-3 space-y-1">
                   <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Subscription ID</p>
-                  <p className="font-mono text-xs text-gray-500">{subscription?.id || '—'}</p>
+                  <p className="text-xs text-gray-500">{subscription?.id || '—'}</p>
                 </div>
               </div>
             </div>
@@ -1007,8 +1016,12 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* AI Context panel */}
+        {/* System Rules panel */}
         {section === 'ai_context' && <AiContextPanel />}
+
+        {/* Benchmark Tasks panels */}
+        {section === 'benchmark' && <BenchmarkPanel scope="board" />}
+        {section === 'sub_benchmark' && isSuperAdmin && <BenchmarkPanel scope="workspace" />}
 
         {/* Editor panel — shared by board files ('files') and subscription files ('sub_files') */}
         {(section === 'files' || section === 'sub_files') && (<>
@@ -1080,7 +1093,7 @@ export default function SettingsPage() {
                 <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">Loading…</div>
               ) : (
                 <textarea
-                  className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] font-mono leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
+                  className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
                   value={content}
                   onChange={e => handleContentChange(e.target.value)}
                   spellCheck={false}
@@ -1111,7 +1124,7 @@ export default function SettingsPage() {
         </>)}
       </div>
 
-      {/* Section info modal (Board Context / Workspace Context / AI Context explainer) */}
+      {/* Section info modal (Board Context / Workspace Context / System Rules explainer) */}
       <InfoModal openKey={openInfoKey} onClose={() => setOpenInfoKey(null)} />
 
       {/* ── Action errors ───────────────────────────────────────────────── */}
@@ -1219,7 +1232,7 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
     <div className="flex-1 overflow-y-auto px-8 py-8">
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-sm font-semibold text-gray-200">Members</h2>
-          <span className="text-xs text-gray-500 font-mono">{users.length}</span>
+          <span className="text-xs text-gray-500">{users.length}</span>
         </div>
         <p className="text-xs text-gray-500 mb-6">All users in this workspace.</p>
 
@@ -1455,10 +1468,10 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           </div>
           {/* Show the connected URL or path */}
           {displayUrl && (
-            <p className="font-mono text-xs text-gray-500 pl-4">{displayUrl}</p>
+            <p className="text-xs text-gray-500 pl-4">{displayUrl}</p>
           )}
           {!project.repo_url && project.client_path && (
-            <p className="font-mono text-xs text-gray-500 pl-4">{project.client_path}</p>
+            <p className="text-xs text-gray-500 pl-4">{project.client_path}</p>
           )}
         </div>
       )}
@@ -1495,7 +1508,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
               onChange={e => setRepoUrl(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleClone()}
               placeholder="https://github.com/user/repo"
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 font-mono"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
             <button
               onClick={handleClone}
@@ -1507,7 +1520,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
             </button>
           </div>
           <p className="text-[11px] text-gray-600">
-            The repository will be cloned into <span className="font-mono">client/</span> and connected to this board.
+            The repository will be cloned into <span>client/</span> and connected to this board.
           </p>
         </div>
       )}
@@ -1538,7 +1551,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           {basePath && (
             <div className="flex items-center gap-1.5">
               <FolderOpen size={11} className="text-gray-600 shrink-0" />
-              <span className="font-mono text-[11px] text-gray-600 truncate">{basePath}</span>
+              <span className="text-[11px] text-gray-600 truncate">{basePath}</span>
             </div>
           )}
 
@@ -1568,7 +1581,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
                       }`}
                     >
                       <FolderOpen size={13} className="shrink-0" />
-                      <span className="font-mono text-xs text-gray-200 flex-1 truncate">{f.name}</span>
+                      <span className="text-xs text-gray-200 flex-1 truncate">{f.name}</span>
                       {f.is_git && (
                         <span className="text-[10px] text-gray-600 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded border border-border">git</span>
                       )}

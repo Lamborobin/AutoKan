@@ -52,7 +52,7 @@ function AgentPanel({ agent, onClose, onEdit }) {
 
       <div className="flex items-center gap-1.5">
         <Cpu size={10} className="text-gray-600 shrink-0" />
-        <span className="text-[10px] font-mono text-gray-600">{modelLabel}</span>
+        <span className="text-[10px] text-gray-600">{modelLabel}</span>
       </div>
 
       {capabilityRoles.length > 0 && (
@@ -88,7 +88,7 @@ function AgentPanel({ agent, onClose, onEdit }) {
           <p className="text-[10px] font-medium text-gray-500 mb-1.5">System Prompt</p>
           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-accent/10 border border-accent/20 rounded-lg">
             <FileText size={10} className="text-accent shrink-0" />
-            <span className="text-[10px] font-mono text-accent truncate">
+            <span className="text-[10px] text-accent truncate">
               {agent.personality_file.replace(/^instructions\//, '').replace(/\.md$/, '')}
             </span>
           </div>
@@ -717,7 +717,7 @@ export default function Sidebar() {
             >
               <Archive size={13} />
               Archived tasks
-              <span className="ml-auto font-mono text-xs">{archivedTasks.length}</span>
+              <span className="ml-auto text-xs">{archivedTasks.length}</span>
             </button>
           )}
 
@@ -725,7 +725,7 @@ export default function Sidebar() {
             <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-amber-400 hover:bg-surface-3 text-sm transition-colors">
               <AlertCircle size={15} />
               Human Action
-              <span className="ml-auto bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full font-mono">
+              <span className="ml-auto bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">
                 {humanActionCount}
               </span>
             </button>
@@ -785,7 +785,7 @@ export default function Sidebar() {
                 <LayoutTemplate size={13} />
                 Templates
                 {agentTemplates.filter(t => !t.archived_at).length > 0 && (
-                  <span className="ml-auto text-xs font-mono text-gray-600">
+                  <span className="ml-auto text-xs text-gray-600">
                     {agentTemplates.filter(t => !t.archived_at).length}
                   </span>
                 )}

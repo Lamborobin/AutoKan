@@ -351,7 +351,7 @@ export default function App() {
                         <div key={col.id} className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 border border-border rounded-lg opacity-60 hover:opacity-100 transition-opacity">
                           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: col.color }} />
                           <span className="text-xs text-gray-400">{col.name}</span>
-                          <span className="text-[10px] font-mono text-gray-600">{tasks.filter(t => t.column_id === col.id).length} tasks</span>
+                          <span className="text-[10px] text-gray-600">{tasks.filter(t => t.column_id === col.id).length} tasks</span>
                           <button onClick={() => unarchiveColumn(col.id)} title="Restore column"
                             className="p-0.5 text-gray-600 hover:text-accent transition-colors">
                             <RotateCcw size={11} />
@@ -375,7 +375,7 @@ export default function App() {
               <div className="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border rounded-xl shadow-2xl opacity-90 w-72">
                 <GripVertical size={13} className="text-gray-500" />
                 <span className="text-sm font-semibold text-gray-200">{dragging.col.name}</span>
-                <span className="text-xs font-mono text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md ml-auto">
+                <span className="text-xs text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md ml-auto">
                   {tasks.filter(t => t.column_id === dragging.col.id).length}
                 </span>
               </div>

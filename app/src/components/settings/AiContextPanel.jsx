@@ -265,6 +265,13 @@ export default function AiContextPanel() {
   const allFiles = groups.flatMap(g => g.files);
   const selected = allFiles.find(f => f.key === selectedKey) || null;
 
+  // Only one file total — skip the picker, go straight to its content.
+  // The moment a second file is added, the list reappears on its own.
+  useEffect(() => {
+    const files = groups.flatMap(g => g.files);
+    if (files.length === 1) setSelectedKey(files[0].key);
+  }, [groups]);
+
   function selectDoc(key) {
     if (editing) return;
     setSelectedKey(key);
@@ -320,7 +327,8 @@ export default function AiContextPanel() {
   return (
     <div className="flex flex-1 overflow-hidden">
 
-      {/* ── File list ──────────────────────────────────────────────────────── */}
+      {/* ── File list — hidden when there's only one file total ─────────────── */}
+      {allFiles.length > 1 && (
       <div className="w-52 shrink-0 border-r border-border overflow-y-auto py-3 px-2 space-y-4">
         {loading ? (
           <p className="text-[10px] text-gray-600 px-2">Loading…</p>
@@ -359,6 +367,7 @@ export default function AiContextPanel() {
           ))
         )}
       </div>
+      )}
 
       {/* ── Content panel ──────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -436,7 +445,7 @@ export default function AiContextPanel() {
             {/* Content */}
             {editing ? (
               <textarea
-                className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] font-mono leading-relaxed px-8 py-6 outline-none resize-none"
+                className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] leading-relaxed px-8 py-6 outline-none resize-none"
                 value={editContent}
                 onChange={e => setEditContent(e.target.value)}
                 spellCheck={false}

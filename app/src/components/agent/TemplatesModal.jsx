@@ -99,7 +99,7 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
           onChange={e => set('template_system_prompt', e.target.value)}
           placeholder={`You are a ${form.name || 'specialist'}...\n\n**How you work:**\n- ...`}
           rows={8}
-          className="w-full bg-surface-1 border border-border rounded-xl px-3 py-2.5 text-[11px] font-mono text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
+          className="w-full bg-surface-1 border border-border rounded-xl px-3 py-2.5 text-[11px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
         />
       </div>
 
@@ -157,7 +157,7 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-200 truncate">{tpl.name}</p>
             {tpl.source_agent_id && (
-              <p className="text-[9px] text-gray-600 font-mono">saved from agent</p>
+              <p className="text-[9px] text-gray-600">saved from agent</p>
             )}
           </div>
         </div>
@@ -213,7 +213,7 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] font-mono text-gray-600 bg-surface-1 border border-border px-2 py-0.5 rounded-md">
+        <span className="text-[10px] text-gray-600 bg-surface-1 border border-border px-2 py-0.5 rounded-md">
           {MODELS.find(m => m.value === tpl.model)?.shortLabel || tpl.model}
         </span>
         {isArchived && (
