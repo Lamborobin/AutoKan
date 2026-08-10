@@ -6,7 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { getDb } = require('../db');
 const { GLOBAL_INSTRUCTIONS_DIR, PROJECT_ROOT } = require('../utils/instructions');
 
-// ── Rule-compliance benchmark runner ──────────────────────────────────────
+// ── Benchmark Tasks runner ──────────────────────────────────────────────────
 //
 // Blind testing: this file never tells the planner which layer is under test,
 // and never gives it "this is a benchmark" awareness. It creates the probing

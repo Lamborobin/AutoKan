@@ -358,31 +358,27 @@ export default function SettingsPage() {
     );
   }
 
-  function FileRow({ file, scope, actions }) {
+  function FileRow({ file, scope, actions, deleteAction }) {
     const isSelected = selectedFile?.name === file.name && selectedFile?.scope === scope;
-    const caps = file.capabilities || [];
     return (
       <div
-        className={`group flex flex-col gap-0.5 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
+        className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
           isSelected ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
         onClick={() => selectFile(file, scope)}
       >
-        <div className="flex items-center gap-2">
-          <FileText size={11} className="shrink-0" />
-          <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
-          {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
-          {actions && (
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-              {actions}
-            </div>
-          )}
-        </div>
-        {scope === 'board' && (
-          <div className="flex flex-wrap gap-1 pl-[19px]">
-            {caps.length > 0
-              ? caps.map(c => <CapBadge key={c} cap={c} />)
-              : <span className="text-[8px] px-1 py-0.5 rounded-full font-medium bg-surface-3 text-gray-500">All agents</span>}
+        <FileText size={11} className="shrink-0" />
+        <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
+        {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
+        {actions && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+            {actions}
+          </div>
+        )}
+        {/* Delete stays visible (and red) always — not hidden behind hover like the other actions */}
+        {deleteAction && (
+          <div className="flex items-center" onClick={e => e.stopPropagation()}>
+            {deleteAction}
           </div>
         )}
       </div>
@@ -443,13 +439,15 @@ export default function SettingsPage() {
           {currentProject && (
             <button
               onClick={() => setCurrentPage('board')}
-              className="flex items-center gap-1.5 mt-2 w-full text-left group"
+              className="flex flex-col mt-2 w-full text-left group"
               title="Go to board"
             >
-              <span className="text-sm shrink-0">{currentProject.emoji || '📋'}</span>
               <span className="text-xs font-medium text-gray-300 truncate group-hover:text-accent transition-colors">
                 {currentProject.name}
               </span>
+              {currentProject.client_name && (
+                <span className="text-[10px] text-gray-600 truncate">{currentProject.client_name}</span>
+              )}
             </button>
           )}
         </div>
@@ -459,7 +457,6 @@ export default function SettingsPage() {
           <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
           <div className="space-y-0.5">
             {navBtn('files', 'Board Context', FileText, null, 'board')}
-            {navBtn('benchmark', 'Rule Benchmark', FlaskConical)}
           </div>
         </div>
 
@@ -480,11 +477,13 @@ export default function SettingsPage() {
                           className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
                           <Archive size={10} />
                         </button>
-                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
-                          className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                          <Trash2 size={10} />
-                        </button>
                       </>
+                    }
+                    deleteAction={
+                      <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
+                        className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                        <Trash2 size={10} />
+                      </button>
                     }
                   />
                 ))}
@@ -542,16 +541,16 @@ export default function SettingsPage() {
                   {showArchived && customArchived.map(f => (
                     <FileRow key={f.name} file={f} scope="board"
                       actions={
-                        <>
-                          <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
-                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
-                            <RotateCcw size={10} />
-                          </button>
-                          <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
-                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                            <Trash2 size={10} />
-                          </button>
-                        </>
+                        <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
+                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          <RotateCcw size={10} />
+                        </button>
+                      }
+                      deleteAction={
+                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
+                          className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                          <Trash2 size={10} />
+                        </button>
                       }
                     />
                   ))}
@@ -560,6 +559,13 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+
+        {/* Board-level Benchmark Tasks — after the Board Context file list, not sandwiched inside it */}
+        <div className="px-2 pb-1 shrink-0">
+          <div className="space-y-0.5">
+            {navBtn('benchmark', 'Benchmark Tasks', FlaskConical)}
+          </div>
+        </div>
 
         {/* Connections nav item — only visible for client boards */}
         {isClientBoard && (
@@ -578,7 +584,6 @@ export default function SettingsPage() {
               {navBtn('sub_overview', 'Overview', Settings2)}
               {navBtn('sub_clients',  'Clients',  Building2)}
               {navBtn('sub_files',    'Workspace Context', FileText, null, 'workspace')}
-              {navBtn('sub_benchmark', 'Rule Benchmark', FlaskConical)}
             </div>
           </div>
         )}
@@ -591,16 +596,16 @@ export default function SettingsPage() {
                 {subFilesActive.map(f => (
                   <FileRow key={f.name} file={f} scope="subscription"
                     actions={f.protected ? null : (
-                      <>
-                        <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
-                          className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
-                          <Archive size={10} />
-                        </button>
-                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
-                          className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                          <Trash2 size={10} />
-                        </button>
-                      </>
+                      <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
+                        className="p-0.5 text-gray-600 hover:text-amber-400 transition-colors">
+                        <Archive size={10} />
+                      </button>
+                    )}
+                    deleteAction={f.protected ? null : (
+                      <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
+                        className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                        <Trash2 size={10} />
+                      </button>
                     )}
                   />
                 ))}
@@ -620,16 +625,16 @@ export default function SettingsPage() {
                   {showArchived && subFilesArchived.map(f => (
                     <FileRow key={f.name} file={f} scope="subscription"
                       actions={
-                        <>
-                          <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
-                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
-                            <RotateCcw size={10} />
-                          </button>
-                          <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
-                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
-                            <Trash2 size={10} />
-                          </button>
-                        </>
+                        <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
+                          className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                          <RotateCcw size={10} />
+                        </button>
+                      }
+                      deleteAction={
+                        <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
+                          className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                          <Trash2 size={10} />
+                        </button>
                       }
                     />
                   ))}
@@ -639,10 +644,11 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Remaining subscription nav items */}
+        {/* Remaining subscription nav items — after the Workspace Context file list, not sandwiched inside it */}
         {isSuperAdmin && (
           <div className="px-2 pb-3 shrink-0">
             <div className="space-y-0.5">
+              {navBtn('sub_benchmark',   'Benchmark Tasks', FlaskConical)}
               {navBtn('sub_team',        'Team',         Users)}
               {navBtn('sub_boards',      'Boards',       LayoutGrid)}
               {navBtn('sub_members',     'Members',      UserCheck)}
@@ -1013,7 +1019,7 @@ export default function SettingsPage() {
         {/* System Rules panel */}
         {section === 'ai_context' && <AiContextPanel />}
 
-        {/* Rule-compliance benchmark panels */}
+        {/* Benchmark Tasks panels */}
         {section === 'benchmark' && <BenchmarkPanel scope="board" />}
         {section === 'sub_benchmark' && isSuperAdmin && <BenchmarkPanel scope="workspace" />}
 

@@ -103,6 +103,15 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1.5">Capability being tested</label>
+            <select disabled value="perm_planning"
+              className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-400 outline-none cursor-not-allowed">
+              <option value="perm_planning">Planning</option>
+            </select>
+            <p className="text-[10px] text-gray-600 mt-1">Only planning is testable this way today — other capabilities (like coding) need a different kind of verification and aren't wired up yet.</p>
+          </div>
+
           <div className="relative">
             <label className="block text-xs font-medium text-gray-400 mb-1.5">Start from an existing task <span className="text-gray-600">(optional)</span></label>
             <div className="relative">

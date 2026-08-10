@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Check, X, Loader2, Play, RotateCcw, Trash2, ChevronDown, ChevronRight, Plus, Sparkles } from 'lucide-react';
+import { format } from 'date-fns';
+import { Check, X, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles } from 'lucide-react';
 import { useStore } from '../../store';
+import { tasksApi } from '../../api';
 import NewBenchmarkTaskModal from './NewBenchmarkTaskModal';
 
 const REVIEW_LEVELS = [
@@ -47,7 +49,8 @@ function toolLabel(tool) {
 // Turns backend rubric-check internals (check names + pre-formatted comparison
 // strings) into a plain-language line — see dev/frontend.md's "Audience-appropriate
 // UI". Falls back to the raw detail for any check shape this doesn't recognize, so
-// nothing silently disappears.
+// nothing silently disappears. The two checklist-length checks (min/max) are merged
+// into one line by the caller since they describe the same number.
 function friendlySummary(check) {
   if (check.name === 'expected_tool') {
     const m = check.detail.match(/expected "([^"]+)", got "([^"]+)"/);
@@ -56,13 +59,6 @@ function friendlySummary(check) {
     return check.passed
       ? `Correctly ${toolLabel(expected)}`
       : `Expected the planner to have ${toolLabel(expected)} — instead it ${toolLabel(got)}`;
-  }
-  if (check.name === 'checklist_count_min' || check.name === 'checklist_count_max') {
-    const m = check.detail.match(/got (\d+)/);
-    const count = m ? m[1] : '?';
-    return check.passed
-      ? `Checklist had an appropriate number of items (${count})`
-      : `Checklist length was off (${count} items)`;
   }
   if (check.name.startsWith('required:')) {
     const field = check.name.slice('required:'.length);
@@ -75,37 +71,107 @@ function friendlySummary(check) {
   return check.detail;
 }
 
+// checklist_count_min / checklist_count_max both describe the same checklist-length
+// number — shown separately by the backend, merged here into one line so it doesn't
+// read as two contradicting or duplicate results.
+function mergeChecklistCountChecks(checks) {
+  const min = checks.find(c => c.name === 'checklist_count_min');
+  const max = checks.find(c => c.name === 'checklist_count_max');
+  if (!min && !max) return checks;
+
+  const countMatch = (min || max).detail.match(/got (\d+)/);
+  const count = countMatch ? countMatch[1] : '?';
+  const passed = (min?.passed ?? true) && (max?.passed ?? true);
+  const merged = {
+    name: 'checklist_count',
+    passed,
+    detail: passed
+      ? `Checklist had an appropriate number of items (${count})`
+      : `Checklist length was off (${count} items)`,
+  };
+
+  const rest = checks.filter(c => c.name !== 'checklist_count_min' && c.name !== 'checklist_count_max');
+  const insertAt = checks.findIndex(c => c.name === 'checklist_count_min' || c.name === 'checklist_count_max');
+  rest.splice(insertAt, 0, merged);
+  return rest;
+}
+
 function DeterministicChecks({ result }) {
-  const [showDetails, setShowDetails] = useState(false);
   if (!result) return <p className="text-xs text-gray-600">Pending…</p>;
-  const checks = result.checks || [];
+  const checks = mergeChecklistCountChecks(result.checks || []);
   const passedCount = checks.filter(c => c.passed).length;
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium text-gray-300">
-          Automated check: {result.passed ? <span className="text-green-400">passed</span> : <span className="text-red-400">failed</span>}
-          {checks.length > 0 && <span className="text-gray-600"> ({passedCount}/{checks.length})</span>}
-        </p>
-        {checks.length > 0 && (
-          <button onClick={() => setShowDetails(v => !v)}
-            className="text-[9px] text-gray-600 hover:text-gray-400 transition-colors shrink-0">
-            {showDetails ? 'Hide technical detail' : 'Show technical detail'}
-          </button>
-        )}
-      </div>
+      <p className="text-xs font-medium text-gray-300">
+        Structural check <span className="text-gray-600 font-normal">(automatic, no AI)</span>: {result.passed ? <span className="text-green-400">passed</span> : <span className="text-red-400">failed</span>}
+        {checks.length > 0 && <span className="text-gray-600"> ({passedCount}/{checks.length})</span>}
+      </p>
       {checks.map((c, i) => (
         <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500 pl-1">
           {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
-          <span>{friendlySummary(c)}</span>
+          <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
         </div>
       ))}
-      {showDetails && (
-        <div className="mt-1 pt-1.5 border-t border-border/50 space-y-0.5">
-          {checks.map((c, i) => (
-            <p key={i} className="text-[10px] text-gray-600">{c.name}: {c.detail}</p>
-          ))}
+    </div>
+  );
+}
+
+// On-demand — fetches the probing task's actual planner output (the question it
+// asked, the checklist it built, any review comment) so a manual reviewer has
+// something to read, not just the derived pass/fail checks.
+function PlannerOutput({ taskId }) {
+  const [open, setOpen] = useState(false);
+  const [task, setTask] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleToggle() {
+    if (!open && !task) {
+      setLoading(true);
+      try { setTask(await tasksApi.get(taskId)); }
+      catch { setTask({}); }
+      finally { setLoading(false); }
+    }
+    setOpen(v => !v);
+  }
+
+  // tasksApi.get() already returns pm_checklist parsed (server/src/routes/tasks.js) — don't re-parse it.
+  const checklist = task?.pm_checklist || [];
+
+  return (
+    <div className="pt-1">
+      <button onClick={handleToggle} className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1">
+        {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />} Planner output
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-2 text-xs text-gray-400 bg-surface-2 rounded-lg p-2.5">
+          {loading && <p className="text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
+          {!loading && task?.pm_pending_question && (
+            <div><p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">Question to the human</p><p>{task.pm_pending_question}</p></div>
+          )}
+          {!loading && task?.pm_review_comment && (
+            <div><p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">Review comment</p><p>{task.pm_review_comment}</p></div>
+          )}
+          {!loading && checklist.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-0.5">Checklist</p>
+              <ul className="space-y-0.5">
+                {checklist.map((entry, i) => {
+                  const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
+                  const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
+                  return (
+                    <li key={i} className="flex items-start gap-1.5">
+                      {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
+                      <span>{text}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+          {!loading && !task?.pm_pending_question && !task?.pm_review_comment && checklist.length === 0 && (
+            <p className="text-gray-600">Nothing recorded for this run.</p>
+          )}
         </div>
       )}
     </div>
@@ -127,20 +193,26 @@ function RunCard({ run, caseId }) {
     finally { setReviewing(false); }
   }
 
+  function handleManualCancel() {
+    setShowManual(false);
+    setLevel('accepted');
+    setNotes('');
+  }
+
   async function handleManualSubmit() {
     setSubmitting(true);
     try {
       await submitManualReviewForRun(run.id, caseId, level, notes);
       setShowManual(false);
       setNotes('');
-    } catch (err) { alert(err.response?.data?.error || 'Manual review failed'); }
+    } catch (err) { alert(err.response?.data?.error || 'Could not save review'); }
     finally { setSubmitting(false); }
   }
 
   return (
     <div className="border border-border rounded-lg p-3 space-y-2 bg-surface-1">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] text-gray-500">{new Date(run.started_at).toLocaleString()}</span>
+        <span className="text-[10px] text-gray-500">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
         <StatusBadge status={run.status} />
       </div>
 
@@ -164,9 +236,7 @@ function RunCard({ run, caseId }) {
         </div>
       )}
 
-      {run.review_provenance !== 'unreviewed' && (
-        <p className="text-[9px] text-gray-600 uppercase tracking-wide">Reviewed via: {run.review_provenance}</p>
-      )}
+      {run.status === 'completed' && <PlannerOutput taskId={run.probing_task_id} />}
 
       {run.status === 'completed' && (
         <div className="flex items-center gap-2 pt-1">
@@ -189,10 +259,16 @@ function RunCard({ run, caseId }) {
           </select>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note…" rows={2}
             className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 resize-none" />
-          <button onClick={handleManualSubmit} disabled={submitting}
-            className="text-[10px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
-            {submitting ? '…' : 'Submit review'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleManualSubmit} disabled={submitting}
+              className="text-[10px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
+              {submitting ? '…' : 'Save'}
+            </button>
+            <button onClick={handleManualCancel} disabled={submitting}
+              className="text-[10px] px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -211,31 +287,32 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
   }
 
   return (
-    <div className="border border-border rounded-xl p-4 space-y-2.5 bg-surface-1">
+    <div className="border border-border rounded-xl p-4 space-y-3 bg-surface-1">
       <div className="flex items-start justify-between gap-2">
-        <button onClick={() => setExpanded(v => !v)} className="flex items-start gap-1.5 text-left min-w-0 flex-1">
-          {expanded ? <ChevronDown size={13} className="mt-0.5 shrink-0 text-gray-500" /> : <ChevronRight size={13} className="mt-0.5 shrink-0 text-gray-500" />}
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-gray-200 truncate">{c.title}</p>
-            <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.description}</p>
-          </div>
-        </button>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-gray-200">{c.title}</p>
+          <p className="text-xs text-gray-500 mt-1 leading-relaxed line-clamp-3">{c.description}</p>
+        </div>
         <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
           {SOURCE_LABEL[c.source] || c.source}
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <button onClick={handleRun} disabled={running || !targetProjectId}
           className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
           {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
         </button>
         <button onClick={() => onDelete(c.id)}
-          className="flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-colors">
-          <Trash2 size={12} />
+          className="text-xs px-2 py-1.5 rounded-lg text-red-400/80 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          Delete
         </button>
         {runs?.length > 0 && (
-          <span className="text-[10px] text-gray-600 flex items-center gap-1 ml-auto"><RotateCcw size={10} /> {runs.length} run{runs.length === 1 ? '' : 's'}</span>
+          <button onClick={() => setExpanded(v => !v)}
+            className="ml-auto flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            {expanded ? 'Hide' : 'Show'} {runs.length} run{runs.length === 1 ? '' : 's'}
+          </button>
         )}
       </div>
 
@@ -280,19 +357,22 @@ export default function BenchmarkPanel({ scope }) {
   }
 
   const boardOptions = useMemo(() => (projects || []).filter(p => !p.archived_at), [projects]);
+  const currentBoard = useMemo(
+    () => (projects || []).find(p => p.id === currentProjectId),
+    [projects, currentProjectId],
+  );
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-200">Rule Benchmark {scope === 'board' ? '— this board' : '— workspace'}</h2>
-          <p className="text-xs text-gray-500 mt-1">
-            Creates a real task and sends it through the real planning flow, then checks whether the result held up.
-          </p>
-        </div>
+        <h2 className="text-sm font-semibold text-gray-200">
+          Benchmark Tasks {scope === 'board'
+            ? `— ${currentBoard?.name || 'this board'}${currentBoard?.client_name ? ` (${currentBoard.client_name})` : ''}`
+            : '— workspace'}
+        </h2>
         <button onClick={() => setModalOpen(true)} disabled={!targetProjectId}
           className="btn-primary shrink-0 disabled:opacity-40">
-          <Plus size={14} /> New Task
+          <Plus size={14} /> New Benchmark Task
         </button>
       </div>
 
