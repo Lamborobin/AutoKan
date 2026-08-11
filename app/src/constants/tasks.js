@@ -50,16 +50,19 @@ export const LOG_ACTION = {
 };
 
 // ── Priority display helpers ──────────────────────────────────
+// Only the two priorities that should change someone's plan carry colour. Medium
+// and low stay neutral: when every card is tinted, colour ranks nothing, and the
+// urgent ones stop being findable at a glance.
 export const PRIORITY_STYLES = {
   [PRIORITY.CRITICAL]: 'bg-red-500/15 text-red-400 border border-red-500/20',
   [PRIORITY.HIGH]:     'bg-orange-500/15 text-orange-400 border border-orange-500/20',
-  [PRIORITY.MEDIUM]:   'bg-blue-500/15 text-blue-400 border border-blue-500/20',
-  [PRIORITY.LOW]:      'bg-gray-500/15 text-gray-400 border border-gray-500/20',
+  [PRIORITY.MEDIUM]:   'bg-surface-4 text-gray-400 border border-border',
+  [PRIORITY.LOW]:      'bg-surface-3 text-gray-500 border border-border',
 };
 
 export const PRIORITY_COLORS = {
   [PRIORITY.CRITICAL]: '#ef4444',
   [PRIORITY.HIGH]:     '#f97316',
-  [PRIORITY.MEDIUM]:   '#3b82f6',
+  [PRIORITY.MEDIUM]:   '#9ca3af',
   [PRIORITY.LOW]:      '#6b7280',
 };

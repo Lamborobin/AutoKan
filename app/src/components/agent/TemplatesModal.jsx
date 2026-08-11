@@ -41,7 +41,7 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
     <div className="bg-surface-3 border border-border rounded-xl p-4 space-y-3">
       {/* Name */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Template Name *</label>
+        <label className="block text-sm font-medium text-gray-400 mb-1.5">Template Name *</label>
         <input
           autoFocus
           value={form.name}
@@ -53,7 +53,7 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
 
       {/* Description */}
       <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1.5">Description</label>
+        <label className="block text-sm font-medium text-gray-400 mb-1.5">Description</label>
         <textarea
           value={form.description}
           onChange={e => set('description', e.target.value)}
@@ -66,14 +66,14 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
       {/* Model + Color row */}
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1.5">Model</label>
+          <label className="block text-sm font-medium text-gray-400 mb-1.5">Model</label>
           <select value={form.model} onChange={e => set('model', e.target.value)}
             className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
             {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-2">Color</label>
+          <label className="block text-sm font-medium text-gray-400 mb-2">Color</label>
           <div className="flex gap-2 flex-wrap">
             {COLORS.map(c => (
               <button key={c} type="button" onClick={() => set('color', c)}
@@ -88,23 +88,23 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
       {/* Template Behaviour Prompt — optional, always editable */}
       <div className="space-y-2">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-400">Behaviour Prompt</label>
-          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
+          <label className="text-sm font-medium text-gray-400">Behaviour Prompt</label>
+          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
             optional
           </span>
         </div>
-        <p className="text-[10px] text-gray-600">The persona and working style injected into every agent created from this template — independent of the board's domain. Leave empty to skip.</p>
+        <p className="text-xs text-gray-600">The persona and working style injected into every agent created from this template — independent of the board's domain. Leave empty to skip.</p>
         <textarea
           value={form.template_system_prompt}
           onChange={e => set('template_system_prompt', e.target.value)}
           placeholder={`You are a ${form.name || 'specialist'}...\n\n**How you work:**\n- ...`}
           rows={8}
-          className="w-full bg-surface-1 border border-border rounded-xl px-3 py-2.5 text-[11px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
+          className="w-full bg-surface-1 border border-border rounded-xl px-3 py-2.5 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
         />
       </div>
 
       {error && (
-        <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
       )}
 
       <div className="flex gap-2 pt-1">
@@ -150,14 +150,14 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
     <div className={`bg-surface-3 border rounded-xl p-3.5 space-y-2.5 ${isArchived ? 'border-border opacity-60' : 'border-border hover:border-accent/30 transition-colors'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+          <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                style={{ background: tpl.color }}>
             {tpl.name[0]}
           </div>
           <div className="min-w-0">
             <p className="text-sm font-medium text-gray-200 truncate">{tpl.name}</p>
             {tpl.source_agent_id && (
-              <p className="text-[9px] text-gray-600">saved from agent</p>
+              <p className="text-xs text-gray-600">saved from agent</p>
             )}
           </div>
         </div>
@@ -165,16 +165,16 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
           {isArchived ? (
             <>
               <button onClick={onUnarchive} title="Restore"
-                className="p-1.5 rounded-lg text-gray-600 hover:text-accent hover:bg-surface-1 transition-colors">
+                className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-surface-1 transition-colors">
                 <RotateCcw size={12} />
               </button>
               <div className="relative">
                 <button onClick={handleDelete} title="Delete permanently"
-                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-gray-600 hover:text-red-400 hover:bg-surface-1'}`}>
+                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-surface-1'}`}>
                   <Trash2 size={12} />
                 </button>
                 {confirmDelete && (
-                  <div className="absolute top-full right-0 mt-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
+                  <div className="absolute top-full right-0 mt-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
                     <span>Are you sure you want to delete this template?</span>
                     <button onClick={e => { e.stopPropagation(); setConfirmDelete(false); }} className="text-red-400 hover:text-red-200 leading-none">✕</button>
                   </div>
@@ -184,20 +184,20 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
           ) : (
             <>
               <button onClick={onEdit} title="Edit"
-                className="p-1.5 rounded-lg text-gray-600 hover:text-accent hover:bg-surface-1 transition-colors">
+                className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-surface-1 transition-colors">
                 <Pencil size={12} />
               </button>
               <button onClick={onArchive} title="Archive"
-                className="p-1.5 rounded-lg text-gray-600 hover:text-amber-400 hover:bg-surface-1 transition-colors">
+                className="p-1.5 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-surface-1 transition-colors">
                 <Archive size={12} />
               </button>
               <div className="relative">
                 <button onClick={handleDelete} title="Delete permanently"
-                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-gray-600 hover:text-red-400 hover:bg-surface-1'}`}>
+                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-surface-1'}`}>
                   <Trash2 size={12} />
                 </button>
                 {confirmDelete && (
-                  <div className="absolute top-full right-0 mt-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
+                  <div className="absolute top-full right-0 mt-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
                     <span>Are you sure you want to delete this template?</span>
                     <button onClick={e => { e.stopPropagation(); setConfirmDelete(false); }} className="text-red-400 hover:text-red-200 leading-none">✕</button>
                   </div>
@@ -209,15 +209,15 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
       </div>
 
       {tpl.description && (
-        <p className="text-xs text-gray-500 leading-relaxed">{tpl.description}</p>
+        <p className="text-sm text-gray-500 leading-relaxed">{tpl.description}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] text-gray-600 bg-surface-1 border border-border px-2 py-0.5 rounded-md">
+        <span className="text-xs text-gray-600 bg-surface-1 border border-border px-2 py-0.5 rounded-md">
           {MODELS.find(m => m.value === tpl.model)?.shortLabel || tpl.model}
         </span>
         {isArchived && (
-          <span className="text-[10px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">archived</span>
+          <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">archived</span>
         )}
       </div>
     </div>
@@ -245,12 +245,12 @@ export default function TemplatesModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
+      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border shrink-0">
           <div>
             <h2 className="text-base font-semibold text-gray-100">Agent Templates</h2>
-            <p className="text-[11px] text-gray-600 mt-0.5">Reusable agent blueprints — a role, capability, and behaviour you can drop onto any board in any sector</p>
+            <p className="text-sm text-gray-400 mt-0.5">Reusable agent blueprints — a role, capability, and behaviour you can drop onto any board in any sector</p>
           </div>
           <button onClick={() => setShowTemplates(false)} className="btn-ghost p-1.5 rounded-lg">
             <X size={16} />
@@ -268,7 +268,7 @@ export default function TemplatesModal() {
           ) : (
             <button
               onClick={() => { setCreating(true); setEditingId(null); }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-border text-xs text-gray-500 hover:text-accent hover:border-accent/40 transition-colors"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-border text-sm text-gray-500 hover:text-accent hover:border-accent/40 transition-colors"
             >
               <Plus size={13} />
               New Template
@@ -277,7 +277,7 @@ export default function TemplatesModal() {
 
           {/* Active templates */}
           {active.length === 0 && !creating && (
-            <p className="text-center text-xs text-gray-600 py-4">No templates yet. Create one above.</p>
+            <p className="text-center text-sm text-gray-600 py-4">No templates yet. Create one above.</p>
           )}
 
           {active.map(tpl =>
@@ -305,7 +305,7 @@ export default function TemplatesModal() {
             <div>
               <button
                 onClick={() => setShowArchived(v => !v)}
-                className="w-full flex items-center gap-2 py-1.5 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                className="w-full flex items-center gap-2 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
               >
                 {showArchived ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                 Archived ({archived.length})

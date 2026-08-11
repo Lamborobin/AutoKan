@@ -43,7 +43,11 @@ function enrichProject(p) {
   const pathExists = p.client_path
     ? fs.existsSync(path.join(PROJECT_ROOT, p.client_path))
     : null;
-  return { ...p, path_exists: pathExists, pr_workflow: boardHasPrWorkflow(p.hidden_capability_ids) };
+  // Whether the connected folder is actually a git repo — a repo_url board was cloned
+  // via git, a locally-linked folder needs its own .git dir checked. Auto-complete
+  // (PR-based) only makes sense when there's a real repo to open a PR against.
+  const hasGit = !!p.repo_url || (pathExists && fs.existsSync(path.join(PROJECT_ROOT, p.client_path, '.git')));
+  return { ...p, path_exists: pathExists, has_git: hasGit, pr_workflow: boardHasPrWorkflow(p.hidden_capability_ids) };
 }
 
 // Sector comes from the client when a client is linked (sector is a client-level property).
@@ -65,6 +69,32 @@ const PROJECT_SELECT = `
 router.get('/client-repos', requireAuth, (req, res) => {
   try {
     if (!fs.existsSync(CLIENT_DIR)) return res.json({ basePath: CLIENT_DIR, folders: [] });
+
+    // Which boards already point at each folder — scoped to boards the user can see,
+    // so the picker can warn before a folder gets shared between two boards.
+    const db = getDb();
+    const userId = req.user?.sub;
+    const linkedRows = (!userId || req.isSuperAdmin)
+      ? db.prepare(`
+          SELECT id, name, emoji, client_path FROM projects
+          WHERE client_path IS NOT NULL AND archived_at IS NULL
+        `).all()
+      : db.prepare(`
+          SELECT p.id, p.name, p.emoji, p.client_path FROM projects p
+          WHERE p.client_path IS NOT NULL AND p.archived_at IS NULL
+            AND EXISTS (
+              SELECT 1 FROM project_members pm
+              WHERE pm.project_id = p.id AND pm.user_id = ?
+            )
+        `).all(userId);
+
+    const linkedByPath = new Map();
+    for (const row of linkedRows) {
+      const key = String(row.client_path).replace(/\\/g, '/').replace(/\/+$/, '');
+      if (!linkedByPath.has(key)) linkedByPath.set(key, []);
+      linkedByPath.get(key).push({ id: row.id, name: row.name, emoji: row.emoji });
+    }
+
     const entries = fs.readdirSync(CLIENT_DIR, { withFileTypes: true });
     const folders = entries
       .filter(e => e.isDirectory())
@@ -73,6 +103,7 @@ router.get('/client-repos', requireAuth, (req, res) => {
         client_path: `client/${e.name}`,
         abs_path: path.join(CLIENT_DIR, e.name),
         is_git: fs.existsSync(path.join(CLIENT_DIR, e.name, '.git')),
+        linked_boards: linkedByPath.get(`client/${e.name}`) || [],
       }));
     res.json({ basePath: CLIENT_DIR, folders });
   } catch (e) {

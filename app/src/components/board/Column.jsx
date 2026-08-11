@@ -123,7 +123,7 @@ export default function Column({ column, tasks }) {
           <button
             {...attributes}
             {...listeners}
-            className="p-0.5 text-gray-700 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+            className="p-0.5 text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
             title="Drag to reorder"
             tabIndex={-1}
           >
@@ -133,7 +133,7 @@ export default function Column({ column, tasks }) {
 
         <div className="flex items-center gap-2 min-w-0 flex-1 ml-1">
           {isUnassigned ? (
-            <h3 className="text-sm font-semibold text-amber-400 truncate flex items-center gap-1.5">
+            <h3 className="text-base font-semibold text-amber-400 truncate flex items-center gap-1.5">
               <span>⚠</span> Unassigned
             </h3>
           ) : renaming ? (
@@ -143,18 +143,18 @@ export default function Column({ column, tasks }) {
               onChange={e => setRenameValue(e.target.value)}
               onBlur={commitRename}
               onKeyDown={handleRenameKey}
-              className="text-sm font-semibold text-gray-200 bg-surface-3 border border-accent/40 rounded px-1.5 py-0.5 outline-none min-w-0 w-full"
+              className="text-base font-semibold text-gray-200 bg-surface-3 border border-accent/40 rounded-md px-1.5 py-0.5 outline-none min-w-0 w-full"
             />
           ) : (
             <h3
-              className="text-sm font-semibold text-gray-200 cursor-pointer hover:text-white transition-colors truncate"
+              className="text-base font-semibold text-gray-200 cursor-pointer hover:text-white transition-colors truncate"
               title="Click to rename"
               onClick={startRename}
             >
               {column.name}
             </h3>
           )}
-          <span className="text-xs text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md shrink-0">
+          <span className="text-sm font-medium text-gray-100 bg-surface-3 px-1.5 py-0.5 rounded-md shrink-0">
             {tasks.length}
           </span>
         </div>
@@ -163,7 +163,7 @@ export default function Column({ column, tasks }) {
           {column.id === COLUMN.BACKLOG && !isUnassigned && (
             <button
               onClick={() => setShowNewTask(true)}
-              className="p-1 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors"
+              className="p-1 rounded-lg text-gray-200 hover:text-white hover:bg-surface-3 transition-colors"
             >
               <Plus size={14} />
             </button>
@@ -171,7 +171,7 @@ export default function Column({ column, tasks }) {
           {isUnassigned ? null : isProtected ? (
             <button
               onClick={startRename}
-              className="p-1 rounded-lg text-gray-700 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+              className="p-1 rounded-lg text-[#d6c3a1] hover:text-[#efe1c6] hover:bg-surface-3 transition-colors"
               title="Rename column"
             >
               <Pencil size={12} />
@@ -180,31 +180,31 @@ export default function Column({ column, tasks }) {
             <div className="relative">
               <button
                 onClick={() => { setShowMenu(v => !v); setConfirmDelete(false); setConfirmArchive(false); setError(''); }}
-                className="p-1 rounded-lg text-gray-700 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
               >
                 <MoreHorizontal size={13} />
               </button>
               {showMenu && (
-                <div className="absolute right-0 top-7 z-20 bg-surface-2 border border-border rounded-xl shadow-xl py-1.5 min-w-[160px]">
+                <div className="absolute right-0 top-7 z-20 bg-surface-2 border border-border rounded-xl shadow-lg py-1.5 min-w-[160px]">
                   <div className="flex items-center justify-between px-3 py-1 mb-1 border-b border-border">
-                    <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Column</span>
-                    <button onClick={closeMenu} className="text-gray-600 hover:text-gray-400 p-0.5">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Column</span>
+                    <button onClick={closeMenu} className="text-gray-400 hover:text-gray-200 p-0.5">
                       <X size={10} />
                     </button>
                   </div>
                   {error && (
-                    <p className="mx-2 mb-1 px-2 py-1.5 text-[10px] text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg leading-relaxed">{error}</p>
+                    <p className="mx-2 mb-1 px-2 py-1.5 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg leading-relaxed">{error}</p>
                   )}
                   <button
                     onClick={startRename}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
                   >
                     <Pencil size={11} />
                     Rename
                   </button>
                   <button
                     onClick={handleArchive}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${
                       confirmArchive
                         ? 'text-amber-300 bg-amber-500/10'
                         : 'text-gray-400 hover:text-amber-400 hover:bg-surface-3'
@@ -214,14 +214,14 @@ export default function Column({ column, tasks }) {
                     Archive
                   </button>
                   {confirmArchive && (
-                    <div className="mx-2 mb-1 px-2 py-1.5 text-[10px] bg-amber-500/15 border border-amber-500/30 text-amber-300 rounded-lg flex items-center justify-between gap-2">
+                    <div className="mx-2 mb-1 px-2 py-1.5 text-xs bg-amber-500/15 border border-amber-500/30 text-amber-300 rounded-lg flex items-center justify-between gap-2">
                       <span>Are you sure you want to archive this column?</span>
                       <button onClick={e => { e.stopPropagation(); setConfirmArchive(false); }} className="text-amber-400 hover:text-amber-200 leading-none">✕</button>
                     </div>
                   )}
                   <button
                     onClick={handleDelete}
-                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${
                       confirmDelete
                         ? 'text-red-300 bg-red-500/10'
                         : 'text-gray-400 hover:text-red-400 hover:bg-surface-3'
@@ -231,7 +231,7 @@ export default function Column({ column, tasks }) {
                     Delete
                   </button>
                   {confirmDelete && (
-                    <div className="mx-2 mb-1 px-2 py-1.5 text-[10px] bg-red-500/15 border border-red-500/30 text-red-300 rounded-lg flex items-center justify-between gap-2">
+                    <div className="mx-2 mb-1 px-2 py-1.5 text-xs bg-red-500/15 border border-red-500/30 text-red-300 rounded-lg flex items-center justify-between gap-2">
                       <span>Are you sure you want to delete this column?</span>
                       <button onClick={e => { e.stopPropagation(); setConfirmDelete(false); }} className="text-red-400 hover:text-red-200 leading-none">✕</button>
                     </div>
@@ -257,7 +257,7 @@ export default function Column({ column, tasks }) {
 
         {tasks.length === 0 && (
           <div className="flex-1 flex items-center justify-center">
-            <p className="text-xs text-gray-700">empty</p>
+            <p className="text-sm text-gray-600">empty</p>
           </div>
         )}
       </div>

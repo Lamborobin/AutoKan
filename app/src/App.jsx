@@ -22,7 +22,7 @@ function LoadingScreen() {
         <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
           <img src="/favicon.png" alt="AutoKan" width={16} height={16} className="animate-spin-slow" />
         </div>
-        <div className="flex items-center gap-2 text-gray-600 text-xs">
+        <div className="flex items-center gap-2 text-gray-600 text-sm">
           <RefreshCw size={11} className="animate-spin" />
           Loading…
         </div>
@@ -289,8 +289,8 @@ export default function App() {
                   <div className="flex flex-col w-72 shrink-0">
                     <form onSubmit={submitAddColumn} className="bg-surface-2 border border-border rounded-xl p-3 flex flex-col gap-2.5">
                       <div className="flex items-center justify-between mb-0.5">
-                        <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">New Column</span>
-                        <button type="button" onClick={cancelAddColumn} className="text-gray-600 hover:text-gray-400 p-0.5">
+                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">New Column</span>
+                        <button type="button" onClick={cancelAddColumn} className="text-gray-400 hover:text-gray-200 p-0.5">
                           <X size={11} />
                         </button>
                       </div>
@@ -313,10 +313,10 @@ export default function App() {
                           />
                         ))}
                       </div>
-                      {addColError && <p className="text-[10px] text-red-400">{addColError}</p>}
+                      {addColError && <p className="text-xs text-red-400">{addColError}</p>}
                       <button
                         type="submit"
-                        className="w-full py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+                        className="w-full py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
                       >
                         Add Column
                       </button>
@@ -326,7 +326,7 @@ export default function App() {
                   <div className="flex flex-col w-16 shrink-0 justify-start pt-0">
                     <button
                       onClick={openAddColumn}
-                      className="flex flex-col items-center justify-center gap-1.5 h-16 w-16 rounded-xl border border-dashed border-border text-gray-700 hover:text-gray-400 hover:border-gray-500 transition-colors"
+                      className="flex flex-col items-center justify-center gap-1.5 h-16 w-16 rounded-xl border border-dashed border-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
                       title="Add column"
                     >
                       <Plus size={14} />
@@ -339,7 +339,7 @@ export default function App() {
                 <div className="shrink-0 border-t border-border bg-surface-1/50 px-5 py-2">
                   <button
                     onClick={() => setShowArchivedCols(v => !v)}
-                    className="flex items-center gap-2 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                    className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
                   >
                     {showArchivedCols ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
                     <Archive size={11} />
@@ -350,14 +350,14 @@ export default function App() {
                       {archivedColumns.map(col => (
                         <div key={col.id} className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 border border-border rounded-lg opacity-60 hover:opacity-100 transition-opacity">
                           <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: col.color }} />
-                          <span className="text-xs text-gray-400">{col.name}</span>
-                          <span className="text-[10px] text-gray-600">{tasks.filter(t => t.column_id === col.id).length} tasks</span>
+                          <span className="text-sm text-gray-400">{col.name}</span>
+                          <span className="text-xs text-gray-600">{tasks.filter(t => t.column_id === col.id).length} tasks</span>
                           <button onClick={() => unarchiveColumn(col.id)} title="Restore column"
-                            className="p-0.5 text-gray-600 hover:text-accent transition-colors">
+                            className="p-0.5 text-gray-400 hover:text-accent transition-colors">
                             <RotateCcw size={11} />
                           </button>
                           <button onClick={() => deleteColumn(col.id)} title="Delete column permanently"
-                            className="p-0.5 text-gray-600 hover:text-red-400 transition-colors">
+                            className="p-0.5 text-gray-400 hover:text-red-400 transition-colors">
                             <Trash2 size={11} />
                           </button>
                         </div>
@@ -372,21 +372,21 @@ export default function App() {
           <DragOverlay>
             {dragging?.type === 'task' && dragging.task && <TaskCard task={dragging.task} />}
             {dragging?.type === 'column' && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border rounded-xl shadow-2xl opacity-90 w-72">
+              <div className="flex items-center gap-2 px-3 py-2 bg-surface-2 border border-border rounded-xl shadow-xl opacity-90 w-72">
                 <GripVertical size={13} className="text-gray-500" />
                 <span className="text-sm font-semibold text-gray-200">{dragging.col.name}</span>
-                <span className="text-xs text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md ml-auto">
+                <span className="text-sm text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md ml-auto">
                   {tasks.filter(t => t.column_id === dragging.col.id).length}
                 </span>
               </div>
             )}
             {dragging?.type === 'agent' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 border border-accent/40 rounded-xl shadow-2xl opacity-90">
-                <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-2 border border-accent/40 rounded-xl shadow-xl opacity-90">
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                      style={{ background: dragging.agent.color }}>
                   {dragging.agent.name[0]}
                 </div>
-                <span className="text-xs font-medium text-gray-200">{dragging.agent.name}</span>
+                <span className="text-sm font-medium text-gray-200">{dragging.agent.name}</span>
               </div>
             )}
           </DragOverlay>
@@ -401,12 +401,12 @@ export default function App() {
       {showTemplates && <TemplatesModal />}
 
       {dragError && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-surface-2 border border-red-500/30 text-red-300 text-xs rounded-xl px-4 py-2.5 shadow-xl">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-surface-2 border border-red-500/30 text-red-300 text-sm rounded-xl px-4 py-2.5 shadow-xl">
           {dragError}
         </div>
       )}
       {dragSuccess && (
-        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-surface-2 border border-accent/30 text-accent text-xs rounded-xl px-4 py-2.5 shadow-xl">
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 bg-surface-2 border border-accent/30 text-accent text-sm rounded-xl px-4 py-2.5 shadow-xl">
           {dragSuccess}
         </div>
       )}

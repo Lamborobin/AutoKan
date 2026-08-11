@@ -143,7 +143,7 @@ export default function BoardsModal({ onClose }) {
               <p className="text-sm font-medium text-gray-200 truncate group-hover:text-white">{p.name}</p>
               {client && (
                 <span
-                  className="inline-flex items-center gap-1 mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded-full"
+                  className="inline-flex items-center gap-1 mt-1 text-xs font-medium px-1.5 py-0.5 rounded-full"
                   style={{ background: (client.color || '#6366f1') + '20', color: client.color || '#6366f1', border: `1px solid ${(client.color || '#6366f1')}40` }}
                 >
                   {client.name}
@@ -165,7 +165,7 @@ export default function BoardsModal({ onClose }) {
             )}
             <button
               onClick={e => { e.stopPropagation(); setShowRepo(v => !v); }}
-              className={`p-1 rounded transition-colors ${showRepo ? 'text-accent' : 'text-gray-600 hover:text-gray-400'}`}
+              className={`p-1 rounded-md transition-colors ${showRepo ? 'text-accent' : 'text-gray-400 hover:text-gray-200'}`}
               title="Repository settings"
             >
               <GitBranch size={12} />
@@ -179,11 +179,11 @@ export default function BoardsModal({ onClose }) {
             {p.created_by_picture ? (
               <img src={p.created_by_picture} className="w-4 h-4 rounded-full shrink-0" alt="" />
             ) : (
-              <div className="w-4 h-4 rounded-full bg-accent/20 flex items-center justify-center text-[8px] font-bold text-accent shrink-0">
+              <div className="w-4 h-4 rounded-full bg-accent/20 flex items-center justify-center text-xs font-bold text-accent shrink-0">
                 {(p.created_by_name?.[0] || p.created_by_email?.[0] || '?').toUpperCase()}
               </div>
             )}
-            <span className="text-[10px] text-gray-500 truncate">{p.created_by_name?.trim() || p.created_by_email}</span>
+            <span className="text-xs text-gray-500 truncate">{p.created_by_name?.trim() || p.created_by_email}</span>
           </div>
         )}
 
@@ -208,8 +208,8 @@ export default function BoardsModal({ onClose }) {
         {title && (
           <div className="flex items-center gap-2 mb-2">
             {color && <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />}
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">{title}</p>
-            <span className="text-xs text-gray-600">{boards.length}</span>
+            <p className="text-sm font-semibold text-gray-500 uppercase tracking-widest">{title}</p>
+            <span className="text-sm text-gray-600">{boards.length}</span>
           </div>
         )}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -226,10 +226,10 @@ export default function BoardsModal({ onClose }) {
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className={`appearance-none bg-surface-2 border rounded-lg pl-3 pr-7 py-1.5 text-xs outline-none transition-colors cursor-pointer ${
+          className={`appearance-none bg-surface-2 border rounded-lg pl-3 pr-7 py-1.5 text-sm outline-none transition-colors cursor-pointer ${
             value
               ? 'border-accent/50 text-gray-200 bg-accent/5'
-              : 'border-border text-gray-500 hover:border-gray-500 hover:text-gray-300'
+              : 'border-border text-gray-500 hover:border-gray-500 hover:text-gray-100'
           }`}
         >
           <option value="">{placeholder}</option>
@@ -253,20 +253,20 @@ export default function BoardsModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" data-modal-backdrop="static">
-      <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col max-h-[85vh]">
+      <div className="bg-surface-1 border border-border rounded-xl w-full max-w-3xl shadow-xl flex flex-col max-h-[85vh]">
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center gap-3 shrink-0">
           <LayoutGrid size={16} className="text-accent" />
-          <h2 className="text-sm font-semibold text-gray-200 flex-1">Boards</h2>
+          <h2 className="text-base font-semibold text-gray-200 flex-1">Boards</h2>
           <button
             onClick={() => setCreating(c => !c)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-xs font-medium rounded-lg transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent text-sm font-medium rounded-lg transition-colors"
           >
             <Plus size={13} />
             New board
           </button>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3">
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-100 hover:bg-surface-3">
             <X size={14} />
           </button>
         </div>
@@ -274,7 +274,7 @@ export default function BoardsModal({ onClose }) {
         {/* New board form (collapsible) */}
         {creating && (
           <form onSubmit={handleCreate} className="px-5 py-3 border-b border-border bg-surface-2 shrink-0 space-y-2">
-            <p className="text-xs font-medium text-gray-400">New board</p>
+            <p className="text-sm font-medium text-gray-400">New board</p>
             <div className="flex gap-2">
               <input
                 value={newName}
@@ -305,7 +305,7 @@ export default function BoardsModal({ onClose }) {
                     className="bg-surface-3 border border-accent/40 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                   />
                   <button type="button" onClick={() => { setAddingClient(false); setNewClientName(''); }}
-                    className="px-2 py-2 text-gray-500 hover:text-gray-300">
+                    className="px-2 py-2 text-gray-500 hover:text-gray-100">
                     <X size={13} />
                   </button>
                 </div>
@@ -313,7 +313,7 @@ export default function BoardsModal({ onClose }) {
             </div>
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => { setCreating(false); setNewName(''); setNewClientId(''); setAddingClient(false); setNewClientName(''); }}
-                className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors">
+                className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-100 transition-colors">
                 Cancel
               </button>
               <button type="submit" disabled={saving || !newName.trim()}
@@ -343,20 +343,20 @@ export default function BoardsModal({ onClose }) {
             <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
               <button
                 onClick={() => { setScope('mine'); setClientFilter(''); }}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
                   scope === 'mine'
                     ? 'bg-accent text-white'
-                    : 'text-gray-500 hover:text-gray-300 bg-surface-2'
+                    : 'text-gray-500 hover:text-gray-100 bg-surface-2'
                 }`}
               >
                 My boards
               </button>
               <button
                 onClick={() => setScope('all')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors border-l border-border ${
+                className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-border ${
                   scope === 'all'
                     ? 'bg-accent text-white'
-                    : 'text-gray-500 hover:text-gray-300 bg-surface-2'
+                    : 'text-gray-500 hover:text-gray-100 bg-surface-2'
                 }`}
               >
                 All boards
@@ -387,7 +387,7 @@ export default function BoardsModal({ onClose }) {
             {(clientFilter || creatorFilter || search.trim()) && (
               <button
                 onClick={resetFilters}
-                className="ml-auto text-[11px] text-gray-500 hover:text-gray-300 transition-colors"
+                className="ml-auto text-xs text-gray-500 hover:text-gray-100 transition-colors"
               >
                 Clear filters
               </button>

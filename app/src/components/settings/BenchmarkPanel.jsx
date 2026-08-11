@@ -36,6 +36,12 @@ function StatusBadge({ status }) {
   );
 }
 
+function formatRunTimestamp(value) {
+  if (!value) return '-';
+  const utcValue = /[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : `${value.replace(' ', 'T')}Z`;
+  return format(new Date(utcValue), 'yyyy-MM-dd HH:mm:ss');
+}
+
 // The AI judge's verdict and the human's are two independent answers to the same
 // question, so they render as the same shape — an unfilled chip reads as a slot
 // still waiting on someone, not as a failure.
@@ -135,7 +141,7 @@ function DeterministicChecks({ result }) {
 
   return (
     <div>
-      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-100 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         Technical check — {result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
         {checks.length > 0 && <span className="text-gray-600">({passedCount}/{checks.length})</span>}
@@ -201,7 +207,7 @@ function PlannerOutput({ taskId }) {
 
   return (
     <div>
-      <button onClick={handleToggle} className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors">
+      <button onClick={handleToggle} className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-100 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} What the planner said
       </button>
 
@@ -284,7 +290,7 @@ function RunCard({ run, caseId }) {
   return (
     <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-surface-2/40 border-b border-border/60">
-        <span className="text-xs text-gray-500 font-mono">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
+        <span className="text-xs text-gray-500 font-mono">{formatRunTimestamp(run.started_at)}</span>
         <StatusBadge status={run.status} />
       </div>
 
@@ -347,7 +353,7 @@ function RunCard({ run, caseId }) {
                 {submitting ? '…' : 'Save'}
               </button>
               <button onClick={handleManualCancel} disabled={submitting}
-                className="text-xs px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
+                className="text-xs px-2 py-1 rounded-md text-gray-500 hover:text-gray-100 transition-colors">
                 Cancel
               </button>
             </div>
@@ -365,7 +371,7 @@ function CompactRunRow({ run, onClick }) {
   return (
     <button onClick={onClick}
       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-surface-1 hover:border-accent/40 hover:bg-surface-2/40 transition-colors text-left">
-      <span className="text-xs text-gray-500 font-mono shrink-0">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
+      <span className="text-xs text-gray-500 font-mono shrink-0">{formatRunTimestamp(run.started_at)}</span>
       <StatusBadge status={run.status} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <VerdictChip
@@ -424,7 +430,7 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
         </button>
         {runs?.length > 0 && (
           <button onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-100 transition-colors">
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {expanded ? 'Hide' : 'Show'} {runs.length} run{runs.length === 1 ? '' : 's'}
           </button>

@@ -9,7 +9,7 @@ import heroImg from '../assets/images/hero.png';
 const COLS = [
   { id: 'backlog',  label: 'Backlog',     color: '#6366f1' },
   { id: 'inprog',  label: 'In Progress',  color: '#ec4899' },
-  { id: 'review',  label: 'Review',       color: '#f59e0b' },
+  { id: 'review',  label: 'Human Review',       color: '#f59e0b' },
   { id: 'done',    label: 'Done',         color: '#10b981' },
 ];
 
@@ -18,7 +18,7 @@ const INITIAL_CARDS = [
   { id: 2, title: 'Auth flow & login page',   col: 'done',    tag: 'Backend', tagColor: '#3b82f6' },
   { id: 3, title: 'Kanban board UI',          col: 'review',  tag: 'UI',      tagColor: '#6366f1' },
   { id: 4, title: 'Agent runner service',     col: 'inprog',  tag: 'Backend', tagColor: '#3b82f6' },
-  { id: 5, title: 'Planning clarification flow', col: 'inprog',  tag: 'Agent',   tagColor: '#a855f7' },
+  { id: 5, title: 'Planning clarification flow', col: 'inprog',  tag: 'Test',   tagColor: '#a855f7' },
   { id: 6, title: 'Notification system',      col: 'backlog', tag: 'Backend', tagColor: '#3b82f6' },
   { id: 7, title: 'Mobile responsive layout', col: 'backlog', tag: 'UI',      tagColor: '#6366f1' },
   { id: 8, title: 'Analytics dashboard',      col: 'backlog', tag: 'Feature', tagColor: '#f59e0b' },
@@ -59,13 +59,7 @@ function KanbanPreview() {
       {/* Top bar */}
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-          <span className="text-[11px] font-semibold text-gray-300 tracking-wide">Project Board</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {['#6366f1','#ec4899','#10b981'].map(c => (
-            <div key={c} className="w-5 h-5 rounded-full border border-white/10" style={{ background: c + '40' }} />
-          ))}
+          <span className="text-xs font-semibold text-gray-300 tracking-wide">Project Board</span>
         </div>
       </div>
 
@@ -78,8 +72,8 @@ function KanbanPreview() {
               {/* Column header */}
               <div className="flex items-center gap-1.5 mb-1 shrink-0">
                 <div className="w-1.5 h-1.5 rounded-full" style={{ background: col.color }} />
-                <span className="text-[10px] font-medium text-gray-400 truncate">{col.label}</span>
-                <span className="ml-auto text-[10px] text-gray-600">{colCards.length}</span>
+                <span className="text-xs font-medium text-gray-400 truncate">{col.label}</span>
+                <span className="ml-auto text-xs text-gray-600">{colCards.length}</span>
               </div>
               {/* Cards */}
               <div className="flex flex-col gap-1.5 flex-1 overflow-hidden">
@@ -94,9 +88,9 @@ function KanbanPreview() {
                       transform: activeCard === card.id ? 'scale(1.02)' : 'scale(1)',
                     }}
                   >
-                    <p className="text-[10px] text-gray-300 leading-tight truncate mb-1.5">{card.title}</p>
+                    <p className="text-xs text-gray-300 leading-tight truncate mb-1.5">{card.title}</p>
                     <span
-                      className="text-[8px] px-1.5 py-0.5 rounded-full font-medium"
+                      className="text-xs px-1.5 py-0.5 rounded-full font-medium"
                       style={{ background: card.tagColor + '20', color: card.tagColor }}
                     >
                       {card.tag}
@@ -111,11 +105,7 @@ function KanbanPreview() {
 
       {/* Bottom status bar */}
       <div className="flex items-center justify-between shrink-0 pt-1 border-t border-white/[0.05]">
-        <span className="text-[10px] text-gray-600">{cards.length} tasks · 3 agents active</span>
-        <div className="flex items-center gap-1">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          <span className="text-[10px] text-gray-600">Live</span>
-        </div>
+        
       </div>
     </div>
   );
@@ -166,59 +156,39 @@ export default function LoginPage({ inviteToken }) {
   return (
     <div className="min-h-screen bg-[#080810] flex flex-col relative overflow-hidden">
 
-      {/* ── Aurora background blobs ── */}
+      {/* ── Aurora wash ── One slow drift on the largest blob is the only ambient
+           motion on this screen; the other two are static so the page reads as a
+           product, not a screensaver. */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-[-20%] left-[-8%]  w-[640px] h-[640px] rounded-full bg-indigo-500/[0.16] blur-[90px] animate-blob-1" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
-        <div className="absolute bottom-[-15%] left-[20%] w-[560px] h-[560px] rounded-full bg-violet-600/[0.13] blur-[80px] animate-blob-2" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
-        <div className="absolute top-[10%] right-[-12%] w-[500px] h-[500px] rounded-full bg-blue-500/[0.11] blur-[75px] animate-blob-3" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
+        <div className="absolute top-[-20%] left-[-8%]  w-[640px] h-[640px] rounded-full bg-indigo-500/[0.14] blur-[90px] animate-blob-1 motion-reduce:animate-none" style={{ willChange: 'transform', transform: 'translateZ(0)' }} />
+        <div className="absolute bottom-[-15%] left-[20%] w-[560px] h-[560px] rounded-full bg-violet-600/[0.10] blur-[80px]" />
+        <div className="absolute top-[10%] right-[-12%] w-[500px] h-[500px] rounded-full bg-blue-500/[0.08] blur-[75px]" />
       </div>
 
-      {/* ── Jumbo hero ── */}
+      {/* ── Hero ── */}
       <div className="relative z-10 flex flex-col items-center justify-center pt-14 pb-10 px-4">
-        <div className="relative flex items-center justify-center w-28 h-28 mb-5">
-          <div className="absolute inset-0 rounded-full animate-spin-reverse pointer-events-none"
-            style={{ border: '1px dashed rgba(99,102,241,0.28)', transform: 'scale(1.55)' }} />
-          <div className="absolute inset-0 rounded-full animate-spin-slow pointer-events-none"
-            style={{
-              background: 'conic-gradient(from 0deg, rgba(99,102,241,0.6) 0%, rgba(139,92,246,0.4) 20%, transparent 50%, rgba(99,102,241,0.1) 80%, rgba(99,102,241,0.6) 100%)',
-              transform: 'scale(1.28)', borderRadius: '50%',
-              mask: 'radial-gradient(transparent 88%, black 89%)',
-              WebkitMask: 'radial-gradient(transparent 88%, black 89%)',
-            }} />
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="animate-orbit-dot">
-              <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_6px_2px_rgba(99,102,241,0.8)]" />
-            </div>
-          </div>
-          {/* Glow layer — opacity only, fully GPU composited */}
+        <div className="relative flex items-center justify-center w-24 h-24 mb-5">
+          {/* Static glow behind the mark — depth without a loop */}
           <div
-            className="absolute inset-0 rounded-full animate-logo-glow pointer-events-none z-10"
-            style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.45) 0%, rgba(139,92,246,0.25) 50%, transparent 70%)', filter: 'blur(18px)' }}
+            className="absolute inset-0 rounded-full pointer-events-none z-10"
+            style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.35) 0%, rgba(139,92,246,0.18) 50%, transparent 70%)', filter: 'blur(18px)' }}
           />
           <img src={heroImg} alt="AutoKan" className="w-full h-full object-contain relative z-20" />
         </div>
-        <h1
-          className="text-3xl sm:text-4xl font-bold tracking-tight select-none animate-shimmer mb-3"
-          style={{
-            backgroundImage: 'linear-gradient(90deg, #a5b4fc 0%, #818cf8 20%, #c4b5fd 40%, #6366f1 60%, #a78bfa 80%, #a5b4fc 100%)',
-            backgroundSize: '300% auto',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            color: 'transparent',
-          }}
-        >AutoKan</h1>
-        <p className="text-base text-gray-500 tracking-wide">Autonomous AI task orchestration</p>
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-gray-100 select-none mb-3">
+          AutoKan
+        </h1>
+        <p className="text-base text-gray-400">Autonomous AI task orchestration</p>
       </div>
 
       {/* ── Two columns ── */}
-      <div className="relative z-10 flex flex-col lg:flex-row items-stretch justify-center gap-6 px-4 sm:px-8 lg:px-10 pb-12 w-full max-w-5xl mx-auto">
+      <div className="relative z-10 flex flex-col lg:flex-row items-stretch justify-center gap-6 px-4 sm:px-8 lg:px-10 pb-12 w-full max-w-6xl mx-auto">
 
         {/* ── Left: login ── */}
         <div className="w-full lg:w-80 xl:w-96 shrink-0 group">
           <div className="
-            bg-white/[0.04] border border-white/[0.08] rounded-2xl px-6 py-8 sm:p-8
-            flex flex-col gap-6 backdrop-blur-sm shadow-2xl h-full justify-center text-left
+            bg-white/[0.04] border border-white/[0.08] rounded-xl px-6 py-8 2
+            flex flex-col gap-6 backdrop-blur-sm shadow-xl h-full justify-center text-left
             transition-all duration-300
             hover:border-white/[0.14] hover:shadow-[0_0_50px_rgba(99,102,241,0.12)]
           ">
@@ -239,19 +209,19 @@ export default function LoginPage({ inviteToken }) {
             ) : inviteError ? (
               <div className="flex flex-col gap-3">
                 <h2 className="text-xl font-semibold text-gray-100">Sign in to continue</h2>
-                <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400">
+                <div className="px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-sm text-amber-400">
                   {inviteError}
                 </div>
               </div>
             ) : (
               <div className="flex flex-col gap-1">
                 <h2 className="text-xl font-semibold text-gray-100">Sign in to continue</h2>
-                <p className="text-sm text-gray-600">Access your boards and agents</p>
+                <p className="text-sm text-gray-400">Access your boards and agents</p>
               </div>
             )}
 
             {authError && (
-              <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+              <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
                 {authError}
               </div>
             )}
@@ -259,7 +229,7 @@ export default function LoginPage({ inviteToken }) {
             {!inviteLoading && (
               <div className="flex flex-col gap-4">
                 {/* Google button — full width */}
-                <div className="google-btn-wrap relative w-full overflow-hidden rounded-lg group/btn">
+                <div className="google-btn-wrap relative w-full overflow-hidden group/btn">
                   <GoogleLogin
                     onSuccess={({ credential }) => googleLogin(credential)}
                     onError={() => useStore.getState().setAuthError('Google sign-in failed. Please try again.')}
@@ -269,10 +239,13 @@ export default function LoginPage({ inviteToken }) {
                     text={isInviteFlow ? 'signin_with' : 'continue_with'}
                     width="320"
                   />
-                  {/* Overlay to cancel Google's gray hover tint */}
-                  <div className="absolute inset-0 rounded-lg pointer-events-none bg-black/0 group-hover/btn:bg-black/40 transition-colors duration-300" />
+                  {/* Google's own hover tint lives inside a cross-origin iframe we can't
+                      restyle — smother it with an opaque overlay, then draw the app's own
+                      accent-tinted hover on top so the button matches the rest of the UI. */}
+                  <div className="absolute inset-0 rounded-lg pointer-events-none bg-black/0 group-hover/btn:bg-black/70 transition-colors duration-300" />
+                  <div className="absolute inset-0 rounded-lg pointer-events-none bg-accent/0 group-hover/btn:bg-accent/10 transition-colors duration-300" />
                 </div>
-                <p className="text-xs text-gray-600 leading-relaxed">
+                <p className="text-sm text-gray-400 leading-relaxed">
                   By signing in you agree to use this tool responsibly.<br />
                   Your data stays on your own server.
                 </p>
@@ -284,7 +257,7 @@ export default function LoginPage({ inviteToken }) {
 
         {/* ── Right: product preview ── */}
         <div className="hidden lg:flex flex-1 min-h-[420px]">
-          <div className="w-full border border-white/[0.06] rounded-2xl overflow-hidden relative bg-[#0d0d14]">
+          <div className="w-full border border-white/[0.06] rounded-xl overflow-hidden relative bg-[#0d0d14]">
             <KanbanPreview />
           </div>
         </div>
@@ -292,7 +265,7 @@ export default function LoginPage({ inviteToken }) {
       </div>
 
       {/* Footer */}
-      <p className="relative z-10 text-xs text-gray-500 text-center pb-8">
+      <p className="relative z-10 text-sm text-gray-500 text-center pb-8">
         AutoKan · Built for humans &amp; AI agents
       </p>
     </div>

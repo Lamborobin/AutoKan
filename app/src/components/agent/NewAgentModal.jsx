@@ -80,7 +80,7 @@ export default function NewAgentModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in">
+      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface-2 z-10">
           <h2 className="text-base font-semibold text-gray-100">New Agent</h2>
           <button onClick={() => setShowNewAgent(false)} className="btn-ghost p-1.5 rounded-lg">
@@ -96,7 +96,7 @@ export default function NewAgentModal() {
             }`}>
               <div className="flex items-center gap-2">
                 <LayoutTemplate size={12} className={selectedTemplateId ? 'text-accent' : 'text-gray-600'} />
-                <label className="text-xs font-medium text-gray-400">Start from template</label>
+                <label className="text-sm font-medium text-gray-400">Start from template</label>
               </div>
               <select
                 value={selectedTemplateId}
@@ -118,7 +118,7 @@ export default function NewAgentModal() {
           />
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Description</label>
             <textarea value={form.description} onChange={e => set('description', e.target.value)}
               placeholder="What does this agent do?"
               rows={2}
@@ -137,7 +137,7 @@ export default function NewAgentModal() {
           <ColorField value={form.color} onChange={v => set('color', v)} />
 
           {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
           )}
 
           <div className="flex gap-3 pt-2">

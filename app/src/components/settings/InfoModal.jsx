@@ -15,14 +15,14 @@ export default function InfoModal({ openKey, onClose }) {
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static"
     >
       <div
-        className="bg-surface-1 border border-border rounded-2xl w-full max-w-xl shadow-2xl max-h-[88vh] flex flex-col"
+        className="bg-surface-1 border border-border rounded-xl w-full max-w-xl shadow-xl max-h-[88vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div>
-            <h2 className="text-sm font-semibold text-gray-200">{info.title}</h2>
-            <p className="text-[11px] text-gray-500 mt-0.5">{info.intro}</p>
+            <h2 className="text-base font-semibold text-gray-200">{info.title}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{info.intro}</p>
           </div>
           <button
             onClick={onClose}
@@ -35,7 +35,7 @@ export default function InfoModal({ openKey, onClose }) {
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          <div className="text-[12px] text-gray-400 leading-relaxed space-y-3">
+          <div className="text-xs text-gray-400 leading-relaxed space-y-3">
             {info.body}
           </div>
 

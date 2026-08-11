@@ -67,18 +67,18 @@ export function HierarchyDiagram({ highlight }) {
                 : 'bg-surface-0/50 border-border text-gray-500'
             }`}
           >
-            <div className={`w-4 text-[9px] ${isHighlight ? 'text-accent' : 'text-gray-700'}`}>
+            <div className={`w-4 text-xs ${isHighlight ? 'text-accent' : 'text-gray-600'}`}>
               {i + 1}
             </div>
             <Icon size={12} className={isHighlight ? 'text-accent' : 'text-gray-600'} />
             <div className="flex-1 min-w-0">
-              <p className={`text-[11px] font-medium truncate ${isHighlight ? 'text-accent' : 'text-gray-400'}`}>
+              <p className={`text-xs font-medium truncate ${isHighlight ? 'text-accent' : 'text-gray-400'}`}>
                 {layer.label}
               </p>
-              <p className="text-[9px] text-gray-600 truncate">{layer.sub}</p>
+              <p className="text-xs text-gray-600 truncate">{layer.sub}</p>
             </div>
             {isHighlight && (
-              <span className="text-[8px] font-semibold uppercase tracking-wider text-accent/80 px-1.5 py-0.5 rounded bg-accent/10">
+              <span className="text-xs font-semibold uppercase tracking-wider text-accent/80 px-1.5 py-0.5 rounded-md bg-accent/10">
                 you're here
               </span>
             )}

@@ -44,15 +44,15 @@ export default function NotificationPopover({ anchorRef, onClose }) {
   return (
     <div
       ref={popoverRef}
-      className="absolute left-full top-0 ml-2 z-[100] w-80 bg-surface-1 border border-border rounded-2xl shadow-2xl overflow-hidden"
+      className="absolute left-full top-0 ml-2 z-[100] w-80 bg-surface-1 border border-border rounded-xl shadow-lg overflow-hidden"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Bell size={14} className="text-gray-400" />
-          <span className="text-sm font-semibold text-gray-200">Notifications</span>
+          <span className="text-base font-semibold text-gray-200">Notifications</span>
           {unreadCount > 0 && (
-            <span className="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">
+            <span className="text-sm bg-accent/20 text-accent px-1.5 py-0.5 rounded-full">
               {unreadCount}
             </span>
           )}
@@ -61,14 +61,14 @@ export default function NotificationPopover({ anchorRef, onClose }) {
           {unreadCount > 0 && (
             <button
               onClick={() => markAllNotificationsRead()}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors px-2 py-1 rounded-lg hover:bg-surface-3"
+              className="text-sm text-gray-500 hover:text-gray-100 transition-colors px-2 py-1 rounded-lg hover:bg-surface-3"
             >
               Mark all read
             </button>
           )}
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+            className="p-1 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
           >
             <X size={13} />
           </button>
@@ -96,9 +96,9 @@ export default function NotificationPopover({ anchorRef, onClose }) {
                     {notif.title}
                   </p>
                   {notif.body && (
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-snug">{notif.body}</p>
+                    <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 leading-snug">{notif.body}</p>
                   )}
-                  <p className="text-[10px] text-gray-600 mt-1">{formatRelativeTime(notif.created_at)}</p>
+                  <p className="text-xs text-gray-600 mt-1">{formatRelativeTime(notif.created_at)}</p>
                 </div>
               </div>
             </button>

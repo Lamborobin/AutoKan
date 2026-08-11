@@ -94,7 +94,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
   const isConnected = !!project.client_path;
 
   return (
-    <div className="mt-2 p-3 bg-surface-1 border border-border rounded-xl space-y-3 text-xs">
+    <div className="mt-2 p-3 bg-surface-1 border border-border rounded-xl space-y-3 text-sm">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -102,14 +102,14 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
           <GitBranch size={12} />
           <span>Repository</span>
         </div>
-        <button onClick={onClose} className="text-gray-600 hover:text-gray-400 p-0.5">
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-200 p-0.5">
           <X size={12} />
         </button>
       </div>
 
       {/* Current status */}
       {isConnected && (
-        <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] ${
+        <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
           project.path_exists
             ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
             : 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
@@ -132,7 +132,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border transition-colors ${
               mode === 'github'
                 ? 'border-accent bg-accent/10 text-accent'
-                : 'border-border text-gray-500 hover:text-gray-300 hover:border-gray-500'
+                : 'border-border text-gray-500 hover:text-gray-100 hover:border-gray-500'
             }`}
           >
             <Github size={12} />
@@ -143,7 +143,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg border transition-colors ${
               mode === 'local'
                 ? 'border-accent bg-accent/10 text-accent'
-                : 'border-border text-gray-500 hover:text-gray-300 hover:border-gray-500'
+                : 'border-border text-gray-500 hover:text-gray-100 hover:border-gray-500'
             }`}
           >
             <FolderOpen size={12} />
@@ -159,7 +159,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
             value={repoUrl}
             onChange={e => setRepoUrl(e.target.value)}
             placeholder="https://github.com/user/repo.git"
-            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
           />
           <div className="flex items-center gap-2">
             <span className="text-gray-600 shrink-0">client/</span>
@@ -167,7 +167,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
               value={folderName}
               onChange={e => setFolderName(e.target.value)}
               placeholder="folder-name"
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
           </div>
           <button
@@ -205,7 +205,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
                 >
                   <FolderOpen size={11} />
                   <span className="flex-1">{r.client_path}</span>
-                  {r.is_git && <span className="text-[10px] text-gray-600">git</span>}
+                  {r.is_git && <span className="text-xs text-gray-600">git</span>}
                 </button>
               ))}
             </div>
@@ -218,7 +218,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
               value={localPath.replace(/^client\//, '')}
               onChange={e => setLocalPath(e.target.value ? `client/${e.target.value}` : '')}
               placeholder="folder-name"
-              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+              className="flex-1 bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
           </div>
 
@@ -238,7 +238,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
         <button
           onClick={handleDisconnect}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-gray-600 hover:text-red-400 border border-transparent hover:border-red-400/20 rounded-lg transition-colors text-[11px]"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 text-gray-400 hover:text-red-400 border border-transparent hover:border-red-400/20 rounded-lg transition-colors text-xs"
         >
           <X size={11} />
           Disconnect repository
@@ -247,13 +247,13 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
 
       {/* Feedback */}
       {error && (
-        <p className="text-red-400 text-[11px] flex items-center gap-1.5">
+        <p className="text-red-400 text-xs flex items-center gap-1.5">
           <AlertTriangle size={11} />
           {error}
         </p>
       )}
       {success && (
-        <p className="text-emerald-400 text-[11px] flex items-center gap-1.5">
+        <p className="text-emerald-400 text-xs flex items-center gap-1.5">
           <Check size={11} />
           {success}
         </p>

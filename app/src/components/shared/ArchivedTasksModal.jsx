@@ -38,14 +38,14 @@ export default function ArchivedTasksModal({ onClose }) {
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static"
     >
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-xl max-h-[80vh] flex flex-col animate-slide-in">
+      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-xl max-h-[80vh] flex flex-col animate-slide-in">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div>
-            <h2 className="text-sm font-semibold text-gray-100">Archived Tasks</h2>
-            <p className="text-[10px] text-gray-600 mt-0.5">{archivedTasks.length} task{archivedTasks.length !== 1 ? 's' : ''} archived</p>
+            <h2 className="text-base font-semibold text-gray-100">Archived Tasks</h2>
+            <p className="text-xs text-gray-600 mt-0.5">{archivedTasks.length} task{archivedTasks.length !== 1 ? 's' : ''} archived</p>
           </div>
-          <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300">
+          <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-100">
             <X size={16} />
           </button>
         </div>
@@ -62,7 +62,7 @@ export default function ArchivedTasksModal({ onClose }) {
               className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 outline-none"
             />
             {search && (
-              <button onClick={() => setSearch('')} className="text-gray-600 hover:text-gray-400">
+              <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-200">
                 <X size={11} />
               </button>
             )}
@@ -95,7 +95,7 @@ export default function ArchivedTasksModal({ onClose }) {
                       onClick={e => { e.stopPropagation(); handleRestore(task); }}
                       disabled={restoring === task.id}
                       title="Restore task"
-                      className="shrink-0 flex items-center gap-1.5 px-2 py-1 text-[10px] font-medium text-gray-500 hover:text-accent hover:bg-accent/10 border border-border hover:border-accent/30 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      className="shrink-0 flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-gray-500 hover:text-accent hover:bg-accent/10 border border-border hover:border-accent/30 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     >
                       <RotateCcw size={10} className={restoring === task.id ? 'animate-spin' : ''} />
                       Restore
@@ -103,7 +103,7 @@ export default function ArchivedTasksModal({ onClose }) {
                   </div>
 
                   {task.description && (
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-2.5 leading-relaxed">
+                    <p className="text-sm text-gray-500 line-clamp-2 mb-2.5 leading-relaxed">
                       {task.description}
                     </p>
                   )}
@@ -112,8 +112,8 @@ export default function ArchivedTasksModal({ onClose }) {
                   {task.progress > 0 && (
                     <div className="mb-2.5">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] text-gray-600">Progress</span>
-                        <span className="text-[10px] text-gray-500">{task.progress}%</span>
+                        <span className="text-xs text-gray-600">Progress</span>
+                        <span className="text-xs text-gray-500">{task.progress}%</span>
                       </div>
                       <div className="h-1 bg-surface-4 rounded-full overflow-hidden">
                         <div
@@ -143,13 +143,13 @@ export default function ArchivedTasksModal({ onClose }) {
                       <span className={`tag ${PRIORITY_STYLES[task.priority] || PRIORITY_STYLES.medium}`}>
                         {task.priority}
                       </span>
-                      <span className="text-[10px] text-gray-600">
+                      <span className="text-xs text-gray-600">
                         {columnName(task.column_id)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-gray-600">
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
                       {assignedAgent && (
-                        <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold"
+                        <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-bold"
                              style={{ background: assignedAgent.color }}>
                           {assignedAgent.name[0]}
                         </div>

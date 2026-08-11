@@ -78,7 +78,7 @@ export default function App() {
                 className={`pb-1 transition-colors ${
                   activeCategory === cat
                     ? 'text-gray-900 border-b border-gray-900'
-                    : 'text-gray-400 hover:text-gray-700'
+                    : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
                 {cat}

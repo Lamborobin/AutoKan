@@ -9,9 +9,14 @@ import { PRIORITIES, COMPLEXITIES, PRIORITY_COLORS, PM_STATUS, HUMAN_STATUS, LOG
 import { COLUMN } from '../../constants/columns';
 
 export default function TaskDetail() {
-  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent } = useStore();
+  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent, currentProjectId, projects } = useStore();
   const [task, setTask] = useState(null);
   const [logs, setLogs] = useState([]);
+
+  // Auto-complete (PR-based) only means something when the board both does coder
+  // work and has an actual git repo connected to open a PR against.
+  const currentProject = projects.find(p => p.id === currentProjectId);
+  const showAutoComplete = currentProject?.pr_workflow !== false && !!currentProject?.has_git;
 
   // Editing state
   const [editingTitle, setEditingTitle] = useState(false);
@@ -408,7 +413,7 @@ export default function TaskDetail() {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
-      <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in overflow-hidden">
+      <div className="bg-surface-1 border border-border rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in overflow-hidden">
 
         {/* Header — editable title */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0 gap-3">
@@ -421,7 +426,7 @@ export default function TaskDetail() {
                 onChange={e => setTitleDraft(e.target.value)}
                 onBlur={saveTitle}
                 onKeyDown={e => { if (e.key === 'Enter') saveTitle(); if (e.key === 'Escape') setEditingTitle(false); }}
-                className="flex-1 text-sm font-semibold bg-surface-3 border border-accent rounded px-2 py-0.5 text-gray-200 focus:outline-none"
+                className="flex-1 text-sm font-semibold bg-surface-3 border border-accent rounded-md px-2 py-0.5 text-gray-200 focus:outline-none"
               />
             ) : (
               <button
@@ -449,12 +454,12 @@ export default function TaskDetail() {
               <button
                 onClick={handleArchive}
                 title="Archive task"
-                className={`p-1.5 rounded-lg transition-colors ${confirmArchive ? 'bg-amber-500/20 text-amber-300' : 'btn-ghost text-gray-600 hover:text-amber-400'}`}
+                className={`p-1.5 rounded-lg transition-colors ${confirmArchive ? 'bg-amber-500/20 text-amber-300' : 'btn-ghost text-gray-400 hover:text-amber-400'}`}
               >
                 <Archive size={13} />
               </button>
               {confirmArchive && (
-                <div className="absolute top-full right-0 mt-1 z-20 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
+                <div className="absolute top-full right-0 mt-1 z-20 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
                   <span>Are you sure you want to archive this task?</span>
                   <button onClick={e => { e.stopPropagation(); setConfirmArchive(false); }} className="text-amber-400 hover:text-amber-200 leading-none">✕</button>
                 </div>
@@ -469,7 +474,7 @@ export default function TaskDetail() {
                 <Trash2 size={13} />
               </button>
               {confirmDelete && (
-                <div className="absolute top-full right-0 mt-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
+                <div className="absolute top-full right-0 mt-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
                   <span>Are you sure you want to delete this task?</span>
                   <button onClick={e => { e.stopPropagation(); setConfirmDelete(false); }} className="text-red-400 hover:text-red-200 leading-none">✕</button>
                 </div>
@@ -490,8 +495,8 @@ export default function TaskDetail() {
               <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/25 rounded-xl">
                 <Lock size={12} className="text-amber-400 shrink-0" />
                 <div>
-                  <p className="text-xs font-medium text-amber-300">Planning in progress</p>
-                  <p className="text-[10px] text-amber-500/70 mt-0.5">You can still edit fields and check items — dragging is locked until both the planning agent and you approve</p>
+                  <p className="text-sm font-medium text-amber-300">Planning in progress</p>
+                  <p className="text-xs text-amber-500/70 mt-0.5">You can still edit fields and check items — dragging is locked until both the planning agent and you approve</p>
                 </div>
               </div>
             )}
@@ -501,14 +506,14 @@ export default function TaskDetail() {
               <div className="rounded-xl border border-blue-500/25 bg-blue-500/5 overflow-hidden">
                 <div className="flex items-center gap-2 px-4 py-2.5 border-b border-blue-500/15">
                   <div className={`w-1.5 h-1.5 rounded-full ${checkingPr ? 'bg-blue-400/50 animate-pulse' : 'bg-blue-400'}`} />
-                  <span className="text-xs font-medium text-blue-300">PR Ready for Review</span>
+                  <span className="text-sm font-medium text-blue-300">PR Ready for Review</span>
                 </div>
                 <div className="px-4 py-3 space-y-3">
                   <a
                     href={task.pr_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all transition-colors"
+                    className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 underline underline-offset-2 break-all transition-colors"
                   >
                     {task.pr_url}
                   </a>
@@ -518,15 +523,15 @@ export default function TaskDetail() {
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                       </svg>
-                      <span className="text-xs text-blue-400/70">Checking if already merged…</span>
+                      <span className="text-sm text-blue-400/70">Checking if already merged…</span>
                     </div>
                   ) : (
                     <>
-                      <p className="text-xs text-gray-500">Review the PR, then click below to move this task to Testing.</p>
+                      <p className="text-sm text-gray-500">Review the PR, then click below to move this task to Testing.</p>
                       <button
                         onClick={handleApprovePr}
                         disabled={approvingPr}
-                        className="w-full py-2 text-xs font-medium bg-blue-600/20 text-blue-300 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="w-full py-2 text-sm font-medium bg-blue-600/20 text-blue-300 rounded-lg hover:bg-blue-600/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                       >
                         {approvingPr ? 'Moving…' : 'PR Reviewed — Send to Testing'}
                       </button>
@@ -542,8 +547,8 @@ export default function TaskDetail() {
                 <svg className="w-3.5 h-3.5 text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 11-1.5 0 .75.75 0 011.5 0z"/>
                 </svg>
-                <span className="text-xs text-gray-500">PR already merged —</span>
-                <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="text-xs text-gray-500 hover:text-gray-300 underline underline-offset-2 truncate transition-colors">
+                <span className="text-sm text-gray-500">PR already merged —</span>
+                <a href={task.pr_url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-500 hover:text-gray-100 underline underline-offset-2 truncate transition-colors">
                   {task.pr_url.replace('https://github.com/', '')}
                 </a>
               </div>
@@ -552,8 +557,8 @@ export default function TaskDetail() {
             {/* Human action notice (non-PR blocks) */}
             {task.requires_human_action === 1 && !task.pr_url && (
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                <p className="text-xs font-medium text-amber-400 mb-1">Human Action Required</p>
-                <p className="text-xs text-amber-300/70">{task.human_action_reason}</p>
+                <p className="text-sm font-medium text-amber-400 mb-1">Human Action Required</p>
+                <p className="text-sm text-amber-300/70">{task.human_action_reason}</p>
               </div>
             )}
 
@@ -563,17 +568,17 @@ export default function TaskDetail() {
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-green-500/15">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 size={13} className="text-green-400" />
-                    <span className="text-xs font-medium text-green-300">Requirements</span>
+                    <span className="text-sm font-medium text-green-300">Requirements</span>
                   </div>
                   <button
                     onClick={() => setShowPlanningHistory(v => !v)}
-                    className="text-[10px] text-gray-600 hover:text-gray-400 transition-colors"
+                    className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
                   >
                     {showPlanningHistory ? 'Hide planning history' : 'Show planning history'}
                   </button>
                 </div>
                 <div className="px-4 py-3">
-                  <MarkdownText text={task.pm_review_comment} className="text-xs text-gray-300 leading-relaxed" />
+                  <MarkdownText text={task.pm_review_comment} className="text-sm text-gray-300 leading-relaxed" />
                 </div>
                 {/* Planning history accordion */}
                 {showPlanningHistory && (
@@ -581,12 +586,12 @@ export default function TaskDetail() {
                     {/* Checklist summary */}
                     {checklist.length > 0 && (
                       <div className="px-4 py-3 border-b border-surface-3">
-                        <p className="text-[10px] text-gray-600 font-medium uppercase tracking-wide mb-2">Planning Checklist</p>
+                        <p className="text-xs text-gray-600 font-medium uppercase tracking-wide mb-2">Planning Checklist</p>
                         <div className="space-y-1">
                           {checklist.map((item, i) => (
                             <div key={i} className="flex items-start gap-2">
                               <CheckCircle2 size={11} className="text-green-400/60 shrink-0 mt-0.5" />
-                              <span className="text-xs text-gray-600 line-through leading-tight">{item.item}</span>
+                              <span className="text-sm text-gray-600 line-through leading-tight">{item.item}</span>
                             </div>
                           ))}
                         </div>
@@ -595,17 +600,17 @@ export default function TaskDetail() {
                     {/* Conversation history */}
                     {rawConversationLogs.length > 0 && (
                       <div className="px-4 py-3">
-                        <p className="text-[10px] text-gray-600 font-medium uppercase tracking-wide mb-2">Planning conversation</p>
+                        <p className="text-xs text-gray-600 font-medium uppercase tracking-wide mb-2">Planning conversation</p>
                         <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
                         {rawConversationLogs.map(log => {
                           const isPM = log.action === LOG_ACTION.PM_QUESTION;
                           const isDone = log.action === LOG_ACTION.PM_REVIEWED;
                           return (
                             <div key={log.id} className={`flex gap-2 ${isPM || isDone ? '' : 'flex-row-reverse'}`}>
-                              <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5 ${isPM || isDone ? 'bg-purple-600/60 text-white' : 'bg-blue-600/60 text-white'}`}>
+                              <div className={`w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${isPM || isDone ? 'bg-purple-600/60 text-white' : 'bg-blue-600/60 text-white'}`}>
                                 {isPM || isDone ? 'PM' : 'Me'}
                               </div>
-                              <div className={`flex-1 rounded-lg px-2 py-1.5 text-xs leading-relaxed opacity-70 ${
+                              <div className={`flex-1 rounded-lg px-2 py-1.5 text-sm leading-relaxed opacity-70 ${
                                 isPM ? 'bg-purple-500/8 text-purple-300' :
                                 isDone ? 'bg-green-500/8 text-green-400' :
                                 'bg-surface-3 text-gray-400'
@@ -638,9 +643,10 @@ export default function TaskDetail() {
                       hasPendingQuestion ? 'bg-yellow-400 animate-pulse' :
                       'bg-blue-400 animate-pulse'
                     }`} />
-                    <span className="text-xs font-medium text-gray-300">Planning</span>
+                    <span className="text-sm font-medium text-gray-300">Planning</span>
                   </div>
-                  <span className="text-[10px] text-gray-500">
+                  <span className="text-xs text-gray-500">
+                    Status:   &nbsp;
                     {pmDone ? 'Awaiting your sign-off' :
                      agentThinking ? 'Agent thinking…' :
                      hasPendingQuestion ? 'Awaiting your reply' :
@@ -652,8 +658,8 @@ export default function TaskDetail() {
                 {checklist.length > 0 && (
                   <div className="px-4 py-3 border-b border-surface-3 bg-surface-2/40">
                     <div className="flex items-center justify-between mb-2.5">
-                      <p className="text-[10px] text-gray-600 font-medium uppercase tracking-wide">Planning Checklist</p>
-                      <span className="text-[10px] text-gray-600">{resolvedCount}/{checklist.length} resolved</span>
+                      <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Planning Checklist</p>
+                      <span className="text-xs text-gray-600">{resolvedCount}/{checklist.length} resolved</span>
                     </div>
                     <div className="space-y-1.5 mb-2.5">
                       {checklist.map((item, i) => (
@@ -670,12 +676,12 @@ export default function TaskDetail() {
                           {item.resolved ? (
                             <CheckCircle2 size={13} className={`shrink-0 mt-0.5 ${item.manuallyResolved ? 'text-blue-400' : 'text-green-400'}`} />
                           ) : (
-                            <Circle size={13} className="text-gray-600 shrink-0 mt-0.5 group-hover:text-gray-400 transition-colors" />
+                            <Circle size={13} className="text-gray-400 shrink-0 mt-0.5 group-hover:text-gray-200 transition-colors" />
                           )}
-                          <span className={`text-xs leading-tight ${item.resolved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                          <span className={`text-sm leading-tight ${item.resolved ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
                             {item.item}
                             {item.manuallyResolved && (
-                              <span className="ml-1.5 text-[10px] text-blue-400/60">(you)</span>
+                              <span className="ml-1.5 text-xs text-blue-400/60">(you)</span>
                             )}
                           </span>
                         </button>
@@ -689,19 +695,13 @@ export default function TaskDetail() {
                           : 'linear-gradient(90deg,#7c6af7,#a78bfa)'
                       }} />
                     </div>
-                    {!pmDone && (
-                      <p className="text-[10px] text-gray-700 mt-2">
-                        Click any item to check / uncheck it — the planning agent re-evaluates after each toggle.
-                        {allItemsChecked && ' All checked — planning agent doing final review…'}
-                      </p>
-                    )}
                   </div>
                 )}
 
                 {/* Conversation thread */}
                 {conversationLogs.length === 0 && !hasPendingQuestion && !agentThinking && (
                   <div className="px-4 py-6 text-center">
-                    <p className="text-xs text-gray-600">Planning agent is analysing the task…</p>
+                    <p className="text-sm text-gray-600">Planning agent is analysing the task…</p>
                   </div>
                 )}
                 {(conversationLogs.length > 0 || agentThinking) && (
@@ -711,10 +711,10 @@ export default function TaskDetail() {
                       const isDone = log.action === LOG_ACTION.PM_REVIEWED;
                       return (
                         <div key={log.id} className={`flex gap-2 ${isPM || isDone ? '' : 'flex-row-reverse'}`}>
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 mt-0.5 ${isPM || isDone ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${isPM || isDone ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'}`}>
                             {isPM || isDone ? 'PM' : 'Me'}
                           </div>
-                          <div className={`flex-1 rounded-lg px-2.5 py-2 text-xs leading-relaxed ${
+                          <div className={`flex-1 rounded-lg px-2.5 py-2 text-sm leading-relaxed ${
                             isPM ? 'bg-purple-500/10 text-purple-200 border border-purple-500/20' :
                             isDone ? 'bg-green-500/10 text-green-300 border border-green-500/20' :
                             'bg-surface-3 text-gray-300'
@@ -729,7 +729,7 @@ export default function TaskDetail() {
                     })}
                     {agentThinking && (
                       <div className="flex gap-2">
-                        <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[9px] font-bold text-white shrink-0 mt-0.5">PM</div>
+                        <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">PM</div>
                         <div className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2.5">
                           <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '0ms' }} />
                           <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -745,37 +745,37 @@ export default function TaskDetail() {
                   <div className="border-t border-surface-3 p-4 space-y-2.5">
                     {/* Current PM question — shown here since it's sliced from the thread above */}
                     <div className="flex gap-2">
-                      <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[9px] font-bold text-white shrink-0 mt-0.5">PM</div>
-                      <div className="flex-1 text-xs text-purple-200 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2 leading-relaxed">
+                      <div className="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">PM</div>
+                      <div className="flex-1 text-sm text-purple-200 bg-purple-500/10 border border-purple-500/20 rounded-lg px-3 py-2 leading-relaxed">
                         <MarkdownText text={task.pm_pending_question} />
                       </div>
                     </div>
                     {splitProposal ? (
                       <div className="pl-7 space-y-2.5">
-                        <p className="text-[11px] font-medium text-gray-300">Would you like to split into smaller tasks?</p>
+                        <p className="text-xs font-medium text-gray-300">Would you like to split into smaller tasks?</p>
                         <ul className="space-y-1">
                           {splitProposal.parts.map((p, i) => (
-                            <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
-                              <span className={`shrink-0 mt-px text-[10px] px-1.5 py-0.5 rounded ${i === 0 ? 'bg-purple-500/15 text-purple-300' : 'bg-amber-500/10 text-amber-400'}`}>
+                            <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                              <span className={`shrink-0 mt-px text-xs px-1.5 py-0.5 rounded-md ${i === 0 ? 'bg-purple-500/15 text-purple-300' : 'bg-amber-500/10 text-amber-400'}`}>
                                 {i === 0 ? 'This task' : 'New'}
                               </span>
                               <span className="leading-tight">{p.title}</span>
                             </li>
                           ))}
                         </ul>
-                        <p className="text-[10px] text-gray-600">
+                        <p className="text-xs text-gray-600">
                           Yes keeps the first as this task and creates the rest as drafts that need a description. No keeps everything as one task.
                         </p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleSplit(true)}
-                            className="px-3 py-1.5 text-xs font-medium bg-amber-500/90 text-white rounded-lg hover:bg-amber-500 transition-colors"
+                            className="px-3 py-1.5 text-sm font-medium bg-amber-500/90 text-white rounded-lg hover:bg-amber-500 transition-colors"
                           >
                             Yes, split into {splitProposal.parts.length}
                           </button>
                           <button
                             onClick={() => handleSplit(false)}
-                            className="px-3 py-1.5 text-xs font-medium bg-surface-3 text-gray-300 border border-surface-4 rounded-lg hover:bg-surface-4 transition-colors"
+                            className="px-3 py-1.5 text-sm font-medium bg-surface-3 text-gray-300 border border-surface-4 rounded-lg hover:bg-surface-4 transition-colors"
                           >
                             No, keep as one
                           </button>
@@ -784,23 +784,23 @@ export default function TaskDetail() {
                     ) : abandonProposal ? (
                       <div className="pl-7 space-y-2.5">
                         {abandonProposal.reason && (
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-xs text-gray-400">
                             Reason: <span className="text-gray-300">{abandonProposal.reason}</span>
                           </p>
                         )}
-                        <p className="text-[10px] text-gray-600">
+                        <p className="text-xs text-gray-600">
                           Abandon archives this task (you can restore it later from the archive). Keep means it does belong here and planning continues.
                         </p>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleAbandon(true)}
-                            className="px-3 py-1.5 text-xs font-medium bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors"
+                            className="px-3 py-1.5 text-sm font-medium bg-red-500/90 text-white rounded-lg hover:bg-red-500 transition-colors"
                           >
                             Abandon task
                           </button>
                           <button
                             onClick={() => handleAbandon(false)}
-                            className="px-3 py-1.5 text-xs font-medium bg-surface-3 text-gray-300 border border-surface-4 rounded-lg hover:bg-surface-4 transition-colors"
+                            className="px-3 py-1.5 text-sm font-medium bg-surface-3 text-gray-300 border border-surface-4 rounded-lg hover:bg-surface-4 transition-colors"
                           >
                             Keep & continue
                           </button>
@@ -813,13 +813,13 @@ export default function TaskDetail() {
                         onChange={e => setAnswerText(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnswer(); } }}
                         placeholder="Reply… (Enter to send, Shift+Enter for new line)"
-                        className="flex-1 text-xs p-2.5 bg-surface-3 border border-surface-4 rounded-lg text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-accent transition-colors"
+                        className="flex-1 text-sm p-2.5 bg-surface-3 border border-surface-4 rounded-lg text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-accent transition-colors"
                         rows="3"
                       />
                       <button
                         onClick={handleAnswer}
                         disabled={!answerText.trim()}
-                        className="self-end px-3 py-2 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="self-end px-3 py-2 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/80 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         Send
                       </button>
@@ -834,12 +834,12 @@ export default function TaskDetail() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
                         <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                        <p className="text-xs font-medium text-purple-300">
+                        <p className="text-sm font-medium text-purple-300">
                           {clientContextSkipped ? 'Knowledge notes — skipped (still available to save)' : 'Agent noted something worth remembering'}
                         </p>
                       </div>
                       {clientContextSkipped && (
-                        <button onClick={() => setClientContextSkipped(false)} className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors">
+                        <button onClick={() => setClientContextSkipped(false)} className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
                           Review
                         </button>
                       )}
@@ -853,25 +853,25 @@ export default function TaskDetail() {
                             value={value}
                             onChange={e => setClientContextEdit(e.target.value)}
                             rows={5}
-                            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-xs text-gray-300 leading-relaxed resize-none outline-none focus:border-purple-500/50 placeholder-gray-600"
+                            className="w-full bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm text-gray-300 leading-relaxed resize-none outline-none focus:border-purple-500/50 placeholder-gray-600"
                             placeholder="Edit what should be remembered about this client…"
                           />
                           <div className="flex justify-between items-center">
-                            <p className="text-[10px] text-gray-600">Edit before saving</p>
-                            <span className={`text-[10px] tabular-nums ${overLimit ? 'text-red-400' : 'text-gray-600'}`}>{value.length} / 2000</span>
+                            <p className="text-xs text-gray-600">Edit before saving</p>
+                            <span className={`text-xs tabular-nums ${overLimit ? 'text-red-400' : 'text-gray-600'}`}>{value.length} / 2000</span>
                           </div>
                           <div className="flex gap-2 pt-0.5">
                             <button
                               onClick={handleSaveClientContext}
                               disabled={savingClientContext || value.length > 2000}
-                              className="flex-1 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-lg transition-colors"
+                              className="flex-1 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-lg transition-colors"
                             >
                               {savingClientContext ? 'Saving…' : 'Save knowledge'}
                             </button>
                             <button
                               onClick={handleSkipClientContext}
                               disabled={savingClientContext}
-                              className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 border border-border rounded-lg transition-colors"
+                              className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg transition-colors"
                             >
                               Skip for now
                             </button>
@@ -885,11 +885,11 @@ export default function TaskDetail() {
                 {/* PM satisfied — human sign-off */}
                 {pmDone && task.human_approval_status !== HUMAN_STATUS.APPROVED && (
                   <div className="border-t border-surface-3 p-4 space-y-2.5">
-                    <p className="text-xs text-green-400 font-medium">Planning agent satisfied — review the requirements and approve</p>
+                    <p className="text-sm text-green-400 font-medium">Planning agent satisfied — review the requirements and approve</p>
                     {task.pm_review_comment && (
                       <div className="bg-surface-2 rounded-lg p-3">
-                        <p className="text-[10px] text-gray-600 font-medium uppercase tracking-wide mb-1.5">Requirements</p>
-                        <MarkdownText text={task.pm_review_comment} className="text-xs text-gray-300 leading-relaxed" />
+                        <p className="text-xs text-gray-600 font-medium uppercase tracking-wide mb-1.5">Requirements</p>
+                        <MarkdownText text={task.pm_review_comment} className="text-sm text-gray-300 leading-relaxed" />
                       </div>
                     )}
                     {!approvingHuman ? (
@@ -897,7 +897,7 @@ export default function TaskDetail() {
                         onClick={() => setApprovingHuman(true)}
                         disabled={!!(task.pm_client_context_draft && !clientContextSkipped)}
                         title={task.pm_client_context_draft && !clientContextSkipped ? 'Save or skip the knowledge notes above first' : undefined}
-                        className="w-full py-2 text-xs font-medium bg-green-600/20 text-green-300 rounded-lg hover:bg-green-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="w-full py-2 text-sm font-medium bg-green-600/20 text-green-300 rounded-lg hover:bg-green-600/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                       >
                         Approve &amp; unlock In Progress
                       </button>
@@ -907,12 +907,12 @@ export default function TaskDetail() {
                           value={approvalComment}
                           onChange={e => setApprovalComment(e.target.value)}
                           placeholder="Optional comment…"
-                          className="w-full text-xs p-2.5 bg-surface-3 border border-surface-4 rounded-lg text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-accent"
+                          className="w-full text-sm p-2.5 bg-surface-3 border border-surface-4 rounded-lg text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-accent"
                           rows="2"
                         />
                         <div className="flex gap-2">
-                          <button onClick={handleApprove} className="flex-1 py-2 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Approve</button>
-                          <button onClick={() => { setApprovingHuman(false); setApprovalComment(''); }} className="px-3 py-2 text-xs text-gray-500 hover:text-gray-300 transition-colors">Cancel</button>
+                          <button onClick={handleApprove} className="flex-1 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">Approve</button>
+                          <button onClick={() => { setApprovingHuman(false); setApprovalComment(''); }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-100 transition-colors">Cancel</button>
                         </div>
                       </div>
                     )}
@@ -922,13 +922,13 @@ export default function TaskDetail() {
                 {/* Bypass — all items checked but PM hasn't approved */}
                 {showBypass && (
                   <div className="border-t border-surface-3 px-4 py-3 space-y-2">
-                    <p className="text-[10px] text-gray-500">All items are checked but the planning agent hasn't approved. You can bypass if you're satisfied.</p>
+                    <p className="text-xs text-gray-500">All items are checked but the planning agent hasn't approved. You can bypass if you're satisfied.</p>
                     <div className="flex gap-2">
-                      <button onClick={handleBypass} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg transition-colors ${confirmBypass ? 'bg-orange-500/25 text-orange-300 border border-orange-500/30' : 'bg-surface-3 text-gray-500 hover:text-orange-300 hover:bg-orange-500/10'}`}>
+                      <button onClick={handleBypass} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg transition-colors ${confirmBypass ? 'bg-orange-500/25 text-orange-300 border border-orange-500/30' : 'bg-surface-3 text-gray-500 hover:text-orange-300 hover:bg-orange-500/10'}`}>
                         <Unlock size={11} />
                         {confirmBypass ? 'Confirm bypass?' : 'Bypass planning checks'}
                       </button>
-                      <button onClick={() => { setShowNewTask(true); setSelectedTask(null); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg bg-surface-3 text-gray-500 hover:text-accent hover:bg-accent/10 transition-colors">
+                      <button onClick={() => { setShowNewTask(true); setSelectedTask(null); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-surface-3 text-gray-500 hover:text-accent hover:bg-accent/10 transition-colors">
                         <Plus size={11} />
                         New task instead
                       </button>
@@ -941,11 +941,11 @@ export default function TaskDetail() {
             {/* Description — editable */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs text-gray-600 font-medium">Description</p>
+                <p className="text-sm text-gray-600 font-medium">Description</p>
                 {!editingDescription && (
                   <button
                     onClick={() => { setDescriptionDraft(task.description || ''); setEditingDescription(true); }}
-                    className="text-[10px] text-gray-700 hover:text-gray-400 flex items-center gap-1 transition-colors"
+                    className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors"
                   >
                     <Pencil size={10} /> Edit
                   </button>
@@ -962,10 +962,10 @@ export default function TaskDetail() {
                     placeholder="Describe what needs to be done…"
                   />
                   <div className="flex gap-2">
-                    <button onClick={saveDescription} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/80 transition-colors">
+                    <button onClick={saveDescription} className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/80 transition-colors">
                       <Check size={11} /> Save
                     </button>
-                    <button onClick={() => setEditingDescription(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                    <button onClick={() => setEditingDescription(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-100 transition-colors">
                       Cancel
                     </button>
                   </div>
@@ -973,9 +973,9 @@ export default function TaskDetail() {
               ) : (
                 <p
                   onClick={() => { setDescriptionDraft(task.description || ''); setEditingDescription(true); }}
-                  className="text-sm text-gray-400 leading-relaxed cursor-text hover:text-gray-300 transition-colors"
+                  className="text-sm text-gray-400 leading-relaxed cursor-text hover:text-gray-100 transition-colors"
                 >
-                  {task.description || <span className="text-gray-700 italic">No description — click to add</span>}
+                  {task.description || <span className="text-gray-600 italic">No description — click to add</span>}
                 </p>
               )}
             </div>
@@ -984,8 +984,8 @@ export default function TaskDetail() {
             {task.progress > 0 && (
               <div className="bg-surface-2 rounded-lg p-2.5">
                 <div className="flex justify-between items-center mb-2">
-                  <p className="text-xs text-gray-600 font-medium">Progress</p>
-                  <span className="text-xs text-gray-400">{task.progress}%</span>
+                  <p className="text-sm text-gray-600 font-medium">Progress</p>
+                  <span className="text-sm text-gray-400">{task.progress}%</span>
                 </div>
                 <div className="h-1.5 bg-surface-4 rounded-full overflow-hidden">
                   <div
@@ -1004,11 +1004,11 @@ export default function TaskDetail() {
             {/* Acceptance criteria — editable */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs text-gray-600 font-medium">Acceptance Criteria</p>
+                <p className="text-sm text-gray-600 font-medium">Acceptance Criteria</p>
                 {!editingCriteria && (
                   <button
                     onClick={() => { setCriteriaDraft(task.acceptance_criteria || ''); setEditingCriteria(true); }}
-                    className="text-[10px] text-gray-700 hover:text-gray-400 flex items-center gap-1 transition-colors"
+                    className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors"
                   >
                     <Pencil size={10} /> Edit
                   </button>
@@ -1020,15 +1020,15 @@ export default function TaskDetail() {
                     value={criteriaDraft}
                     onChange={e => setCriteriaDraft(e.target.value)}
                     onFocus={e => e.target.focus()}
-                    className="w-full text-xs p-2.5 bg-surface-2 border border-accent/60 rounded-lg text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-accent transition-colors"
+                    className="w-full text-sm p-2.5 bg-surface-2 border border-accent/60 rounded-lg text-gray-300 placeholder-gray-600 resize-none focus:outline-none focus:border-accent transition-colors"
                     rows="3"
                     placeholder="Define what done looks like…"
                   />
                   <div className="flex gap-2">
-                    <button onClick={saveCriteria} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-accent text-white rounded-lg hover:bg-accent/80 transition-colors">
+                    <button onClick={saveCriteria} className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-accent text-white rounded-lg hover:bg-accent/80 transition-colors">
                       <Check size={11} /> Save
                     </button>
-                    <button onClick={() => setEditingCriteria(false)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                    <button onClick={() => setEditingCriteria(false)} className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-100 transition-colors">
                       Cancel
                     </button>
                   </div>
@@ -1039,8 +1039,8 @@ export default function TaskDetail() {
                   className="bg-surface-2 rounded-lg p-3 cursor-text hover:bg-surface-3/50 transition-colors"
                 >
                   {task.acceptance_criteria
-                    ? <p className="text-xs text-gray-400 leading-relaxed whitespace-pre-wrap">{task.acceptance_criteria}</p>
-                    : <p className="text-xs text-gray-700 italic">None — click to add</p>
+                    ? <p className="text-sm text-gray-400 leading-relaxed whitespace-pre-wrap">{task.acceptance_criteria}</p>
+                    : <p className="text-sm text-gray-600 italic">None — click to add</p>
                   }
                 </div>
               )}
@@ -1048,11 +1048,11 @@ export default function TaskDetail() {
 
             {/* Priority */}
             <div className="bg-surface-2 rounded-lg p-2.5">
-              <p className="text-xs text-gray-600 mb-1.5">Priority</p>
+              <p className="text-sm text-gray-600 mb-1.5">Priority</p>
               <select
                 value={task.priority}
                 onChange={e => handlePriorityChange(e.target.value)}
-                className="w-full bg-transparent text-xs font-medium focus:outline-none cursor-pointer"
+                className="w-full bg-transparent text-sm font-medium focus:outline-none cursor-pointer"
                 style={{ color: PRIORITY_COLORS[task.priority] }}
               >
                 {PRIORITIES.map(p => (
@@ -1064,16 +1064,16 @@ export default function TaskDetail() {
             {/* Team section — controls visible/restricted for client role */}
             <div className="border border-border rounded-xl overflow-hidden">
               <div className="px-3 py-1.5 bg-surface-3/50 border-b border-border">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600">Team</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-gray-600">Team</p>
               </div>
               <div className="p-3 space-y-3">
                 {/* TODO: complexity is visible to client but read-only when client login is implemented */}
                 <div className="bg-surface-2 rounded-lg p-2.5">
-                  <p className="text-xs text-gray-600 mb-1.5">Complexity</p>
+                  <p className="text-sm text-gray-600 mb-1.5">Complexity</p>
                   <select
                     value={task.complexity}
                     onChange={e => handleComplexityChange(e.target.value)}
-                    className="w-full bg-transparent text-xs font-medium text-gray-300 focus:outline-none cursor-pointer"
+                    className="w-full bg-transparent text-sm font-medium text-gray-300 focus:outline-none cursor-pointer"
                   >
                     {COMPLEXITIES.map(c => (
                       <option key={c} value={c} style={{ background: '#1a1a2e' }}>{c}</option>
@@ -1081,31 +1081,32 @@ export default function TaskDetail() {
                   </select>
                 </div>
 
-                {/* TODO: hide auto_complete toggle for client role when login is implemented */}
-                <div
-                  className="flex items-center justify-between bg-surface-2 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-surface-3/60 transition-colors"
-                  onClick={() => {
-                    const next = task.auto_complete ? 0 : 1;
-                    updateTask(task.id, { auto_complete: next });
-                    setTask(t => ({ ...t, auto_complete: next }));
-                  }}
-                >
-                  <div>
-                    <p className="text-xs font-medium text-gray-300">Auto-complete</p>
-                    <p className="text-[10px] text-gray-600 mt-0.5">
-                      {task.auto_complete ? 'PR will be merged automatically → Testing' : 'PR sent to Human Action for your review'}
-                    </p>
+                {showAutoComplete && (
+                  <div
+                    className="flex items-center justify-between bg-surface-2 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-surface-3/60 transition-colors"
+                    onClick={() => {
+                      const next = task.auto_complete ? 0 : 1;
+                      updateTask(task.id, { auto_complete: next });
+                      setTask(t => ({ ...t, auto_complete: next }));
+                    }}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-gray-300">Auto-complete</p>
+                      <p className="text-xs text-gray-600 mt-0.5">
+                        {task.auto_complete ? 'PR will be merged automatically → Testing' : 'PR sent to Human Action for your review'}
+                      </p>
+                    </div>
+                    <div className={`w-8 h-4.5 rounded-full transition-colors relative shrink-0 ml-3 ${task.auto_complete ? 'bg-accent' : 'bg-surface-4'}`}
+                         style={{ height: '18px', width: '32px' }}>
+                      <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${task.auto_complete ? 'translate-x-[14px]' : 'translate-x-0.5'}`} />
+                    </div>
                   </div>
-                  <div className={`w-8 h-4.5 rounded-full transition-colors relative shrink-0 ml-3 ${task.auto_complete ? 'bg-accent' : 'bg-surface-4'}`}
-                       style={{ height: '18px', width: '32px' }}>
-                    <div className={`absolute top-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform ${task.auto_complete ? 'translate-x-[14px]' : 'translate-x-0.5'}`} />
-                  </div>
-                </div>
+                )}
 
                 {/* TODO: hide Move To buttons for client role when login is implemented */}
                 {!isLocked && (
                   <div>
-                    <p className="text-xs text-gray-600 mb-2 flex items-center gap-1"><ArrowRight size={10} />Move to</p>
+                    <p className="text-sm text-gray-600 mb-2 flex items-center gap-1"><ArrowRight size={10} />Move to</p>
                     <div className="flex flex-wrap gap-1.5">
                       {columns.filter(c => c.id !== task.column_id && !c.archived_at).map(col => (
                         <button key={col.id} onClick={() => handleMove(col.id)}
@@ -1123,11 +1124,11 @@ export default function TaskDetail() {
             {/* Assigned agent */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-medium text-gray-500">Assigned Agent</label>
+                <label className="text-sm font-medium text-gray-500">Assigned Agent</label>
                 {task.assigned_agent_id && (
                   <button
                     onClick={handleOpenEditAgent}
-                    className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-accent transition-colors"
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-accent transition-colors"
                     title="Edit this agent"
                   >
                     <Pencil size={10} />
@@ -1157,15 +1158,15 @@ export default function TaskDetail() {
             {/* Unsaved changes prompt — shown when user tries to open agent editor */}
             {pendingEditAgent && (
               <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4" data-modal-backdrop="static">
-                <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+                <div className="bg-surface-1 border border-border rounded-xl w-full max-w-sm shadow-xl p-6 space-y-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-200">Unsaved changes</h3>
-                    <p className="text-xs text-gray-500 mt-1">You have unsaved changes in this task. Would you like to save them before opening the agent editor?</p>
+                    <h3 className="text-base font-semibold text-gray-200">Unsaved changes</h3>
+                    <p className="text-sm text-gray-500 mt-1">You have unsaved changes in this task. Would you like to save them before opening the agent editor?</p>
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setPendingEditAgent(null)}
-                      className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-300 rounded-lg border border-border hover:bg-surface-3 transition-colors"
+                      className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-100 rounded-lg border border-border hover:bg-surface-3 transition-colors"
                     >
                       Cancel
                     </button>
@@ -1189,7 +1190,7 @@ export default function TaskDetail() {
             {/* Tags */}
             {tags.length > 0 && (
               <div>
-                <p className="text-xs text-gray-600 mb-2 flex items-center gap-1"><Tag size={10} />Tags</p>
+                <p className="text-sm text-gray-600 mb-2 flex items-center gap-1"><Tag size={10} />Tags</p>
                 <div className="flex flex-wrap gap-1.5">
                   {tags.map(tag => (
                     <span key={tag} className="tag bg-surface-3 text-gray-400">{tag}</span>
@@ -1199,13 +1200,13 @@ export default function TaskDetail() {
             )}
 
             {/* Timestamps */}
-            <div className="flex items-center gap-3 text-xs text-gray-700">
-              <span className="flex items-center gap-1">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="flex items-center gap-1 text-gray-400">
                 <Clock size={10} />
                 Created {formatDistanceToNow(new Date(task.created_at.replace(' ', 'T') + 'Z'), { addSuffix: true })}
               </span>
               {task.updated_at && task.updated_at !== task.created_at && (
-                <span className="flex items-center gap-1 text-gray-600">
+                <span className="flex items-center gap-1 text-gray-400">
                   · Modified {formatDistanceToNow(new Date(task.updated_at.replace(' ', 'T') + 'Z'), { addSuffix: true })}
                 </span>
               )}
@@ -1220,7 +1221,7 @@ export default function TaskDetail() {
           {/* Activity log */}
           {logs.length > 0 && (
             <div className="border-t border-border p-5">
-              <p className="text-xs text-gray-600 mb-3 flex items-center gap-1"><Activity size={10} />Activity</p>
+              <p className="text-sm text-gray-600 mb-3 flex items-center gap-1"><Activity size={10} />Activity</p>
               <div className="max-h-64 overflow-y-auto pr-1 space-y-2.5">
                 {logs.map(log => {
                   const label = (() => {
@@ -1251,8 +1252,8 @@ export default function TaskDetail() {
                     <div key={log.id} className="flex gap-2.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-surface-4 mt-1.5 shrink-0" />
                       <div>
-                        <p className="text-xs text-gray-400">{label}</p>
-                        <p className="text-[10px] text-gray-700 mt-0.5">
+                        <p className="text-sm text-gray-400">{label}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">
                           {log.agent_name || 'System'} · {formatDistanceToNow(new Date(log.created_at.replace(' ', 'T') + 'Z'), { addSuffix: true })}
                         </p>
                       </div>

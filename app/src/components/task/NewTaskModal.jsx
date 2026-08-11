@@ -7,8 +7,9 @@ import { COLUMN } from '../../constants/columns';
 export default function NewTaskModal() {
   const { agents, roles, createTask, setShowNewTask, currentProjectId, projects } = useStore();
   const currentProject = projects.find(p => p.id === currentProjectId);
-  // Auto-complete only means something on boards with a PR/code workflow.
-  const showAutoComplete = currentProject?.pr_workflow !== false;
+  // Auto-complete (PR-based) only means something when the board both does coder
+  // work and has an actual git repo connected to open a PR against.
+  const showAutoComplete = currentProject?.pr_workflow !== false && !!currentProject?.has_git;
   const defaultPlanningAgent = agents.find(a => a.active !== 0 && Array.isArray(a.role_ids) && a.role_ids.includes('perm_planning'));
   const [form, setForm] = useState({
     title: '', description: '', priority: PRIORITY.MEDIUM, complexity: COMPLEXITY.MEDIUM,
@@ -39,7 +40,7 @@ export default function NewTaskModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg animate-slide-in">
+      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-lg animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h2 className="text-base font-semibold text-gray-100">New Task</h2>
           <button onClick={() => setShowNewTask(false)} className="btn-ghost p-1.5 rounded-lg">
@@ -49,7 +50,7 @@ export default function NewTaskModal() {
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Title *</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Title *</label>
             <input
               autoFocus
               value={form.title}
@@ -61,7 +62,7 @@ export default function NewTaskModal() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Description</label>
             <textarea
               value={form.description}
               onChange={e => set('description', e.target.value)}
@@ -73,7 +74,7 @@ export default function NewTaskModal() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Acceptance Criteria <span className="text-gray-600">(optional)</span></label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Acceptance Criteria <span className="text-gray-600">(optional)</span></label>
             <textarea
               value={form.acceptance_criteria}
               onChange={e => set('acceptance_criteria', e.target.value)}
@@ -86,14 +87,14 @@ export default function NewTaskModal() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">Priority</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Priority</label>
               <select value={form.priority} onChange={e => set('priority', e.target.value)}
                 className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
                 {PRIORITIES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1.5">Complexity</label>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">Complexity</label>
               <select value={form.complexity} onChange={e => set('complexity', e.target.value)}
                 className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
                 {COMPLEXITIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -102,7 +103,7 @@ export default function NewTaskModal() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Assign Agent</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Assign Agent</label>
             <select value={form.assigned_agent_id} onChange={e => set('assigned_agent_id', e.target.value)}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
               <option value="">Unassigned</option>
@@ -124,8 +125,8 @@ export default function NewTaskModal() {
               onClick={() => set('auto_complete', !form.auto_complete)}
             >
               <div>
-                <p className="text-xs font-medium text-gray-300">Auto-complete</p>
-                <p className="text-[10px] text-gray-500 mt-0.5">
+                <p className="text-sm font-medium text-gray-300">Auto-complete</p>
+                <p className="text-xs text-gray-500 mt-0.5">
                   {form.auto_complete ? 'PR merged automatically → Testing' : 'PR sent to Human Action for review'}
                 </p>
               </div>
@@ -137,7 +138,7 @@ export default function NewTaskModal() {
           )}
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Tags <span className="text-gray-600">(comma separated)</span></label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Tags <span className="text-gray-600">(comma separated)</span></label>
             <input
               value={form.tags}
               onChange={e => set('tags', e.target.value)}

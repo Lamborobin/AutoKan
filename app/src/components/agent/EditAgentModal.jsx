@@ -140,7 +140,7 @@ export default function EditAgentModal() {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in">
+      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-border sticky top-0 bg-surface-2 z-10">
           <div>
             <h2 className="text-base font-semibold text-gray-100">Edit Agent</h2>
@@ -155,7 +155,7 @@ export default function EditAgentModal() {
           {originArchived && (
             <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
               <LayoutTemplate size={12} className="text-amber-400 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-400 leading-relaxed">
+              <p className="text-xs text-amber-400 leading-relaxed">
                 Created from template <span className="font-medium">{originTemplate.name}</span>, which has since been archived.
               </p>
             </div>
@@ -163,7 +163,7 @@ export default function EditAgentModal() {
 
           {/* Name — no role generation in edit mode */}
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Name *</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Name *</label>
             <input
               value={form.name}
               onChange={e => set('name', e.target.value)}
@@ -172,7 +172,7 @@ export default function EditAgentModal() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Description</label>
             <textarea
               value={form.description}
               onChange={e => set('description', e.target.value)}
@@ -196,7 +196,7 @@ export default function EditAgentModal() {
           {/* Save as template inline UI */}
           {showSaveAsTemplate ? (
             <div className="bg-surface-3 border border-accent/30 rounded-xl p-3 space-y-2.5">
-              <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
+              <p className="text-sm font-medium text-gray-300 flex items-center gap-1.5">
                 <LayoutTemplate size={12} className="text-accent" />
                 Save as template
               </p>
@@ -206,15 +206,15 @@ export default function EditAgentModal() {
                 placeholder="Template name"
                 className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors"
               />
-              <p className="text-[10px] text-gray-600">Saves this agent's description, model, and color. You can edit the system prompt content in the Templates manager.</p>
+              <p className="text-xs text-gray-600">Saves this agent's description, model, and color. You can edit the system prompt content in the Templates manager.</p>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowSaveAsTemplate(false)}
-                  className="btn-ghost flex-1 justify-center py-1.5 text-xs">
+                  className="btn-ghost flex-1 justify-center py-1.5 text-sm">
                   Cancel
                 </button>
                 <button type="button" onClick={handleSaveAsTemplate}
                   disabled={savingAsTemplate || !templateName.trim()}
-                  className="btn-primary flex-1 justify-center py-1.5 text-xs disabled:opacity-40">
+                  className="btn-primary flex-1 justify-center py-1.5 text-sm disabled:opacity-40">
                   <Check size={12} />
                   {savingAsTemplate ? 'Saving...' : 'Save Template'}
                 </button>
@@ -224,10 +224,10 @@ export default function EditAgentModal() {
             <button
               type="button"
               onClick={() => { setShowSaveAsTemplate(true); setTemplateSaved(false); }}
-              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border text-xs transition-colors ${
+              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border text-sm transition-colors ${
                 templateSaved
                   ? 'border-accent/40 text-accent bg-accent/5'
-                  : 'border-dashed border-border text-gray-600 hover:text-accent hover:border-accent/40'
+                  : 'border-dashed border-border text-gray-400 hover:text-accent hover:border-accent/40'
               }`}
             >
               <LayoutTemplate size={12} />
@@ -241,14 +241,14 @@ export default function EditAgentModal() {
               <div className="flex items-start gap-2">
                 <AlertCircle size={13} className="text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-medium text-amber-300">Column access removed — tasks will be displaced</p>
-                  <p className="text-[10px] text-amber-400/80 mt-0.5">
+                  <p className="text-sm font-medium text-amber-300">Column access removed — tasks will be displaced</p>
+                  <p className="text-xs text-amber-400/80 mt-0.5">
                     {displacementWarning.tasks.length} task{displacementWarning.tasks.length > 1 ? 's' : ''} assigned to this agent will be moved to Unassigned:
                   </p>
                   <ul className="mt-1.5 space-y-0.5 max-h-32 overflow-y-auto">
                     {displacementWarning.tasks.map(t => (
-                      <li key={t.id} className="text-[10px] text-amber-400 flex items-center gap-2">
-                        <span className="text-[9px] text-amber-500/70 shrink-0">{columns.find(c => c.id === t.column_id)?.name || t.column_id}</span>
+                      <li key={t.id} className="text-xs text-amber-400 flex items-center gap-2">
+                        <span className="text-xs text-amber-500/70 shrink-0">{columns.find(c => c.id === t.column_id)?.name || t.column_id}</span>
                         <span className="truncate">{t.title}</span>
                       </li>
                     ))}
@@ -257,11 +257,11 @@ export default function EditAgentModal() {
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setDisplacementWarning(null)}
-                  className="flex-1 py-1.5 text-xs rounded-lg border border-border text-gray-400 hover:text-gray-200 transition-colors">
+                  className="flex-1 py-1.5 text-sm rounded-lg border border-border text-gray-400 hover:text-gray-200 transition-colors">
                   Cancel
                 </button>
                 <button type="button" onClick={doSave} disabled={saving}
-                  className="flex-1 py-1.5 text-xs font-medium bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors disabled:opacity-40">
+                  className="flex-1 py-1.5 text-sm font-medium bg-amber-500/20 border border-amber-500/40 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors disabled:opacity-40">
                   {saving ? 'Saving…' : 'Save & Move to Unassigned'}
                 </button>
               </div>
@@ -269,7 +269,7 @@ export default function EditAgentModal() {
           )}
 
           {error && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
+            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>
           )}
 
           <div className="flex gap-2 pt-2 flex-wrap">
@@ -277,17 +277,17 @@ export default function EditAgentModal() {
               <button
                 type="button"
                 onClick={handleArchiveAgent}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                   confirmingArchive
                     ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
-                    : 'btn-ghost text-gray-600 hover:text-amber-400'
+                    : 'btn-ghost text-gray-400 hover:text-amber-400'
                 }`}
               >
                 <Archive size={13} />
                 Archive
               </button>
               {confirmingArchive && (
-                <div className="absolute bottom-full left-0 mb-1 z-20 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
+                <div className="absolute bottom-full left-0 mb-1 z-20 bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
                   <span>Are you sure you want to archive this agent?</span>
                   <button type="button" onClick={e => { e.stopPropagation(); setConfirmingArchive(false); }} className="text-amber-400 hover:text-amber-200 leading-none">✕</button>
                 </div>
@@ -297,17 +297,17 @@ export default function EditAgentModal() {
               <button
                 type="button"
                 onClick={handleDelete}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                   confirming
                     ? 'bg-red-500/20 border border-red-500/40 text-red-400'
-                    : 'btn-ghost text-gray-600 hover:text-red-400'
+                    : 'btn-ghost text-gray-400 hover:text-red-400'
                 }`}
               >
                 <Trash2 size={13} />
                 Delete
               </button>
               {confirming && (
-                <div className="absolute bottom-full left-0 mb-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-[10px] rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
+                <div className="absolute bottom-full left-0 mb-1 z-20 bg-red-500/20 border border-red-500/40 text-red-300 text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap flex items-center gap-2 shadow-lg">
                   <span>Are you sure you want to delete this agent?</span>
                   <button type="button" onClick={e => { e.stopPropagation(); setConfirming(false); }} className="text-red-400 hover:text-red-200 leading-none">✕</button>
                 </div>

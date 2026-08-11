@@ -3,7 +3,7 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info, Mail, UserPlus, FlaskConical,
+  BookOpen, Info, Mail, UserPlus, FlaskConical, Link2 as LinkIcon,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
 import BenchmarkPanel from './BenchmarkPanel';
@@ -324,7 +324,7 @@ export default function SettingsPage() {
   function CapBadge({ cap }) {
     const meta = capMeta[cap] || { label: cap, color: '#6366f1' };
     return (
-      <span className="text-[8px] px-1 py-0.5 rounded-full font-medium"
+      <span className="text-xs px-1 py-0.5 rounded-full font-medium"
         style={{ background: meta.color + '20', color: meta.color }}>
         {meta.label}
       </span>
@@ -339,11 +339,11 @@ export default function SettingsPage() {
       <div className="bg-surface-3 border border-border rounded-lg p-2 space-y-1 max-h-56 overflow-y-auto">
         <label className="flex items-center gap-1.5 px-0.5 cursor-pointer">
           <input type="checkbox" className="accent-accent w-2.5 h-2.5" checked={allAgents} onChange={() => onChange([])} />
-          <span className="text-[10px] text-gray-300 font-medium">All agents</span>
-          <span className="text-[9px] text-gray-600">· no restriction</span>
+          <span className="text-xs text-gray-300 font-medium">All agents</span>
+          <span className="text-xs text-gray-600">· no restriction</span>
         </label>
         <div className="border-t border-border my-0.5 opacity-50" />
-        {capabilityRoles.length === 0 && <p className="text-[9px] text-gray-600 px-0.5">No capabilities available.</p>}
+        {capabilityRoles.length === 0 && <p className="text-xs text-gray-600 px-0.5">No capabilities available.</p>}
         {capabilityRoles.map(role => (
           <label key={role.id} className={`flex items-center gap-1.5 px-0.5 cursor-pointer ${allAgents ? 'opacity-50' : ''}`}>
             <input type="checkbox" className="accent-accent w-2.5 h-2.5"
@@ -351,7 +351,7 @@ export default function SettingsPage() {
               onChange={e => onChange(e.target.checked ? [...selected, role.id] : selected.filter(c => c !== role.id))}
             />
             <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: role.color }} />
-            <span className="text-[10px] text-gray-400">{role.name}</span>
+            <span className="text-xs text-gray-400">{role.name}</span>
           </label>
         ))}
       </div>
@@ -362,17 +362,17 @@ export default function SettingsPage() {
     const isSelected = selectedFile?.name === file.name && selectedFile?.scope === scope;
     return (
       <div
-        className={`group flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors ${
+        className={`group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
           isSelected ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
         onClick={() => selectFile(file, scope)}
       >
-        <FileText size={11} className="shrink-0" />
-        <span className="text-[11px] flex-1 truncate">{file.label || file.name}</span>
-        {file.protected && <span className="text-[8px] px-1 py-0.5 rounded bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">protected</span>}
+        <FileText size={14} className="shrink-0" />
+        <span className="text-sm flex-1 truncate">{file.label || file.name}</span>
+        {file.protected && <span className="text-xs px-1 py-0.5 rounded-md bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">protected</span>}
         {/* All actions stay visible (and tinted) always — none hidden behind hover */}
         {actions && (
-          <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
             {actions}
           </div>
         )}
@@ -392,7 +392,7 @@ export default function SettingsPage() {
       <button
         key={id}
         onClick={() => setSection(id)}
-        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-colors group ${
+        className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-sm transition-colors group ${
           active ? 'bg-accent/15 text-accent' : 'text-gray-400 hover:bg-surface-3 hover:text-gray-200'
         }`}
       >
@@ -406,9 +406,9 @@ export default function SettingsPage() {
             onClick={e => { e.stopPropagation(); setOpenInfoKey(infoKey); }}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); setOpenInfoKey(infoKey); } }}
             title="What is this?"
-            className="p-0.5 rounded text-gray-600 hover:text-accent hover:bg-surface-3 transition-colors opacity-60 group-hover:opacity-100"
+            className="p-0.5 rounded-md text-gray-400 hover:text-accent hover:bg-surface-3 transition-colors"
           >
-            <Info size={11} />
+            <Info size={14} />
           </span>
         )}
       </button>
@@ -416,9 +416,9 @@ export default function SettingsPage() {
   }
 
   const connectionDot = !currentProject?.client_path
-    ? <span className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400" />
+    ? <span className="ml-auto shrink-0 text-amber-400" title="No folder connected"><AlertTriangle size={13} /></span>
     : !currentProject?.path_exists
-    ? <span className="ml-auto w-1.5 h-1.5 rounded-full bg-amber-400" />
+    ? <span className="ml-auto shrink-0 text-amber-400" title="Connected folder not found"><AlertTriangle size={13} /></span>
     : null;
 
   return (
@@ -431,22 +431,22 @@ export default function SettingsPage() {
         <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
           <button
             onClick={() => setCurrentPage('board')}
-            className="flex items-center gap-1.5 text-[10px] text-gray-600 hover:text-gray-400 transition-colors mb-3"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors mb-3"
           >
             <ArrowLeft size={10} /> Back to board
           </button>
-          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Settings</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Settings</p>
           {currentProject && (
             <button
               onClick={() => setCurrentPage('board')}
               className="flex flex-col mt-2 w-full text-left group"
               title="Go to board"
             >
-              <span className="text-xs font-medium text-gray-300 truncate group-hover:text-accent transition-colors">
+              <span className="text-sm font-medium text-gray-300 truncate group-hover:text-accent transition-colors">
                 {currentProject.name}
               </span>
               {currentProject.client_name && (
-                <span className="text-[10px] text-gray-600 truncate">{currentProject.client_name}</span>
+                <span className="text-xs text-gray-600 truncate">{currentProject.client_name}</span>
               )}
             </button>
           )}
@@ -454,7 +454,7 @@ export default function SettingsPage() {
 
         {/* BOARD section */}
         <div className="px-2 pt-3 pb-1 shrink-0">
-          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Board</p>
           <div className="space-y-0.5">
             {navBtn('files', 'Board Context', FileText, null, 'board')}
           </div>
@@ -462,7 +462,7 @@ export default function SettingsPage() {
 
         {/* File list — only when section === 'files' (board-scoped) */}
         {section === 'files' && (
-          <div className="mx-2 mb-1 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+          <div className="mx-2 mb-1 shrink-0 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
             <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-240px)]">
               <div>
                 {customActive.map(f => (
@@ -471,18 +471,18 @@ export default function SettingsPage() {
                       <>
                         <button onClick={() => selectFile(f, 'board')} title="Edit content & visibility"
                           className="p-0.5 text-accent/70 hover:text-accent transition-colors">
-                          <Pencil size={10} />
+                          <Pencil size={13} />
                         </button>
                         <button onClick={() => setArchiveConfirm({ file: f, scope: 'board' })} title="Archive"
                           className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
-                          <Archive size={10} />
+                          <Archive size={13} />
                         </button>
                       </>
                     }
                     deleteAction={
                       <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
                         className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
-                        <Trash2 size={10} />
+                        <Trash2 size={13} />
                       </button>
                     }
                   />
@@ -495,33 +495,33 @@ export default function SettingsPage() {
                       onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
                       onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''), setNewFileCapabilities([]))}
                       placeholder="e.g. Brand voice, Returns policy…"
-                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-[11px] text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                     />
                     {newFileName.trim() && (
                       safeFileName(newFileName)
-                        ? <p className="text-[9px] text-gray-600 px-0.5">Saved as <span className="text-gray-500">{safeFileName(newFileName)}.md</span></p>
-                        : <p className="text-[9px] text-amber-500/80 px-0.5">Needs at least one letter or number</p>
+                        ? <p className="text-xs text-gray-600 px-0.5">Saved as <span className="text-gray-500">{safeFileName(newFileName)}.md</span></p>
+                        : <p className="text-xs text-amber-500/80 px-0.5">Needs at least one letter or number</p>
                     )}
-                    {newFileError && <p className="text-[9px] text-red-400">{newFileError}</p>}
+                    {newFileError && <p className="text-xs text-red-400">{newFileError}</p>}
                     <div className="flex gap-1.5">
                       <button type="submit" disabled={!safeFileName(newFileName)}
-                        className="flex-1 py-1 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 disabled:opacity-40 rounded-md transition-colors">
+                        className="flex-1 py-1 text-xs font-medium text-white bg-accent hover:bg-accent/80 disabled:opacity-40 rounded-md transition-colors">
                         Create
                       </button>
                       <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); setNewFileCapabilities([]); setNewFileError(''); }}
-                        className="px-3 py-1 text-[10px] text-gray-400 hover:text-gray-200 border border-border rounded-md transition-colors">
+                        className="px-3 py-1 text-xs text-gray-400 hover:text-gray-200 border border-border rounded-md transition-colors">
                         Cancel
                       </button>
                     </div>
                     <div className="space-y-1 pt-0.5">
-                      <p className="text-[9px] text-gray-600 uppercase tracking-wide font-medium px-0.5">Visible to</p>
+                      <p className="text-xs text-gray-600 uppercase tracking-wide font-medium px-0.5">Visible to</p>
                       <CapabilityPicker selected={newFileCapabilities} onChange={setNewFileCapabilities} />
                     </div>
                   </form>
                 ) : (
                   <button
                     onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); setNewFileCapabilities([]); }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-[11px] text-gray-600 hover:text-gray-400 transition-colors rounded-lg"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-sm text-gray-400 hover:text-gray-200 transition-colors rounded-lg"
                   >
                     <Plus size={11} /> New file
                   </button>
@@ -533,7 +533,7 @@ export default function SettingsPage() {
                 <div>
                   <button
                     onClick={() => setShowArchived(v => !v)}
-                    className="flex items-center gap-1.5 px-1.5 py-1 w-full text-[9px] font-semibold text-gray-600 uppercase tracking-widest hover:text-gray-400 transition-colors"
+                    className="flex items-center gap-1.5 px-1.5 py-1 w-full text-xs font-semibold text-gray-400 uppercase tracking-widest hover:text-gray-200 transition-colors"
                   >
                     {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
                     Archived ({customArchived.length})
@@ -543,13 +543,13 @@ export default function SettingsPage() {
                       actions={
                         <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
                           className="p-0.5 text-accent/70 hover:text-accent transition-colors">
-                          <RotateCcw size={10} />
+                          <RotateCcw size={13} />
                         </button>
                       }
                       deleteAction={
                         <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
                           className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
-                          <Trash2 size={10} />
+                          <Trash2 size={13} />
                         </button>
                       }
                     />
@@ -579,7 +579,7 @@ export default function SettingsPage() {
         {/* SUBSCRIPTION section (superadmin only) */}
         {isSuperAdmin && (
           <div className="px-2 pt-3 pb-1 shrink-0 border-t border-border">
-            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
             <div className="space-y-0.5">
               {navBtn('sub_overview', 'Overview', Settings2)}
               {navBtn('sub_clients',  'Clients',  Building2)}
@@ -590,7 +590,7 @@ export default function SettingsPage() {
 
         {/* Subscription file list — directly below the Instruction Files nav item */}
         {section === 'sub_files' && isSuperAdmin && (
-          <div className="mx-2 mb-2 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+          <div className="mx-2 mb-2 shrink-0 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
             <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-340px)]">
               <div>
                 {subFilesActive.map(f => (
@@ -598,18 +598,18 @@ export default function SettingsPage() {
                     actions={f.protected ? null : (
                       <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
                         className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
-                        <Archive size={10} />
+                        <Archive size={13} />
                       </button>
                     )}
                     deleteAction={f.protected ? null : (
                       <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
                         className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
-                        <Trash2 size={10} />
+                        <Trash2 size={13} />
                       </button>
                     )}
                   />
                 ))}
-                <p className="text-[9px] text-gray-600 px-2.5 py-1">Workspace files are fixed — edit their content, but no new files can be added here.</p>
+                <p className="text-xs text-gray-600 px-2.5 py-1">Workspace files are fixed — edit their content, but no new files can be added here.</p>
               </div>
 
               {/* Archived subscription files */}
@@ -617,7 +617,7 @@ export default function SettingsPage() {
                 <div>
                   <button
                     onClick={() => setShowArchived(v => !v)}
-                    className="flex items-center gap-1.5 px-1.5 py-1 w-full text-[9px] font-semibold text-gray-600 uppercase tracking-widest hover:text-gray-400 transition-colors"
+                    className="flex items-center gap-1.5 px-1.5 py-1 w-full text-xs font-semibold text-gray-400 uppercase tracking-widest hover:text-gray-200 transition-colors"
                   >
                     {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
                     Archived ({subFilesArchived.length})
@@ -627,13 +627,13 @@ export default function SettingsPage() {
                       actions={
                         <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
                           className="p-0.5 text-accent/70 hover:text-accent transition-colors">
-                          <RotateCcw size={10} />
+                          <RotateCcw size={13} />
                         </button>
                       }
                       deleteAction={
                         <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
                           className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
-                          <Trash2 size={10} />
+                          <Trash2 size={13} />
                         </button>
                       }
                     />
@@ -659,7 +659,7 @@ export default function SettingsPage() {
 
         {/* SYSTEM section */}
         <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
-          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">System</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">System</p>
           <div className="space-y-0.5">
             {navBtn('ai_context', 'System Rules', BookOpen, null, 'ai_context')}
           </div>
@@ -676,17 +676,17 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2.5">
                   <GitBranch size={15} className="text-accent" />
-                  <h2 className="text-sm font-semibold text-gray-200">Connections</h2>
+                  <h2 className="text-base font-semibold text-gray-200">Connections</h2>
                 </div>
                 <button
                   onClick={() => { loadProjects(); setConnRefreshKey(k => k + 1); }}
                   title="Refresh connection status"
-                  className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-surface-2 transition-colors"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-2 transition-colors"
                 >
                   <RotateCcw size={13} />
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mb-6">
+              <p className="text-sm text-gray-500 mb-6">
                 Link this board to a client folder. The folder can contain anything — a codebase, documents, or any other files relevant to this board's work.
               </p>
               <ConnectionsPanel
@@ -704,14 +704,14 @@ export default function SettingsPage() {
           <div className="flex-1 overflow-y-auto px-8 py-8">
             <div className="max-w-lg space-y-8">
               <div>
-                <h2 className="text-sm font-semibold text-gray-200 mb-1">Subscription</h2>
-                <p className="text-xs text-gray-500 mb-6">
+                <h2 className="text-base font-semibold text-gray-200 mb-1">Subscription</h2>
+                <p className="text-sm text-gray-500 mb-6">
                   Workspace-level settings. Changes apply to all boards and members.
                 </p>
 
                 {/* Workspace name */}
                 <div className="bg-surface-2 border border-border rounded-xl p-4 space-y-3">
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Workspace name</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Workspace name</p>
                   {editingSubName ? (
                     <form onSubmit={handleSaveSubName} className="space-y-2">
                       <input
@@ -720,14 +720,14 @@ export default function SettingsPage() {
                         autoFocus
                         className="w-full bg-surface-3 border border-accent/40 rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/60"
                       />
-                      {subNameError && <p className="text-xs text-red-400">{subNameError}</p>}
+                      {subNameError && <p className="text-sm text-red-400">{subNameError}</p>}
                       <div className="flex gap-2">
                         <button type="submit" disabled={savingSubName || !subName.trim()}
                           className="px-3 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
                           {savingSubName ? 'Saving…' : 'Save'}
                         </button>
                         <button type="button" onClick={() => { setEditingSubName(false); setSubName(subscription?.name || ''); setSubNameError(''); }}
-                          className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors">
+                          className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-100 transition-colors">
                           Cancel
                         </button>
                       </div>
@@ -736,7 +736,7 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-gray-200">{subscription?.name || '—'}</p>
                       <button onClick={() => { setEditingSubName(true); setSubNameError(''); }}
-                        className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors" title="Rename">
+                        className="p-1.5 rounded-md text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors" title="Rename">
                         <Pencil size={12} />
                       </button>
                     </div>
@@ -745,8 +745,8 @@ export default function SettingsPage() {
 
                 {/* Subscription ID (read-only info) */}
                 <div className="bg-surface-2 border border-border rounded-xl p-4 mt-3 space-y-1">
-                  <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Subscription ID</p>
-                  <p className="text-xs text-gray-500">{subscription?.id || '—'}</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Subscription ID</p>
+                  <p className="text-sm text-gray-500">{subscription?.id || '—'}</p>
                 </div>
               </div>
             </div>
@@ -757,14 +757,14 @@ export default function SettingsPage() {
         {section === 'sub_clients' && isSuperAdmin && (
           <div className="flex-1 overflow-y-auto px-8 py-8">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-sm font-semibold text-gray-200">Clients</h2>
+              <h2 className="text-base font-semibold text-gray-200">Clients</h2>
               {!addingClient && (
-                <button onClick={() => setAddingClient(true)} className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors">
+                <button onClick={() => setAddingClient(true)} className="flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors">
                   <Plus size={12} /> Add client
                 </button>
               )}
             </div>
-            <p className="text-xs text-gray-500 mb-6">Companies and organisations this workspace serves.</p>
+            <p className="text-sm text-gray-500 mb-6">Companies and organisations this workspace serves.</p>
 
             {/* Add client form */}
             {addingClient && (
@@ -791,10 +791,10 @@ export default function SettingsPage() {
                   <option value="manufacturing">Manufacturing</option>
                   <option value="personal">Personal</option>
                 </select>
-                {clientError && <p className="text-xs text-red-400">{clientError}</p>}
+                {clientError && <p className="text-sm text-red-400">{clientError}</p>}
                 <div className="flex gap-2">
                   <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientSector('software'); setClientError(''); }}
-                    className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
+                    className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
                   <button type="submit" disabled={creatingClient || !clientName.trim()}
                     className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
                     {creatingClient ? 'Creating…' : 'Create'}
@@ -857,7 +857,7 @@ export default function SettingsPage() {
                     const meta = SECTOR_META[client.sector] ?? { label: client.sector || '—', color: '#6b7280' };
                     return (
                       <span
-                        className="text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+                        className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
                         style={{ background: meta.color + '18', color: meta.color, border: `1px solid ${meta.color}30` }}
                       >
                         {meta.label}
@@ -898,14 +898,14 @@ export default function SettingsPage() {
                   <button
                     onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
                     title="Rename"
-                    className="p-1.5 rounded text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors"
+                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors"
                   >
                     <Pencil size={12} />
                   </button>
                   <button
                     onClick={() => archiveClient(client.id)}
                     title="Archive"
-                    className="p-1.5 rounded text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                    className="p-1.5 rounded-md text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
                   >
                     <Archive size={12} />
                   </button>
@@ -950,8 +950,8 @@ export default function SettingsPage() {
         {section === 'sub_superadmins' && isSuperAdmin && (
           <div className="flex-1 overflow-y-auto px-8 py-8">
             <div className="max-w-lg">
-              <h2 className="text-sm font-semibold text-gray-200 mb-1">Superadmins</h2>
-              <p className="text-xs text-gray-500 mb-6">
+              <h2 className="text-base font-semibold text-gray-200 mb-1">Superadmins</h2>
+              <p className="text-sm text-gray-500 mb-6">
                 Superadmins have full access to all boards, teams, and members in this subscription.
               </p>
 
@@ -964,7 +964,7 @@ export default function SettingsPage() {
                       {admin.picture ? (
                         <img src={admin.picture} className="w-7 h-7 rounded-full ring-1 ring-border shrink-0" alt="" />
                       ) : (
-                        <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-sm font-bold text-accent shrink-0">
                           {(admin.first_name?.[0] || admin.email[0]).toUpperCase()}
                         </div>
                       )}
@@ -972,18 +972,18 @@ export default function SettingsPage() {
                         <div className="flex items-center gap-1.5">
                           <p className="text-sm font-medium text-gray-200 truncate">{name}</p>
                           {isSelf && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
                           )}
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0 flex items-center gap-0.5">
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0 flex items-center gap-0.5">
                             <Crown size={8} /> Super
                           </span>
                         </div>
-                        {name !== admin.email && <p className="text-xs text-gray-500 truncate">{admin.email}</p>}
+                        {name !== admin.email && <p className="text-sm text-gray-500 truncate">{admin.email}</p>}
                       </div>
                       {!isSelf && subscriptionAdmins.length > 1 && (
                         <button
                           onClick={() => handleRemoveSuperAdmin(admin.user_id)}
-                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                          className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
                           title="Remove superadmin"
                         >
                           <UserMinus size={13} />
@@ -1010,8 +1010,8 @@ export default function SettingsPage() {
                   {addingAdmin ? '…' : 'Add'}
                 </button>
               </form>
-              {adminError   && <p className="text-xs text-red-400 mt-1.5">{adminError}</p>}
-              {adminSuccess && <p className="text-xs text-green-400 mt-1.5">{adminSuccess}</p>}
+              {adminError   && <p className="text-sm text-red-400 mt-1.5">{adminError}</p>}
+              {adminSuccess && <p className="text-sm text-green-400 mt-1.5">{adminSuccess}</p>}
             </div>
           </div>
         )}
@@ -1032,28 +1032,28 @@ export default function SettingsPage() {
                   <FileText size={13} className="text-accent" />
                   <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
                   {selectedFile.scope === 'subscription' && (
-                    <span className="flex items-center gap-1 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
+                    <span className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
                       workspace
                     </span>
                   )}
                   {selectedFile.archived && (
-                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wide">
                       archived
                     </span>
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  {saving && <span className="text-[10px] text-gray-500">Saving…</span>}
+                  {saving && <span className="text-xs text-gray-500">Saving…</span>}
                   {saveStatus === 'saved' && (
-                    <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                    <span className="flex items-center gap-1 text-xs text-emerald-400">
                       <Check size={10} /> Saved
                     </span>
                   )}
-                  {saveStatus === 'error' && <span className="text-[10px] text-red-400">Save failed</span>}
+                  {saveStatus === 'error' && <span className="text-xs text-red-400">Save failed</span>}
                   {dirty && !saving && (
                     <button
                       onClick={saveCurrentContent}
-                      className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
                     >
                       <Save size={10} /> Save
                     </button>
@@ -1065,14 +1065,14 @@ export default function SettingsPage() {
               {selectedFile.scope === 'board' && !selectedFile.archived && (
                 <div className="shrink-0 px-6 py-2.5 border-b border-border bg-surface-1/40">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] text-gray-500 uppercase tracking-wide font-medium">Visible to</span>
+                    <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">Visible to</span>
                     {(selectedFile.capabilities?.length
                       ? selectedFile.capabilities.map(c => <CapBadge key={c} cap={c} />)
-                      : <span className="text-[8px] px-1 py-0.5 rounded-full font-medium bg-surface-3 text-gray-500">All agents</span>)}
-                    {savingCaps && <span className="text-[9px] text-gray-600">saving…</span>}
+                      : <span className="text-xs px-1 py-0.5 rounded-full font-medium bg-surface-3 text-gray-500">All agents</span>)}
+                    {savingCaps && <span className="text-xs text-gray-600">saving…</span>}
                     <button
                       onClick={() => setEditingCaps(v => !v)}
-                      className="ml-auto text-[10px] text-accent hover:text-accent/80 transition-colors"
+                      className="ml-auto text-xs text-accent hover:text-accent/80 transition-colors"
                     >
                       {editingCaps ? 'Done' : 'Edit'}
                     </button>
@@ -1083,17 +1083,17 @@ export default function SettingsPage() {
                         selected={selectedFile.capabilities || []}
                         onChange={handleCapabilitiesChange}
                       />
-                      <p className="text-[9px] text-gray-600 mt-1">Controls which agents load this file as context.</p>
+                      <p className="text-xs text-gray-600 mt-1">Controls which agents load this file as context.</p>
                     </div>
                   )}
                 </div>
               )}
 
               {loadingContent ? (
-                <div className="flex-1 flex items-center justify-center text-gray-600 text-xs">Loading…</div>
+                <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">Loading…</div>
               ) : (
                 <textarea
-                  className="flex-1 w-full bg-surface-0 text-gray-300 text-[13px] leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
+                  className="flex-1 w-full bg-surface-0 text-gray-300 text-sm leading-relaxed px-8 py-6 outline-none resize-none placeholder-gray-700"
                   value={content}
                   onChange={e => handleContentChange(e.target.value)}
                   spellCheck={false}
@@ -1102,12 +1102,12 @@ export default function SettingsPage() {
                 />
               )}
               {selectedFile.archived && (
-                <div className="shrink-0 px-8 py-2 bg-amber-500/5 border-t border-amber-500/10 text-[10px] text-amber-400/70">
+                <div className="shrink-0 px-8 py-2 bg-amber-500/5 border-t border-amber-500/10 text-xs text-amber-400/70">
                   This file is archived and read-only. Restore it to edit.
                 </div>
               )}
               {selectedFile.scope === 'subscription' && (
-                <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-[10px] text-accent/60">
+                <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-xs text-accent/60">
                   Workspace file — shared by all boards in this subscription.
                 </div>
               )}
@@ -1116,7 +1116,7 @@ export default function SettingsPage() {
             <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-600 gap-3">
               <FileText size={28} className="opacity-30" />
               <p className="text-sm font-medium text-gray-500">Select a file to edit</p>
-              <p className="text-xs text-gray-600 max-w-xs">
+              <p className="text-sm text-gray-600 max-w-xs">
                 Agents read these files as context. Changes take effect on the next agent run.
               </p>
             </div>
@@ -1130,8 +1130,8 @@ export default function SettingsPage() {
       {/* ── Action errors ───────────────────────────────────────────────── */}
       {actionError && (
         <div className="fixed bottom-5 right-5 z-50 flex items-start gap-2.5 max-w-sm bg-surface-2 border border-red-500/30 rounded-xl px-4 py-3 shadow-xl">
-          <p className="text-xs text-red-400 flex-1">{actionError}</p>
-          <button onClick={() => setActionError(null)} className="text-gray-600 hover:text-gray-400 shrink-0">
+          <p className="text-sm text-red-400 flex-1">{actionError}</p>
+          <button onClick={() => setActionError(null)} className="text-gray-400 hover:text-gray-200 shrink-0">
             <X size={12} />
           </button>
         </div>
@@ -1140,12 +1140,12 @@ export default function SettingsPage() {
       {/* Archive confirm */}
       {archiveConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-modal-backdrop="static">
-          <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
-            <p className="text-sm font-semibold text-gray-200">Archive "{archiveConfirm.file.name}.md"?</p>
-            <p className="text-xs text-gray-500">The file will be moved to the archive. Agents referencing it will still work while it remains on disk.</p>
+          <div className="bg-surface-1 border border-border rounded-xl w-80 shadow-xl p-5 space-y-4">
+            <p className="text-base font-semibold text-gray-200">Archive "{archiveConfirm.file.name}.md"?</p>
+            <p className="text-sm text-gray-500">The file will be moved to the archive. Agents referencing it will still work while it remains on disk.</p>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => handleArchive(archiveConfirm.file, archiveConfirm.scope)} className="flex-1 py-1.5 text-xs font-medium text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors">Archive</button>
-              <button onClick={() => setArchiveConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
+              <button onClick={() => handleArchive(archiveConfirm.file, archiveConfirm.scope)} className="flex-1 py-1.5 text-sm font-medium text-white bg-amber-500 hover:bg-amber-400 rounded-lg transition-colors">Archive</button>
+              <button onClick={() => setArchiveConfirm(null)} className="flex-1 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
             </div>
           </div>
         </div>
@@ -1154,12 +1154,12 @@ export default function SettingsPage() {
       {/* Delete confirm */}
       {deleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" data-modal-backdrop="static">
-          <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
-            <p className="text-sm font-semibold text-gray-200">Delete "{deleteConfirm.file.name}.md"?</p>
-            <p className="text-xs text-gray-500">This permanently removes the file. If any agents reference it, the delete will fail and you'll be prompted to archive instead.</p>
+          <div className="bg-surface-1 border border-border rounded-xl w-80 shadow-xl p-5 space-y-4">
+            <p className="text-base font-semibold text-gray-200">Delete "{deleteConfirm.file.name}.md"?</p>
+            <p className="text-sm text-gray-500">This permanently removes the file. If any agents reference it, the delete will fail and you'll be prompted to archive instead.</p>
             <div className="flex gap-2 pt-1">
-              <button onClick={() => handleDelete(deleteConfirm.file, deleteConfirm.scope)} className="flex-1 py-1.5 text-xs font-medium text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors">Delete</button>
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm.file, deleteConfirm.scope)} className="flex-1 py-1.5 text-sm font-medium text-white bg-red-500 hover:bg-red-400 rounded-lg transition-colors">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-lg border border-border transition-colors">Cancel</button>
             </div>
           </div>
         </div>
@@ -1231,14 +1231,14 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
   return (
     <div className="flex-1 overflow-y-auto px-8 py-8">
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-sm font-semibold text-gray-200">Members</h2>
-          <span className="text-xs text-gray-500">{users.length}</span>
+          <h2 className="text-base font-semibold text-gray-200">Members</h2>
+          <span className="text-sm text-gray-500">{users.length}</span>
         </div>
-        <p className="text-xs text-gray-500 mb-6">All users in this workspace.</p>
+        <p className="text-sm text-gray-500 mb-6">All users in this workspace.</p>
 
         {/* Invite form */}
         <div className="mb-6">
-          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">Invite member</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Invite member</p>
           <form onSubmit={handleInvite} className="flex gap-2">
             <div className="relative flex-1">
               <Mail size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
@@ -1259,14 +1259,14 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
               {inviting ? '…' : 'Invite'}
             </button>
           </form>
-          {inviteError   && <p className="text-xs text-red-400 mt-1.5">{inviteError}</p>}
-          {inviteSuccess && <p className="text-xs text-green-400 mt-1.5">{inviteSuccess}</p>}
+          {inviteError   && <p className="text-sm text-red-400 mt-1.5">{inviteError}</p>}
+          {inviteSuccess && <p className="text-sm text-green-400 mt-1.5">{inviteSuccess}</p>}
         </div>
 
         {/* Pending invites */}
         {!loadingInvites && invites.length > 0 && (
           <div className="mb-6">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
               Pending invites ({invites.length})
             </p>
             <div className="space-y-1">
@@ -1277,12 +1277,12 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-300 truncate">{inv.email}</p>
-                    <p className="text-xs text-gray-600">Invite pending</p>
+                    <p className="text-sm text-gray-600">Invite pending</p>
                   </div>
                   <button
                     onClick={() => handleCancelInvite(inv.id)}
                     disabled={removingInvite === inv.id}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
                     title="Cancel invite"
                   >
                     <X size={13} />
@@ -1311,7 +1311,7 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
                       <img src={u.picture} className="w-7 h-7 rounded-full ring-1 ring-border shrink-0" alt="" />
                     ) : (
                       <div
-                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
                         style={{ background: color + '20', color, border: `1px solid ${color}30` }}
                       >
                         {(name?.[0] || u.email[0]).toUpperCase()}
@@ -1321,10 +1321,10 @@ function MembersPanel({ users, subscriptionAdmins, currentUser }) {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-medium text-gray-200 truncate">{name || u.email}</span>
                         {isSelf && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide shrink-0">You</span>
                         )}
                         {isAdmin && (
-                          <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
+                          <span className="inline-flex items-center gap-0.5 text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
                             <Crown size={8} /> Super
                           </span>
                         )}
@@ -1432,6 +1432,19 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
   return (
     <div className="space-y-6">
 
+      {/* Not connected — explain what's missing */}
+      {!isConnected && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-amber-500/25 bg-amber-500/10">
+          <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium text-amber-300">This board is not connected to a folder</p>
+            <p className="text-sm text-amber-200/70">
+              Pick a local folder below, or clone a GitHub repository, so agents on this board have files to work with.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Connected status */}
       {isConnected && (
         <div className="space-y-1.5">
@@ -1441,26 +1454,26 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
               {project.repo_url ? 'Connected via GitHub' : 'Connected locally'}
             </span>
             {!project.path_exists && (
-              <span className="text-xs text-amber-400 flex items-center gap-1">
+              <span className="text-sm text-amber-400 flex items-center gap-1">
                 <AlertTriangle size={11} /> Folder not found
               </span>
             )}
-            <span className="text-gray-700 text-xs">·</span>
+            <span className="text-gray-600 text-sm">·</span>
             {confirmSwitch ? (
-              <span className="flex items-center gap-2 text-xs">
+              <span className="flex items-center gap-2 text-sm">
                 <span className="text-gray-500">Switch connection?</span>
                 <button onClick={handleSwitch} disabled={saving}
                   className="text-red-400 hover:text-red-300 font-medium transition-colors">
                   {saving ? 'Switching…' : 'Yes'}
                 </button>
-                <button onClick={() => setConfirmSwitch(false)} className="text-gray-600 hover:text-gray-400 transition-colors">
+                <button onClick={() => setConfirmSwitch(false)} className="text-gray-400 hover:text-gray-200 transition-colors">
                   Cancel
                 </button>
               </span>
             ) : (
               <button
                 onClick={() => setConfirmSwitch(true)}
-                className="text-xs text-red-500/70 hover:text-red-400 transition-colors"
+                className="text-sm text-red-500/70 hover:text-red-400 transition-colors"
               >
                 {switchLabel}
               </button>
@@ -1468,10 +1481,10 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           </div>
           {/* Show the connected URL or path */}
           {displayUrl && (
-            <p className="text-xs text-gray-500 pl-4">{displayUrl}</p>
+            <p className="text-sm text-gray-400 pl-4">{displayUrl}</p>
           )}
           {!project.repo_url && project.client_path && (
-            <p className="text-xs text-gray-500 pl-4">{project.client_path}</p>
+            <p className="text-sm text-gray-400 pl-4">{project.client_path}</p>
           )}
         </div>
       )}
@@ -1485,10 +1498,10 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           <button
             key={id}
             onClick={() => { setMode(id); setError(''); setSuccess(''); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
               mode === id
                 ? 'bg-surface-1 text-gray-200 shadow-sm'
-                : 'text-gray-500 hover:text-gray-300'
+                : 'text-gray-500 hover:text-gray-100'
             }`}
           >
             <Icon size={11} /> {label}
@@ -1499,7 +1512,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
       {/* GitHub mode */}
       {mode === 'github' && !isConnected && (
         <div className="space-y-3">
-          <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+          <label className="block text-xs font-semibold text-gray-500 uppercase tracking-widest">
             GitHub repository URL
           </label>
           <div className="flex gap-2">
@@ -1519,7 +1532,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
               {cloning ? 'Cloning…' : 'Clone & Save'}
             </button>
           </div>
-          <p className="text-[11px] text-gray-600">
+          <p className="text-sm text-gray-400">
             The repository will be cloned into <span>client/</span> and connected to this board.
           </p>
         </div>
@@ -1529,11 +1542,11 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
       {mode === 'local' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Select a folder</p>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Select a folder</p>
             {isConnected && !switchingFolder && (
               <button
                 onClick={() => setSwitchingFolder(true)}
-                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                className="text-sm text-gray-500 hover:text-gray-100 transition-colors"
               >
                 Switch folder
               </button>
@@ -1541,7 +1554,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
             {isConnected && switchingFolder && (
               <button
                 onClick={() => { setSwitchingFolder(false); setLocalPath(project.client_path); }}
-                className="text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
               >
                 Cancel
               </button>
@@ -1551,7 +1564,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           {basePath && (
             <div className="flex items-center gap-1.5">
               <FolderOpen size={11} className="text-gray-600 shrink-0" />
-              <span className="text-[11px] text-gray-600 truncate">{basePath}</span>
+              <span className="text-sm text-gray-400 truncate">{basePath}</span>
             </div>
           )}
 
@@ -1564,12 +1577,15 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
             ) : folders.length === 0 ? (
               <div className="px-4 py-6 rounded-xl border border-dashed border-border text-center">
                 <p className="text-sm text-gray-500">No folders found.</p>
-                <p className="text-xs text-gray-600 mt-1">Clone a GitHub repo to get started.</p>
+                <p className="text-sm text-gray-600 mt-1">Clone a GitHub repo to get started.</p>
               </div>
             ) : (
               <div className="space-y-1">
                 {folders.map(f => {
                   const selected = localPath === f.client_path;
+                  const linked      = f.linked_boards || [];
+                  const linkedHere  = linked.some(b => b.id === project.id);
+                  const otherBoards = linked.filter(b => b.id !== project.id);
                   return (
                     <button
                       key={f.client_path}
@@ -1581,9 +1597,30 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
                       }`}
                     >
                       <FolderOpen size={13} className="shrink-0" />
-                      <span className="text-xs text-gray-200 flex-1 truncate">{f.name}</span>
+                      <span className="text-sm text-gray-200 flex-1 truncate">{f.name}</span>
+
+                      {/* Who else is using this folder */}
+                      {linkedHere && (
+                        <span className="text-xs font-medium text-emerald-400 shrink-0 px-1.5 py-0.5 bg-emerald-500/10 rounded-md border border-emerald-500/20">
+                          This board
+                        </span>
+                      )}
+                      {otherBoards.length > 0 && (
+                        <span
+                          title={`Also linked to ${otherBoards.map(b => b.name).join(', ')}`}
+                          className="flex items-center gap-1 text-xs text-gray-300 shrink-0 max-w-[45%] px-1.5 py-0.5 bg-surface-3 rounded-md border border-border"
+                        >
+                          <LinkIcon size={10} className="shrink-0 text-gray-400" />
+                          <span className="truncate">
+                            {otherBoards.length === 1
+                              ? otherBoards[0].name
+                              : `${otherBoards.length} boards`}
+                          </span>
+                        </span>
+                      )}
+
                       {f.is_git && (
-                        <span className="text-[10px] text-gray-600 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded border border-border">git</span>
+                        <span className="text-xs text-gray-400 shrink-0 px-1.5 py-0.5 bg-surface-3 rounded-md border border-border">git</span>
                       )}
                       {selected && <Check size={13} className="shrink-0 text-accent" />}
                     </button>

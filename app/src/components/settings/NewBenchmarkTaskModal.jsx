@@ -94,7 +94,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
-      <div className="bg-surface-2 border border-border rounded-2xl w-full max-w-lg animate-slide-in">
+      <div className="bg-surface-2 border border-border rounded-xl w-full max-w-lg animate-slide-in">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h2 className="text-base font-semibold text-gray-100">New Benchmark Task</h2>
           <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg">
@@ -104,16 +104,16 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Capability being tested</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Capability being tested</label>
             <select disabled value="perm_planning"
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-400 outline-none cursor-not-allowed">
               <option value="perm_planning">Planning</option>
             </select>
-            <p className="text-[10px] text-gray-600 mt-1">Only planning is testable this way today — other capabilities (like coding) need a different kind of verification and aren't wired up yet.</p>
+            <p className="text-xs text-gray-600 mt-1">Only planning is testable this way today — other capabilities (like coding) need a different kind of verification and aren't wired up yet.</p>
           </div>
 
           <div className="relative">
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Start from an existing task <span className="text-gray-600">(optional)</span></label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Start from an existing task <span className="text-gray-600">(optional)</span></label>
             <div className="relative">
               <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
               <input
@@ -127,18 +127,18 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
               {searching && <Loader2 size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 animate-spin" />}
             </div>
             {showResults && (
-              <div className="absolute z-10 mt-1 w-full bg-surface-3 border border-border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+              <div className="absolute z-10 mt-1 w-full bg-surface-3 border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto">
                 {results.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-500">No matching tasks</p>
+                  <p className="px-3 py-2 text-sm text-gray-500">No matching tasks</p>
                 ) : results.map(t => (
                   <button
                     key={t.id}
                     type="button"
                     onClick={() => pickTask(t)}
-                    className="w-full text-left px-3 py-2 text-xs text-gray-200 hover:bg-surface-4 transition-colors border-b border-border/50 last:border-b-0"
+                    className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-surface-4 transition-colors border-b border-border/50 last:border-b-0"
                   >
                     <span className="truncate block">{t.title}</span>
-                    {t.archived_at && <span className="text-[9px] text-gray-500">historic</span>}
+                    {t.archived_at && <span className="text-xs text-gray-500">historic</span>}
                   </button>
                 ))}
               </div>
@@ -156,7 +156,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
           </button>
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Title *</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Title *</label>
             <input
               autoFocus
               value={title}
@@ -168,7 +168,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1.5">Description</label>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">Description</label>
             <textarea
               value={description}
               onChange={e => { setDescription(e.target.value); markEdited(); }}
@@ -179,7 +179,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
             />
           </div>
 
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && <p className="text-sm text-red-400">{error}</p>}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-ghost flex-1 justify-center py-2">

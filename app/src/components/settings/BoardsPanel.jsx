@@ -135,12 +135,12 @@ export default function BoardsPanel({
                     {p.name}
                   </span>
                   {isCurrent && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30 uppercase tracking-wide shrink-0">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-accent/20 text-accent border border-accent/30 uppercase tracking-wide shrink-0">
                       current
                     </span>
                   )}
                   {p.archived_at && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-600 border border-border uppercase tracking-wide shrink-0">
                       archived
                     </span>
                   )}
@@ -168,7 +168,7 @@ export default function BoardsPanel({
         const meta = SECTOR_META[p.sector] ?? { label: p.sector, color: '#6b7280' };
         return (
           <span
-            className="text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
+            className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
             style={{
               background: meta.color + '18',
               color: meta.color,
@@ -187,7 +187,7 @@ export default function BoardsPanel({
       render: (p) => {
         if (!p.client_path) return <span className="text-sm text-gray-600">—</span>;
         return (
-          <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${
             p.path_exists
               ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
               : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
@@ -209,18 +209,18 @@ export default function BoardsPanel({
           <button
             onClick={() => handleUnarchive(p.id)}
             title="Restore board"
-            className="p-1.5 rounded-lg text-gray-600 hover:text-accent hover:bg-accent/10 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-accent/10 transition-colors"
           >
             <RotateCcw size={12} />
           </button>
           {confirmDelete === p.id ? (
             <span className="flex items-center gap-1">
-              <span className="text-[10px] text-red-400">Delete?</span>
-              <button onClick={() => handleDelete(p.id)} className="px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10 rounded transition-colors">Yes</button>
-              <button onClick={() => setConfirmDelete(null)} className="px-1.5 py-0.5 text-[10px] text-gray-600 hover:text-gray-400 rounded transition-colors">No</button>
+              <span className="text-xs text-red-400">Delete?</span>
+              <button onClick={() => handleDelete(p.id)} className="px-1.5 py-0.5 text-xs font-medium text-red-400 hover:bg-red-500/10 rounded-md transition-colors">Yes</button>
+              <button onClick={() => setConfirmDelete(null)} className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors">No</button>
             </span>
           ) : (
-            <button onClick={() => setConfirmDelete(p.id)} title="Delete permanently" className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+            <button onClick={() => setConfirmDelete(p.id)} title="Delete permanently" className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
               <Trash2 size={12} />
             </button>
           )}
@@ -234,7 +234,7 @@ export default function BoardsPanel({
           <button
             onClick={() => setConfirmSwitch(p.id)}
             title="Switch to this board"
-            className="p-1.5 rounded-lg text-gray-600 hover:text-accent hover:bg-accent/10 transition-colors"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-accent/10 transition-colors"
           >
             <ChevronRight size={12} />
           </button>
@@ -242,29 +242,29 @@ export default function BoardsPanel({
         <button
           onClick={() => { setRenamingId(p.id); setRenameValue(p.name); }}
           title="Rename"
-          className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors"
+          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors"
         >
           <Pencil size={12} />
         </button>
         {confirmArchive === p.id ? (
           <span className="flex items-center gap-1">
-            <span className="text-[10px] text-amber-400">Archive?</span>
-            <button onClick={() => handleArchive(p.id)} className="px-1.5 py-0.5 text-[10px] font-medium text-amber-400 hover:bg-amber-500/10 rounded transition-colors">Yes</button>
-            <button onClick={() => setConfirmArchive(null)} className="px-1.5 py-0.5 text-[10px] text-gray-600 hover:text-gray-400 rounded transition-colors">No</button>
+            <span className="text-xs text-amber-400">Archive?</span>
+            <button onClick={() => handleArchive(p.id)} className="px-1.5 py-0.5 text-xs font-medium text-amber-400 hover:bg-amber-500/10 rounded-md transition-colors">Yes</button>
+            <button onClick={() => setConfirmArchive(null)} className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors">No</button>
           </span>
         ) : (
-          <button onClick={() => setConfirmArchive(p.id)} title="Archive" className="p-1.5 rounded-lg text-gray-600 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
+          <button onClick={() => setConfirmArchive(p.id)} title="Archive" className="p-1.5 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
             <Archive size={12} />
           </button>
         )}
         {confirmDelete === p.id ? (
           <span className="flex items-center gap-1">
-            <span className="text-[10px] text-red-400">Delete?</span>
-            <button onClick={() => handleDelete(p.id)} className="px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10 rounded transition-colors">Yes</button>
-            <button onClick={() => setConfirmDelete(null)} className="px-1.5 py-0.5 text-[10px] text-gray-600 hover:text-gray-400 rounded transition-colors">No</button>
+            <span className="text-xs text-red-400">Delete?</span>
+            <button onClick={() => handleDelete(p.id)} className="px-1.5 py-0.5 text-xs font-medium text-red-400 hover:bg-red-500/10 rounded-md transition-colors">Yes</button>
+            <button onClick={() => setConfirmDelete(null)} className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors">No</button>
           </span>
         ) : (
-          <button onClick={() => setConfirmDelete(p.id)} title="Delete" className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          <button onClick={() => setConfirmDelete(p.id)} title="Delete" className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
             <Trash2 size={12} />
           </button>
         )}
@@ -284,17 +284,17 @@ export default function BoardsPanel({
 
         {/* Header */}
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-sm font-semibold text-gray-200">Boards</h2>
+          <h2 className="text-base font-semibold text-gray-200">Boards</h2>
           {!showCreate && (
             <button
               onClick={() => { setShowCreate(true); setNewName(''); setNewClientId(''); setCreateError(''); }}
-              className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors"
+              className="flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors"
             >
               <Plus size={12} /> New board
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-500 mb-6">All boards in this workspace.</p>
+        <p className="text-sm text-gray-500 mb-6">All boards in this workspace.</p>
 
         {/* Create form */}
         {showCreate && (
@@ -321,21 +321,21 @@ export default function BoardsPanel({
             )}
             {/* Read-only sector hint — comes from the client, not settable on the board */}
             <div className="flex items-center gap-2 px-1">
-              <span className="text-[10px] text-gray-600">Sector</span>
+              <span className="text-xs text-gray-600">Sector</span>
               <span
-                className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                className="text-xs px-2 py-0.5 rounded-full font-medium"
                 style={{ background: createSectorPreview.color + '18', color: createSectorPreview.color, border: `1px solid ${createSectorPreview.color}30` }}
               >
                 {createSectorPreview.label}
               </span>
-              <span className="text-[10px] text-gray-700">inherited from client</span>
+              <span className="text-xs text-gray-600">inherited from client</span>
             </div>
-            {createError && <p className="text-xs text-red-400">{createError}</p>}
+            {createError && <p className="text-sm text-red-400">{createError}</p>}
             <div className="flex gap-1.5">
               <button
                 type="button"
                 onClick={() => { setShowCreate(false); setNewName(''); setNewClientId(''); setCreateError(''); }}
-                className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3 transition-colors"
+                className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg hover:bg-surface-3 transition-colors"
               >
                 Cancel
               </button>
@@ -373,7 +373,7 @@ export default function BoardsPanel({
         {archivedCount > 0 && (
           <button
             onClick={() => setShowArchived(v => !v)}
-            className="mt-3 flex items-center gap-1.5 text-[11px] text-gray-600 hover:text-gray-400 transition-colors"
+            className="mt-3 flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors"
           >
             <ChevronRight
               size={10}
@@ -386,8 +386,8 @@ export default function BoardsPanel({
         {/* Action error */}
         {actionError && (
           <div className="fixed bottom-5 right-5 z-50 flex items-start gap-2.5 max-w-sm bg-surface-2 border border-red-500/30 rounded-xl px-4 py-3 shadow-xl">
-            <p className="text-xs text-red-400 flex-1">{actionError}</p>
-            <button onClick={() => setActionError('')} className="text-gray-600 hover:text-gray-400 shrink-0">
+            <p className="text-sm text-red-400 flex-1">{actionError}</p>
+            <button onClick={() => setActionError('')} className="text-gray-400 hover:text-gray-200 shrink-0">
               <X size={12} />
             </button>
           </div>
@@ -402,7 +402,7 @@ export default function BoardsPanel({
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
             data-modal-backdrop="static"
           >
-            <div className="bg-surface-1 border border-border rounded-2xl w-80 shadow-2xl p-5 space-y-4">
+            <div className="bg-surface-1 border border-border rounded-xl w-80 shadow-xl p-5 space-y-4">
               <div className="flex items-start gap-3">
                 <div
                   className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-lg mt-0.5"
@@ -412,8 +412,8 @@ export default function BoardsPanel({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-200 truncate">{target.name}</p>
-                  {target.client_name && <p className="text-xs text-gray-500 truncate">{target.client_name}</p>}
-                  <p className="text-xs text-gray-500 mt-1.5">
+                  {target.client_name && <p className="text-sm text-gray-500 truncate">{target.client_name}</p>}
+                  <p className="text-sm text-gray-500 mt-1.5">
                     You'll leave Settings and switch to this board. No unsaved changes will be lost.
                   </p>
                 </div>
@@ -421,13 +421,13 @@ export default function BoardsPanel({
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => setConfirmSwitch(null)}
-                  className="flex-1 py-1.5 text-xs text-gray-400 hover:text-gray-200 rounded-lg border border-border hover:bg-surface-3 transition-colors"
+                  className="flex-1 py-1.5 text-sm text-gray-400 hover:text-gray-200 rounded-lg border border-border hover:bg-surface-3 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => { setConfirmSwitch(null); onSwitchBoard(target.id); }}
-                  className="flex-1 py-1.5 text-xs font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+                  className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
                 >
                   Switch board
                 </button>

@@ -62,7 +62,7 @@ export function useAgentForm(initial = {}) {
 export function NameField({ value, onChange, roleConflict }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1.5">Name *</label>
+      <label className="block text-sm font-medium text-gray-400 mb-1.5">Name *</label>
       <input
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -70,7 +70,7 @@ export function NameField({ value, onChange, roleConflict }) {
         className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors"
       />
       {roleConflict && (
-        <p className="mt-1 text-[10px] text-red-400">An agent with this name already exists.</p>
+        <p className="mt-1 text-xs text-red-400">An agent with this name already exists.</p>
       )}
     </div>
   );
@@ -79,7 +79,7 @@ export function NameField({ value, onChange, roleConflict }) {
 export function ModelField({ value, onChange }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1.5">Model</label>
+      <label className="block text-sm font-medium text-gray-400 mb-1.5">Model</label>
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -94,7 +94,7 @@ export function ModelField({ value, onChange }) {
 export function ColorField({ value, onChange }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-400 mb-2">Color</label>
+      <label className="block text-sm font-medium text-gray-400 mb-2">Color</label>
       <div className="flex gap-2">
         {COLORS.map(c => (
           <button key={c} type="button" onClick={() => onChange(c)}
@@ -114,15 +114,15 @@ export function TemplatePromptField({ form, onChange }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">
-        <label className="text-xs font-medium text-gray-400">Behaviour Prompt</label>
-        <span className="text-[10px] text-gray-600">· plain text, not markdown</span>
+        <label className="text-sm font-medium text-gray-400">Behaviour Prompt</label>
+        <span className="text-xs text-gray-600">· plain text, not markdown</span>
         <button
           type="button"
           onClick={() => setShowInfo(true)}
-          className="ml-auto text-gray-600 hover:text-gray-400 transition-colors"
+          className="ml-auto text-gray-400 hover:text-accent transition-colors"
           aria-label="What is the Behaviour Prompt?"
         >
-          <Info size={11} />
+          <Info size={14} />
         </button>
         <InfoModal openKey={showInfo ? 'agent' : null} onClose={() => setShowInfo(false)} />
       </div>
@@ -132,9 +132,9 @@ export function TemplatePromptField({ form, onChange }) {
         maxLength={1000}
         rows={4}
         placeholder="Optional additional personality or context for this agent…"
-        className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
+        className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
       />
-      <p className={`text-right text-[10px] ${charCount > 900 ? 'text-amber-400' : 'text-gray-600'}`}>
+      <p className={`text-right text-xs ${charCount > 900 ? 'text-amber-400' : 'text-gray-600'}`}>
         {charCount} / 1000
       </p>
     </div>
@@ -146,7 +146,7 @@ function RoleCheckbox({ checked, onToggle, color, label, badge }) {
     <label className="flex items-center gap-2.5 cursor-pointer group">
       <div
         onClick={onToggle}
-        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+        className={`w-4 h-4 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
           checked ? 'border-accent bg-accent' : 'border-border bg-surface-1 group-hover:border-accent/50'
         }`}
       >
@@ -157,9 +157,9 @@ function RoleCheckbox({ checked, onToggle, color, label, badge }) {
         )}
       </div>
       <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-      <span className="text-xs text-gray-400 group-hover:text-gray-300 flex-1">{label}</span>
+      <span className="text-sm text-gray-400 group-hover:text-gray-100 flex-1">{label}</span>
       {badge && (
-        <span className="text-[9px] text-gray-600 bg-surface-1 border border-border px-1.5 py-0.5 rounded shrink-0">
+        <span className="text-xs text-gray-600 bg-surface-1 border border-border px-1.5 py-0.5 rounded-md shrink-0">
           {badge}
         </span>
       )}
@@ -187,8 +187,8 @@ export function RoleField({ selectedRoleIds, onToggle }) {
       {/* Column Access */}
       <div>
         <div className="flex items-center gap-1.5 mb-1.5">
-          <label className="text-xs font-medium text-gray-400">Column Access *</label>
-          <span className="text-[10px] text-gray-600">· which columns this agent can be assigned to</span>
+          <label className="text-sm font-medium text-gray-400">Column Access *</label>
+          <span className="text-xs text-gray-600">· which columns this agent can be assigned to</span>
         </div>
         <div className="bg-surface-3 border border-border rounded-lg p-3 space-y-1.5">
           {/* All Columns toggle first */}
@@ -217,9 +217,9 @@ export function RoleField({ selectedRoleIds, onToggle }) {
           ))}
         </div>
         {!hasColumn ? (
-          <p className="mt-1 text-[10px] text-red-400">Select at least one column (or All Columns).</p>
+          <p className="mt-1 text-xs text-red-400">Select at least one column (or All Columns).</p>
         ) : (
-          <p className="mt-1 text-[10px] text-gray-600">
+          <p className="mt-1 text-xs text-gray-600">
             Removing a column access role moves assigned tasks in that column to Unassigned.
           </p>
         )}
@@ -228,10 +228,10 @@ export function RoleField({ selectedRoleIds, onToggle }) {
       {/* Capabilities (permission roles) — always expanded; one is required */}
       <div>
         <div className="flex items-center gap-1.5 mb-1.5">
-          <label className="text-xs font-medium text-gray-400">Capability *</label>
-          <span className="text-[10px] text-gray-600">· what this agent does (pick exactly one)</span>
+          <label className="text-sm font-medium text-gray-400">Capability *</label>
+          <span className="text-xs text-gray-600">· what this agent does (pick exactly one)</span>
           {capabilityCount > 0 && (
-            <span className="ml-auto text-[10px] text-accent">{capabilityCount} selected</span>
+            <span className="ml-auto text-xs text-accent">{capabilityCount} selected</span>
           )}
         </div>
         <div className="bg-surface-3 border border-border rounded-lg p-3 space-y-1.5 max-h-64 overflow-y-auto">
@@ -247,10 +247,10 @@ export function RoleField({ selectedRoleIds, onToggle }) {
           ))}
         </div>
         {capabilityCount === 0 && (
-          <p className="mt-1 text-[10px] text-red-400">Select one capability.</p>
+          <p className="mt-1 text-xs text-red-400">Select one capability.</p>
         )}
         {capabilityCount > 1 && (
-          <p className="mt-1 text-[10px] text-red-400">An agent can have only one capability — pick one.</p>
+          <p className="mt-1 text-xs text-red-400">An agent can have only one capability — pick one.</p>
         )}
       </div>
     </div>

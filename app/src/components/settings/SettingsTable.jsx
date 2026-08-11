@@ -110,8 +110,8 @@ export default function SettingsTable({
                   key={col.key}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={col.sortable ? () => toggleSort(col.key) : undefined}
-                  className={`px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-widest border-b border-border whitespace-nowrap ${
-                    col.sortable ? 'cursor-pointer hover:text-gray-300 select-none' : ''
+                  className={`px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-widest border-b border-border whitespace-nowrap ${
+                    col.sortable ? 'cursor-pointer hover:text-gray-100 select-none' : ''
                   }`}
                 >
                   <span className="inline-flex items-center gap-1">

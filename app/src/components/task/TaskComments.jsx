@@ -16,7 +16,7 @@ function renderContent(text) {
       parts.push(<span key={lastIndex}>{text.slice(lastIndex, match.index)}</span>);
     }
     parts.push(
-      <span key={match.index} className="text-accent font-medium bg-accent/10 rounded px-1">
+      <span key={match.index} className="text-accent font-medium bg-accent/10 rounded-md px-1">
         @{match[1]}
       </span>
     );
@@ -26,12 +26,12 @@ function renderContent(text) {
   return parts;
 }
 
-function Avatar({ user, size = 6 }) {
+function Avatar({ user, size = 6, additionalClasses = '' }) {
   if (user.picture) {
-    return <img src={user.picture} alt="" className={`w-${size} h-${size} rounded-full shrink-0 ring-1 ring-border`} />;
+    return <img src={user.picture} alt="" className={`w-${size} h-${size} rounded-full shrink-0 ring-1 ring-border ${additionalClasses}`} />;
   }
   return (
-    <div className={`w-${size} h-${size} rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-[9px] font-bold text-accent shrink-0`}>
+    <div className={`w-${size} h-${size} rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent shrink-0 ${additionalClasses}`}>
       {((user.first_name?.[0] || user.email?.[0] || '?')).toUpperCase()}
     </div>
   );
@@ -180,9 +180,9 @@ export default function TaskComments({ taskId }) {
   return (
     <div className="mt-6 flex flex-col gap-4">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">Comments</span>
+        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Comments</span>
         {comments.length > 0 && (
-          <span className="text-[10px] text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md">{comments.length}</span>
+          <span className="text-xs text-gray-600 bg-surface-3 px-1.5 py-0.5 rounded-md">{comments.length}</span>
         )}
       </div>
 
@@ -194,14 +194,14 @@ export default function TaskComments({ taskId }) {
               <Avatar user={c} size={6} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-xs font-medium text-gray-300">
+                  <span className="text-sm font-medium text-gray-300">
                     {`${c.first_name || ''} ${c.last_name || ''}`.trim() || c.email}
                   </span>
-                  <span className="text-[10px] text-gray-600">
+                  <span className="text-xs text-gray-600">
                     {formatDistanceToNow(new Date(c.created_at), { addSuffix: true })}
                   </span>
                   {c.updated_at !== c.created_at && (
-                    <span className="text-[10px] text-gray-700 italic">(edited)</span>
+                    <span className="text-xs text-gray-600 italic">(edited)</span>
                   )}
                 </div>
                 {editingId === c.id ? (
@@ -215,25 +215,25 @@ export default function TaskComments({ taskId }) {
                       }}
                       rows={2}
                       autoFocus
-                      className="w-full bg-surface-2 border border-accent/40 rounded-lg px-2 py-1.5 text-xs text-gray-200 outline-none resize-none leading-relaxed"
+                      className="w-full bg-surface-2 border border-accent/40 rounded-lg px-2 py-1.5 text-sm text-gray-200 outline-none resize-none leading-relaxed"
                     />
                     <div className="flex gap-1">
                       <button
                         onClick={() => handleEditSave(c.id)}
-                        className="flex items-center gap-1 px-2 py-1 bg-accent hover:bg-accent/80 text-white text-[10px] font-medium rounded-md transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 bg-accent hover:bg-accent/80 text-white text-xs font-medium rounded-md transition-colors"
                       >
                         <Check size={9} /> Save
                       </button>
                       <button
                         onClick={handleEditCancel}
-                        className="flex items-center gap-1 px-2 py-1 bg-surface-3 hover:bg-surface-2 text-gray-400 text-[10px] rounded-md transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 bg-surface-3 hover:bg-surface-2 text-gray-400 text-xs rounded-md transition-colors"
                       >
                         <X size={9} /> Cancel
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-gray-400 leading-relaxed break-words">
+                  <div className="text-sm text-gray-400 leading-relaxed break-words">
                     {renderContent(c.content)}
                   </div>
                 )}
@@ -242,14 +242,14 @@ export default function TaskComments({ taskId }) {
                 <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 mt-0.5 shrink-0 transition-all">
                   <button
                     onClick={() => handleEditStart(c)}
-                    className="text-gray-700 hover:text-accent p-0.5"
+                    className="text-gray-400 hover:text-accent p-0.5"
                     title="Edit comment"
                   >
                     <Pencil size={11} />
                   </button>
                   <button
                     onClick={() => handleDelete(c.id)}
-                    className="text-gray-700 hover:text-red-400 p-0.5"
+                    className="text-gray-400 hover:text-red-400 p-0.5"
                     title="Delete comment"
                   >
                     <Trash2 size={11} />
@@ -267,7 +267,7 @@ export default function TaskComments({ taskId }) {
         {showMentions && filteredUsers.length > 0 && (
           <div
             ref={dropdownRef}
-            className="absolute bottom-full mb-1 left-0 z-50 w-56 bg-surface-2 border border-border rounded-xl shadow-xl overflow-hidden"
+            className="absolute bottom-full mb-1 left-0 z-50 w-56 bg-surface-2 border border-border rounded-xl shadow-lg overflow-hidden"
           >
             {filteredUsers.map((u, i) => (
               <button
@@ -280,19 +280,19 @@ export default function TaskComments({ taskId }) {
               >
                 <Avatar user={u} size={5} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium truncate">
+                  <div className="text-sm font-medium truncate">
                     {`${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email}
                   </div>
-                  <div className="text-[10px] text-gray-600 truncate">{u.email}</div>
+                  <div className="text-xs text-gray-600 truncate">{u.email}</div>
                 </div>
               </button>
             ))}
           </div>
         )}
 
-        <div className="flex gap-2 items-start">
-          {user && <Avatar user={{ ...user, picture: user.picture }} size={6} />}
-          <div className="flex-1 flex flex-col gap-1">
+        <div className="flex flex-col gap-2 w-full">
+          <div className="flex gap-2 items-start w-full">
+            {user && <Avatar user={{ ...user, picture: user.picture }} size={6} additionalClasses="mt-2" />}
             <textarea
               ref={textareaRef}
               value={draft}
@@ -300,19 +300,18 @@ export default function TaskComments({ taskId }) {
               onKeyDown={handleKeyDown}
               placeholder="Add a comment… type @ to mention someone"
               rows={2}
-              className="w-full bg-surface-2 border border-border rounded-xl px-3 py-2 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/40 transition-colors resize-none leading-relaxed"
+              className="flex-1 min-w-0 bg-surface-2 border border-border rounded-xl px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/40 transition-colors resize-none leading-relaxed"
             />
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-gray-700">@ to mention</span>
-              <button
-                type="submit"
-                disabled={!draft.trim() || submitting}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
-              >
-                <Send size={10} />
-                {submitting ? 'Posting…' : 'Comment'}
-              </button>
-            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={!draft.trim() || submitting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <Send size={10} />
+              {submitting ? 'Posting…' : 'Comment'}
+            </button>
           </div>
         </div>
       </form>

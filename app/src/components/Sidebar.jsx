@@ -24,43 +24,43 @@ function AgentPanel({ agent, onClose, onEdit }) {
     <div className="mt-1 mb-2 mx-1 bg-surface-3 border border-border rounded-xl p-3 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+          <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
             style={{ background: agent.color }}>
             {agent.name[0]}
           </div>
-          <span className="text-xs font-semibold text-gray-200">{agent.name}</span>
+          <span className="text-sm font-semibold text-gray-200">{agent.name}</span>
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={onEdit} className="text-gray-600 hover:text-accent transition-colors p-1 rounded" title="Edit agent">
+          <button onClick={onEdit} className="text-gray-400 hover:text-accent transition-colors p-1 rounded-md" title="Edit agent">
             <Pencil size={11} />
           </button>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-400 transition-colors p-1 rounded">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-200 transition-colors p-1 rounded-md">
             <X size={12} />
           </button>
         </div>
       </div>
 
       {agent.created_from_template_id && (
-        <span className="self-start text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
+        <span className="self-start text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/25 uppercase tracking-wide">
           From template
         </span>
       )}
 
       {agent.description && (
-        <p className="text-[11px] text-gray-500 leading-relaxed">{agent.description}</p>
+        <p className="text-xs text-gray-500 leading-relaxed">{agent.description}</p>
       )}
 
       <div className="flex items-center gap-1.5">
         <Cpu size={10} className="text-gray-600 shrink-0" />
-        <span className="text-[10px] text-gray-600">{modelLabel}</span>
+        <span className="text-xs text-gray-600">{modelLabel}</span>
       </div>
 
       {capabilityRoles.length > 0 && (
         <div>
-          <p className="text-[10px] font-medium text-gray-500 mb-1">Capability</p>
+          <p className="text-xs font-medium text-gray-500 mb-1">Capability</p>
           <div className="flex flex-wrap gap-1">
             {capabilityRoles.map(role => (
-              <span key={role.id} className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
+              <span key={role.id} className="text-xs font-medium px-1.5 py-0.5 rounded-full border"
                 style={{ color: role.color, borderColor: role.color + '40', background: role.color + '18' }}>
                 {role.name}
               </span>
@@ -71,10 +71,10 @@ function AgentPanel({ agent, onClose, onEdit }) {
 
       {columnRoles.length > 0 && (
         <div>
-          <p className="text-[10px] font-medium text-gray-500 mb-1">Column access</p>
+          <p className="text-xs font-medium text-gray-500 mb-1">Column access</p>
           <div className="flex flex-wrap gap-1">
             {columnRoles.map(role => (
-              <span key={role.id} className="text-[9px] font-medium px-1.5 py-0.5 rounded-full border"
+              <span key={role.id} className="text-xs font-medium px-1.5 py-0.5 rounded-full border"
                 style={{ color: role.color, borderColor: role.color + '40', background: role.color + '18' }}>
                 {role.name}
               </span>
@@ -85,10 +85,10 @@ function AgentPanel({ agent, onClose, onEdit }) {
 
       {agent.personality_file && (
         <div>
-          <p className="text-[10px] font-medium text-gray-500 mb-1.5">System Prompt</p>
+          <p className="text-xs font-medium text-gray-500 mb-1.5">System Prompt</p>
           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-accent/10 border border-accent/20 rounded-lg">
             <FileText size={10} className="text-accent shrink-0" />
-            <span className="text-[10px] text-accent truncate">
+            <span className="text-xs text-accent truncate">
               {agent.personality_file.replace(/^instructions\//, '').replace(/\.md$/, '')}
             </span>
           </div>
@@ -112,7 +112,7 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
         }`}
         title="Click to expand · Drag to assign to a task"
       >
-        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
           style={{ background: agent.color }}>
           {agent.name[0]}
         </div>
@@ -122,7 +122,7 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
             {showTemplateBadge && (
               <span
                 title={originTemplate ? `Created from template: ${originTemplate.name}${templateArchived ? ' (archived)' : ''}` : 'Created from a template'}
-                className={`shrink-0 text-[8px] font-medium px-1 py-px rounded uppercase tracking-wide leading-none ${
+                className={`shrink-0 text-xs font-medium px-1 py-px rounded-md uppercase tracking-wide leading-none ${
                   templateArchived
                     ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
                     : 'bg-accent/15 text-accent border border-accent/20'
@@ -205,7 +205,7 @@ function ProjectSwitcher() {
         <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color || '#6366f1' }} />
         <div className="flex-1 min-w-0 text-left">
           <p className="text-sm font-medium text-gray-200 truncate">{p.name}</p>
-          {p.client_name && <p className="text-[10px] text-gray-600 truncate">{p.client_name}</p>}
+          {p.client_name && <p className="text-xs text-gray-600 truncate">{p.client_name}</p>}
         </div>
         {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
       </button>
@@ -230,17 +230,17 @@ function ProjectSwitcher() {
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+          <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-lg z-50 overflow-hidden">
             <div className="max-h-64 overflow-y-auto">
               {personalBoards.length > 0 && (
                 <>
-                  <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600">Personal</p>
+                  <p className="px-3 pt-2.5 pb-1 text-xs font-semibold uppercase tracking-widest text-gray-600">Personal</p>
                   {personalBoards.map(p => <BoardRow key={p.id} p={p} />)}
                 </>
               )}
               {clientGroupList.map(({ client, boards }, idx) => (
                 <div key={client?.id || idx}>
-                  <p className={`px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-600 ${
+                  <p className={`px-3 pb-1 text-xs font-semibold uppercase tracking-widest text-gray-600 ${
                     (personalBoards.length > 0 || idx > 0) ? 'pt-2 border-t border-border/50 mt-1' : 'pt-2.5'
                   }`}>
                     {client?.name || 'Client'}
@@ -257,7 +257,7 @@ function ProjectSwitcher() {
               {/* Browse all boards */}
               <button
                 onClick={() => { setOpen(false); setShowBoardsModal(true); }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors border-b border-border/50"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors border-b border-border/50"
               >
                 <LayoutGrid size={12} />
                 Browse all boards
@@ -282,7 +282,7 @@ function ProjectSwitcher() {
                   </select>
                   <div className="flex gap-1.5">
                     <button type="button" onClick={() => setAdding(false)}
-                      className="flex-1 py-1.5 text-sm text-gray-600 hover:text-gray-400 transition-colors">
+                      className="flex-1 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors">
                       Cancel
                     </button>
                     <button type="submit" disabled={creating || !newName.trim()}
@@ -294,7 +294,7 @@ function ProjectSwitcher() {
               ) : (
                 <button
                   onClick={() => setAdding(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-600 hover:text-gray-400 hover:bg-surface-3 transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
                 >
                   <Plus size={13} />
                   New board
@@ -336,11 +336,11 @@ function Toggle({ on, onToggle }) {
 function SectionHeader({ onBack, title, onClose }) {
   return (
     <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
-      <button onClick={onBack} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300">
+      <button onClick={onBack} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-100">
         <ChevronRight size={14} className="rotate-180" />
       </button>
-      <h2 className="text-sm font-semibold text-gray-200">{title}</h2>
-      <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300 ml-auto">
+      <h2 className="text-base font-semibold text-gray-200">{title}</h2>
+      <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-100 ml-auto">
         <X size={14} />
       </button>
     </div>
@@ -375,7 +375,7 @@ function UserProfileModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-surface-1 border border-border rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+      <div className="bg-surface-1 border border-border rounded-xl w-full max-w-sm shadow-xl overflow-hidden">
 
         {/* ── Main menu ── */}
         {!activeSection && (
@@ -394,11 +394,11 @@ function UserProfileModal({ onClose }) {
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-200 truncate group-hover:text-white transition-colors">{displayName}</p>
-                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                  {user?.company_name && <p className="text-xs text-gray-600 truncate">{user.company_name}</p>}
+                  <p className="text-sm text-gray-500 truncate">{user?.email}</p>
+                  {user?.company_name && <p className="text-sm text-gray-600 truncate">{user.company_name}</p>}
                 </div>
               </button>
-              <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-300 ml-2 shrink-0">
+              <button onClick={onClose} className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-gray-100 ml-2 shrink-0">
                 <X size={14} />
               </button>
             </div>
@@ -406,7 +406,7 @@ function UserProfileModal({ onClose }) {
             <div className="py-2">
               {/* Account */}
               <div className="px-3 pb-1">
-                <p className="px-2 pb-1 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Account</p>
+                <p className="px-2 pb-1 text-xs uppercase tracking-widest text-gray-600 font-semibold">Account</p>
                 <button
                   onClick={() => setActiveSection('profile')}
                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors group"
@@ -421,7 +421,7 @@ function UserProfileModal({ onClose }) {
 
               {/* Preferences */}
               <div className="px-3 pb-1 pt-3">
-                <p className="px-2 pb-1 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Preferences</p>
+                <p className="px-2 pb-1 text-xs uppercase tracking-widest text-gray-600 font-semibold">Preferences</p>
 
                 <button
                   onClick={() => setActiveSection('notifications')}
@@ -442,7 +442,7 @@ function UserProfileModal({ onClose }) {
                     <Globe size={15} className="text-blue-400" />
                   </div>
                   <span className="flex-1 text-sm text-gray-300 text-left group-hover:text-gray-200">Language</span>
-                  <span className="text-xs text-gray-500 mr-1">{language}</span>
+                  <span className="text-sm text-gray-500 mr-1">{language}</span>
                   <ChevronRight size={14} className="text-gray-600" />
                 </button>
 
@@ -454,7 +454,7 @@ function UserProfileModal({ onClose }) {
                     <Settings size={15} className="text-gray-400" />
                   </div>
                   <span className="flex-1 text-sm text-gray-300 text-left group-hover:text-gray-200">Settings</span>
-                  <span className="text-xs text-gray-500 mr-1 capitalize">{theme}</span>
+                  <span className="text-sm text-gray-500 mr-1 capitalize">{theme}</span>
                   <ChevronRight size={14} className="text-gray-600" />
                 </button>
               </div>
@@ -491,10 +491,10 @@ function UserProfileModal({ onClose }) {
               </div>
               <div className="space-y-0.5">
                 <p className="text-center text-sm font-semibold text-gray-200">{displayName}</p>
-                <p className="text-center text-xs text-gray-500">{user?.email}</p>
+                <p className="text-center text-sm text-gray-500">{user?.email}</p>
               </div>
               <div>
-                <label className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-1.5">
+                <label className="flex items-center gap-1.5 text-sm font-medium text-gray-500 mb-1.5">
                   <Briefcase size={11} /> Company
                 </label>
                 <input
@@ -508,7 +508,7 @@ function UserProfileModal({ onClose }) {
             </div>
             <div className="px-5 pb-5 flex gap-2">
               <button onClick={() => setActiveSection(null)}
-                className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-300 transition-colors rounded-lg border border-border hover:bg-surface-3">
+                className="flex-1 py-2 text-sm text-gray-500 hover:text-gray-100 transition-colors rounded-lg border border-border hover:bg-surface-3">
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving}
@@ -524,7 +524,7 @@ function UserProfileModal({ onClose }) {
           <>
             <SectionHeader onBack={() => setActiveSection(null)} title="Language" onClose={onClose} />
             <div className="px-3 py-2">
-              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Display language</p>
+              <p className="px-2 pb-2 text-xs uppercase tracking-widest text-gray-600 font-semibold">Display language</p>
               {['English', 'Swedish', 'German', 'French', 'Spanish'].map(lang => (
                 <button
                   key={lang}
@@ -535,7 +535,6 @@ function UserProfileModal({ onClose }) {
                   {language === lang && <Check size={14} className="text-accent" />}
                 </button>
               ))}
-              <p className="px-3 pt-3 pb-1 text-xs text-gray-600">Full translation support coming soon.</p>
             </div>
           </>
         )}
@@ -545,7 +544,7 @@ function UserProfileModal({ onClose }) {
           <>
             <SectionHeader onBack={() => setActiveSection(null)} title="Notifications" onClose={onClose} />
             <div className="px-3 py-2">
-              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Channels</p>
+              <p className="px-2 pb-2 text-xs uppercase tracking-widest text-gray-600 font-semibold">Channels</p>
               <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-surface-3 transition-colors">
                 <div className="w-8 h-8 rounded-lg bg-yellow-500/15 flex items-center justify-center shrink-0">
                   <Bell size={15} className="text-yellow-400" />
@@ -574,7 +573,7 @@ function UserProfileModal({ onClose }) {
                   }}
                 />
               </div>
-              <p className="px-3 pt-3 pb-1 text-xs text-gray-600">Email sends when you're offline. In-app delivers live.</p>
+              <p className="px-3 pt-3 pb-1 text-sm text-gray-400">Email sends when you're offline. In-app delivers live.</p>
             </div>
           </>
         )}
@@ -584,7 +583,7 @@ function UserProfileModal({ onClose }) {
           <>
             <SectionHeader onBack={() => setActiveSection(null)} title="Settings" onClose={onClose} />
             <div className="px-3 py-2">
-              <p className="px-2 pb-2 text-[10px] uppercase tracking-widest text-gray-600 font-semibold">Appearance</p>
+              <p className="px-2 pb-2 text-xs uppercase tracking-widest text-gray-600 font-semibold">Appearance</p>
               {THEMES.map(({ id, label, Icon, color, bg }) => (
                 <button
                   key={id}
@@ -625,14 +624,14 @@ function UserMenu() {
         {user?.picture ? (
           <img src={user.picture} alt="" className="w-7 h-7 rounded-full shrink-0 ring-1 ring-border" />
         ) : (
-          <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-xs font-bold text-accent shrink-0">
+          <div className="w-7 h-7 rounded-full bg-accent/20 border border-accent/30 flex items-center justify-center text-sm font-bold text-accent shrink-0">
             {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
           </div>
         )}
         <div className="flex-1 min-w-0 text-left">
           <p className="text-sm font-medium text-gray-300 truncate">{displayName || user?.email}</p>
           {user?.company_name && (
-            <p className="text-xs text-gray-500 truncate">{user.company_name}</p>
+            <p className="text-sm text-gray-500 truncate">{user.company_name}</p>
           )}
         </div>
       </button>
@@ -677,7 +676,7 @@ export default function Sidebar() {
               <button
                 ref={bellRef}
                 onClick={() => setShowNotifications(v => !v)}
-                className={`relative p-2 rounded-lg transition-colors ${showNotifications ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
+                className={`relative p-2 rounded-lg transition-colors ${showNotifications ? 'bg-surface-3 text-amber-300' : 'text-amber-400 hover:text-amber-300 hover:bg-surface-3'}`}
                 title="Notifications"
               >
                 <Bell size={18} />
@@ -687,7 +686,7 @@ export default function Sidebar() {
               </button>
               <button
                 onClick={() => setCurrentPage('settings')}
-                className={`p-2 rounded-lg transition-colors ${currentPage === 'settings' ? 'bg-surface-3 text-gray-300' : 'text-gray-500 hover:text-gray-300 hover:bg-surface-3'}`}
+                className={`p-2 rounded-lg transition-colors ${currentPage === 'settings' ? 'bg-surface-3 text-gray-200' : 'text-gray-400 hover:text-gray-200 hover:bg-surface-3'}`}
                 title="Settings"
               >
                 <Settings size={18} />
@@ -713,11 +712,11 @@ export default function Sidebar() {
           {archivedTasks.length > 0 && (
             <button
               onClick={() => setShowArchivedModal(true)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 text-sm transition-colors"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-gray-500 hover:text-gray-100 hover:bg-surface-3 text-sm transition-colors"
             >
               <Archive size={13} />
               Archived tasks
-              <span className="ml-auto text-xs">{archivedTasks.length}</span>
+              <span className="ml-auto text-sm">{archivedTasks.length}</span>
             </button>
           )}
 
@@ -725,7 +724,7 @@ export default function Sidebar() {
             <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-amber-400 hover:bg-surface-3 text-sm transition-colors">
               <AlertCircle size={15} />
               Human Action
-              <span className="ml-auto bg-amber-500/20 text-amber-400 text-xs px-1.5 py-0.5 rounded-full">
+              <span className="ml-auto bg-amber-500/20 text-amber-400 text-sm px-1.5 py-0.5 rounded-full">
                 {humanActionCount}
               </span>
             </button>
@@ -736,7 +735,7 @@ export default function Sidebar() {
         <div className="flex-1 overflow-y-auto p-3">
           <button
             onClick={() => setAgentsOpen(o => !o)}
-            className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-xs font-semibold text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest"
+            className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-sm font-semibold text-gray-500 hover:text-gray-100 transition-colors uppercase tracking-widest"
           >
             <span className="flex items-center gap-1.5">
               <Bot size={12} />
@@ -776,16 +775,16 @@ export default function Sidebar() {
               })}
 
               <button onClick={() => setShowNewAgent(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 transition-colors text-sm">
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-100 hover:bg-surface-3 transition-colors text-sm">
                 <Plus size={13} />
                 Add agent
               </button>
               <button onClick={() => setShowTemplates(true)}
-                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 transition-colors text-sm">
+                className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-100 hover:bg-surface-3 transition-colors text-sm">
                 <LayoutTemplate size={13} />
                 Templates
                 {agentTemplates.filter(t => !t.archived_at).length > 0 && (
-                  <span className="ml-auto text-xs text-gray-600">
+                  <span className="ml-auto text-sm text-gray-600">
                     {agentTemplates.filter(t => !t.archived_at).length}
                   </span>
                 )}
@@ -797,7 +796,7 @@ export default function Sidebar() {
           {isClientBoard && <div className="mt-3 pt-3 border-t border-border/50">
             <button
               onClick={() => setMembersOpen(o => !o)}
-              className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-xs font-semibold text-gray-500 hover:text-gray-300 transition-colors uppercase tracking-widest"
+              className="w-full flex items-center justify-between px-1 py-1 mb-1.5 text-sm font-semibold text-gray-500 hover:text-gray-100 transition-colors uppercase tracking-widest"
             >
               <span className="flex items-center gap-1.5">
                 <Users size={12} />
@@ -823,22 +822,22 @@ export default function Sidebar() {
                       {member.picture ? (
                         <img src={member.picture} alt="" className="w-6 h-6 rounded-full ring-1 ring-border shrink-0" />
                       ) : (
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0 ring-1 ring-border"
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ring-1 ring-border"
                           style={{ background: avatarColor }}>
                           {(name?.[0] || member.email[0]).toUpperCase()}
                         </div>
                       )}
                       <p className="text-sm text-gray-400 truncate flex-1">{name || member.email}</p>
-                      {isSelf && <span className="text-[8px] text-accent shrink-0">you</span>}
+                      {isSelf && <span className="text-xs text-accent shrink-0">you</span>}
                     </div>
                   );
                 })}
                 {boardMembers.length > 5 && (
-                  <p className="text-xs text-gray-600 px-2.5 py-1">+{boardMembers.length - 5} more</p>
+                  <p className="text-sm text-gray-600 px-2.5 py-1">+{boardMembers.length - 5} more</p>
                 )}
                 <button
                   onClick={() => setShowMembersModal(true)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-3 transition-colors text-sm"
+                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-gray-500 hover:text-gray-100 hover:bg-surface-3 transition-colors text-sm"
                 >
                   <UserPlus size={13} />
                   Manage members

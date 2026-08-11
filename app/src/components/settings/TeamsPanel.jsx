@@ -19,7 +19,7 @@ function MemberAvatar({ email, name, picture }) {
   if (picture) return <img src={picture} alt="" className="w-6 h-6 rounded-full ring-1 ring-border shrink-0" />;
   return (
     <div
-      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0"
+      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
       style={{ background: color + '20', color, border: `1px solid ${color}30` }}
     >
       {initial}
@@ -93,28 +93,28 @@ function TeamDetailPanel({ team, users, onMembersChanged }) {
             <MemberAvatar email={tm.email} name={name || undefined} picture={tm.picture} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="text-xs font-medium text-gray-300 truncate">{name || tm.email}</p>
+                <p className="text-sm font-medium text-gray-300 truncate">{name || tm.email}</p>
                 {!tm.user_id && (
-                  <span className="text-[8px] font-medium px-1 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
+                  <span className="text-xs font-medium px-1 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/25 uppercase tracking-wide shrink-0">
                     Pending
                   </span>
                 )}
               </div>
-              {name && <p className="text-[10px] text-gray-600 truncate">{tm.email}</p>}
+              {name && <p className="text-xs text-gray-600 truncate">{tm.email}</p>}
             </div>
             {confirmRemove === tm.email ? (
               <div className="flex items-center gap-1 shrink-0">
-                <span className="text-[10px] text-gray-500">Remove?</span>
+                <span className="text-xs text-gray-500">Remove?</span>
                 <button
                   onClick={() => handleRemove(tm.email)}
                   disabled={removing === tm.email}
-                  className="px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-30"
+                  className="px-1.5 py-0.5 text-xs font-medium text-red-400 hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-30"
                 >
                   Yes
                 </button>
                 <button
                   onClick={() => setConfirmRemove(null)}
-                  className="px-1.5 py-0.5 text-[10px] text-gray-600 hover:text-gray-400 rounded transition-colors"
+                  className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors"
                 >
                   No
                 </button>
@@ -123,7 +123,7 @@ function TeamDetailPanel({ team, users, onMembersChanged }) {
               <button
                 onClick={() => setConfirmRemove(tm.email)}
                 disabled={!!removing}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
               >
                 <Trash2 size={12} />
               </button>
@@ -135,20 +135,20 @@ function TeamDetailPanel({ team, users, onMembersChanged }) {
       {/* Add existing workspace members not yet in team */}
       {nonMembers.length > 0 && (
         <div className="pt-2 pb-0.5">
-          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest px-2 pb-1">Add member</p>
+          <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2 pb-1">Add member</p>
           {nonMembers.map(u => {
             const name = `${u.first_name || ''} ${u.last_name || ''}`.trim();
             return (
               <div key={u.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-3 group transition-colors">
                 <MemberAvatar email={u.email} name={name || undefined} picture={u.picture} />
                 <div className="flex-1 min-w-0">
-                  {name && <p className="text-xs font-medium text-gray-400 truncate">{name}</p>}
-                  <p className="text-[10px] text-gray-600 truncate">{u.email}</p>
+                  {name && <p className="text-sm font-medium text-gray-400 truncate">{name}</p>}
+                  <p className="text-xs text-gray-600 truncate">{u.email}</p>
                 </div>
                 <button
                   onClick={() => handleAdd(u.email)}
                   disabled={adding}
-                  className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-all disabled:opacity-40 shrink-0"
+                  className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-all disabled:opacity-40 shrink-0"
                 >
                   <Plus size={10} /> Add
                 </button>
@@ -168,17 +168,17 @@ function TeamDetailPanel({ team, users, onMembersChanged }) {
           onChange={e => { setAddEmail(e.target.value); setAddError(''); }}
           placeholder="Invite by email…"
           type="email"
-          className="flex-1 bg-surface-3 border border-border rounded-lg px-2.5 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 transition-colors"
+          className="flex-1 bg-surface-3 border border-border rounded-lg px-2.5 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 transition-colors"
         />
         <button
           type="submit"
           disabled={adding || !addEmail.trim()}
-          className="px-2.5 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent text-xs font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
+          className="px-2.5 py-1.5 bg-accent/15 hover:bg-accent/25 text-accent text-sm font-medium rounded-lg transition-colors disabled:opacity-40 shrink-0"
         >
           {adding ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
         </button>
       </form>
-      {addError && <p className="text-[11px] text-red-400 px-1 pt-0.5">{addError}</p>}
+      {addError && <p className="text-xs text-red-400 px-1 pt-0.5">{addError}</p>}
     </div>
   );
 }
@@ -236,7 +236,7 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
       sortable: true,
       render: (team) => (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold bg-accent/15 text-accent border border-accent/20">
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-sm font-bold bg-accent/15 text-accent border border-accent/20">
             {team.name[0].toUpperCase()}
           </div>
           {renamingTeam === team.id ? (
@@ -276,17 +276,17 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
 
         {/* Header */}
         <div className="flex items-center justify-between mb-1">
-          <h2 className="text-sm font-semibold text-gray-200">Teams</h2>
+          <h2 className="text-base font-semibold text-gray-200">Teams</h2>
           {!showNewTeamForm && (
             <button
               onClick={() => { setShowNewTeamForm(true); setNewTeamName(''); setCreateError(''); }}
-              className="flex items-center gap-1 text-xs text-accent hover:text-accent/80 transition-colors"
+              className="flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors"
             >
               <Plus size={12} /> New team
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-500 mb-6">Teams group workspace members for board assignment.</p>
+        <p className="text-sm text-gray-500 mb-6">Teams group workspace members for board assignment.</p>
 
         {/* Create form */}
         {showNewTeamForm && (
@@ -299,12 +299,12 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
               autoFocus
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
             />
-            {createError && <p className="text-xs text-red-400">{createError}</p>}
+            {createError && <p className="text-sm text-red-400">{createError}</p>}
             <div className="flex gap-1.5">
               <button
                 type="button"
                 onClick={() => { setShowNewTeamForm(false); setNewTeamName(''); setCreateError(''); }}
-                className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-300 border border-border rounded-lg hover:bg-surface-3 transition-colors"
+                className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg hover:bg-surface-3 transition-colors"
               >
                 Cancel
               </button>
@@ -332,24 +332,24 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
               <button
                 onClick={() => { setRenamingTeam(team.id); setRenameValue(team.name); }}
                 title="Rename"
-                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-surface-3 transition-colors"
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors"
               >
                 <Pencil size={12} />
               </button>
               {confirmDelete === team.id ? (
                 <span className="flex items-center gap-1">
-                  <span className="text-[10px] text-amber-400 whitespace-nowrap">
+                  <span className="text-xs text-amber-400 whitespace-nowrap">
                     {team.member_count > 0 ? `Delete (${team.member_count})?` : 'Delete?'}
                   </span>
                   <button
                     onClick={() => handleDeleteTeam(team)}
-                    className="px-1.5 py-0.5 text-[10px] font-medium text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                    className="px-1.5 py-0.5 text-xs font-medium text-red-400 hover:bg-red-500/10 rounded-md transition-colors"
                   >
                     Yes
                   </button>
                   <button
                     onClick={() => setConfirmDelete(null)}
-                    className="px-1.5 py-0.5 text-[10px] text-gray-600 hover:text-gray-400 rounded transition-colors"
+                    className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors"
                   >
                     No
                   </button>
@@ -358,7 +358,7 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
                 <button
                   onClick={() => handleDeleteTeam(team)}
                   title="Delete team"
-                  className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>

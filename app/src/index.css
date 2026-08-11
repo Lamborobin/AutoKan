@@ -31,7 +31,7 @@
 .light .text-gray-400 { color: #3c3c58 !important; }
 .light .text-gray-500 { color: #5a5a7a !important; }
 .light .text-gray-600 { color: #7878a0 !important; }
-.light .text-gray-700 { color: #9898b8 !important; }
+.light .text-gray-600 { color: #9898b8 !important; }
 
 .light .placeholder-gray-600::placeholder { color: #9898b8; }
 .light .placeholder-gray-700::placeholder { color: #aaaacc; }
@@ -53,6 +53,22 @@
 
   .light body {
     color: #111128;
+  }
+
+  /* Keyboard focus — the app uses `outline-none` widely to kill the default ring on
+     click. That also killed it for keyboard users, so restore it explicitly here.
+     Element selectors (0,1,1) outrank the `outline-none` utility class (0,1,0), and
+     :focus-visible means mouse clicks stay clean. Outline follows border-radius. */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  summary:focus-visible,
+  [role="button"]:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
   }
 
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -79,6 +95,6 @@
   }
 
   .tag {
-    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium;
   }
 }

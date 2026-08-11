@@ -43,7 +43,7 @@ export default function TaskCard({ task }) {
       {...attributes}
       {...(isLocked ? {} : listeners)}
       onClick={() => setSelectedTask(task)}
-      className={`group relative bg-surface-2 border rounded-xl p-3.5 transition-all duration-150 animate-slide-in select-none
+      className={`group relative bg-surface-2 border rounded-xl p-4 transition-all duration-150 animate-slide-in select-none
         ${isLocked
           ? 'border-amber-500/25 cursor-pointer'
           : isDraggingAgent && isOver
@@ -56,25 +56,25 @@ export default function TaskCard({ task }) {
       {/* Agent drop hint overlay */}
       {isDraggingAgent && isOver && (
         <div className="absolute inset-0 rounded-xl border-2 border-accent/40 border-dashed pointer-events-none z-10 flex items-center justify-center">
-          <span className="text-[10px] font-medium text-accent bg-surface-2/90 px-2 py-1 rounded-lg">
+          <span className="text-xs font-medium text-accent bg-surface-2/90 px-2 py-1 rounded-lg">
             Drop to assign
           </span>
         </div>
       )}
 
-      {/* Lock banner */}
+      {/* Lock banner — matches the amber "Planning in progress" banner in TaskDetail */}
       {isLocked && (
-        <div className="flex items-center gap-1.5 mb-2.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <Lock size={9} className="text-amber-400 shrink-0" />
-          <span className="text-[10px] font-medium text-amber-400">Locked · Planning phase</span>
+        <div className="flex items-center gap-1.5 mb-2.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md">
+          <Lock size={12} className="text-amber-400 shrink-0" />
+          <span className="text-xs font-medium text-amber-400">Locked · Planning phase</span>
         </div>
       )}
 
       {/* Needs-attention banner — draft task awaiting a description */}
       {needsAttention && !isLocked && (
-        <div className="flex items-center gap-1.5 mb-2.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <AlertTriangle size={9} className="text-amber-400 shrink-0" />
-          <span className="text-[10px] font-medium text-amber-400">Needs attention · add a description</span>
+        <div className="flex items-center gap-1.5 mb-2.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md">
+          <AlertTriangle size={12} className="text-amber-400 shrink-0" />
+          <span className="text-xs font-medium text-amber-400">Needs attention · add a description</span>
         </div>
       )}
 
@@ -90,7 +90,7 @@ export default function TaskCard({ task }) {
 
       {/* Description */}
       {task.description && (
-        <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">
+        <p className="text-sm text-gray-500 line-clamp-2 mb-3 leading-relaxed">
           {task.description}
         </p>
       )}
@@ -99,18 +99,15 @@ export default function TaskCard({ task }) {
       {task.progress > 0 && (
         <div className="mb-3">
           <div className="flex justify-between items-center mb-1">
-            <span className="text-xs text-gray-500">Progress</span>
-            <span className="text-xs text-gray-400">{task.progress}%</span>
+            <span className="text-xs text-gray-400">Progress</span>
+            <span className="text-xs font-medium text-gray-300">{task.progress}%</span>
           </div>
           <div className="h-1 bg-surface-4 rounded-full overflow-hidden">
             <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${task.progress}%`,
-                background: task.progress === 100
-                  ? 'linear-gradient(90deg, #10b981, #34d399)'
-                  : 'linear-gradient(90deg, #7c6af7, #a78bfa)'
-              }}
+              className={`h-full rounded-full transition-all duration-300 ${
+                task.progress === 100 ? 'bg-emerald-500' : 'bg-accent'
+              }`}
+              style={{ width: `${task.progress}%` }}
             />
           </div>
         </div>
@@ -136,17 +133,17 @@ export default function TaskCard({ task }) {
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-gray-600">
+        <div className="flex items-center gap-2 text-xs text-gray-400">
           {assignedAgent && (
             <span className="flex items-center gap-1">
-              <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
+              <div className="w-4 h-4 rounded-full flex items-center justify-center text-white text-xs font-bold"
                    style={{ background: assignedAgent.color }}>
                 {assignedAgent.name[0]}
               </div>
             </span>
           )}
           <span className="flex items-center gap-1">
-            <Clock size={10} />
+            <Clock size={12} />
             {formatDistanceToNow(new Date(task.created_at.replace(' ', 'T') + 'Z'), { addSuffix: true })}
           </span>
         </div>

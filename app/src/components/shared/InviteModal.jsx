@@ -56,15 +56,15 @@ export default function InviteModal({ onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-surface-1 border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-md bg-surface-1 border border-border rounded-xl shadow-xl flex flex-col overflow-hidden">
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
             <UserPlus size={15} className="text-accent" />
-            <span className="text-sm font-semibold text-gray-200">Invite team member</span>
+            <span className="text-base font-semibold text-gray-200">Invite team member</span>
           </div>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-300 transition-colors p-0.5">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-100 transition-colors p-0.5">
             <X size={14} />
           </button>
         </div>
@@ -73,7 +73,7 @@ export default function InviteModal({ onClose }) {
 
           {/* Send invite form */}
           <form onSubmit={handleSend} className="flex flex-col gap-3">
-            <label className="text-xs font-medium text-gray-400">Email address</label>
+            <label className="text-sm font-medium text-gray-400">Email address</label>
             <div className="flex gap-2">
               <input
                 type="email"
@@ -86,7 +86,7 @@ export default function InviteModal({ onClose }) {
               <button
                 type="submit"
                 disabled={sending || !email.trim()}
-                className="px-3 py-2 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5"
+                className="px-3 py-2 bg-accent hover:bg-accent/80 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
               >
                 <Mail size={12} />
                 {sending ? 'Sending…' : 'Send'}
@@ -94,7 +94,7 @@ export default function InviteModal({ onClose }) {
             </div>
 
             {feedback && (
-              <div className={`px-3 py-2 rounded-lg text-xs border ${
+              <div className={`px-3 py-2 rounded-lg text-sm border ${
                 feedback.type === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
                 feedback.type === 'error'   ? 'bg-red-500/10 border-red-500/20 text-red-400' :
                                              'bg-amber-500/10 border-amber-500/20 text-amber-300'
@@ -105,13 +105,13 @@ export default function InviteModal({ onClose }) {
                     <input
                       readOnly
                       value={feedback.link}
-                      className="flex-1 bg-surface-3 border border-border rounded px-2 py-1 text-[10px] text-gray-400 outline-none"
+                      className="flex-1 bg-surface-3 border border-border rounded-md px-2 py-1 text-xs text-gray-400 outline-none"
                       onClick={e => e.target.select()}
                     />
                     <button
                       type="button"
                       onClick={() => copyLink(feedback.link)}
-                      className="flex items-center gap-1 px-2 py-1 bg-surface-3 border border-border rounded text-[10px] text-gray-400 hover:text-gray-200 transition-colors"
+                      className="flex items-center gap-1 px-2 py-1 bg-surface-3 border border-border rounded-md text-xs text-gray-400 hover:text-gray-200 transition-colors"
                     >
                       {copied ? <Check size={10} className="text-green-400" /> : <Copy size={10} />}
                       {copied ? 'Copied' : 'Copy'}
@@ -125,15 +125,15 @@ export default function InviteModal({ onClose }) {
           {/* Pending invites list */}
           {invites.length > 0 && (
             <div className="flex flex-col gap-2">
-              <span className="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Pending invites</span>
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pending invites</span>
               <div className="flex flex-col gap-1.5">
                 {invites.map(invite => (
                   <div key={invite.id} className={`flex items-center gap-3 px-3 py-2.5 bg-surface-2 border rounded-lg ${
                     invite.is_expired || invite.used_at ? 'border-border opacity-50' : 'border-border'
                   }`}>
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs text-gray-200 font-medium truncate">{invite.email}</div>
-                      <div className="text-[10px] text-gray-600 mt-0.5">
+                      <div className="text-sm text-gray-200 font-medium truncate">{invite.email}</div>
+                      <div className="text-xs text-gray-600 mt-0.5">
                         {invite.used_at
                           ? `Accepted ${formatDistanceToNow(new Date(invite.used_at), { addSuffix: true })}`
                           : invite.is_expired
@@ -141,14 +141,14 @@ export default function InviteModal({ onClose }) {
                           : `Expires ${formatDistanceToNow(new Date(invite.expires_at), { addSuffix: true })}`
                         }
                         {invite.invited_by_name && (
-                          <span className="text-gray-700"> · by {invite.invited_by_name}</span>
+                          <span className="text-gray-600"> · by {invite.invited_by_name}</span>
                         )}
                       </div>
                     </div>
                     {!invite.used_at && (
                       <button
                         onClick={() => handleRevoke(invite.id)}
-                        className="text-gray-600 hover:text-red-400 transition-colors p-0.5 shrink-0"
+                        className="text-gray-400 hover:text-red-400 transition-colors p-0.5 shrink-0"
                         title="Revoke invite"
                       >
                         <Trash2 size={12} />
@@ -161,7 +161,7 @@ export default function InviteModal({ onClose }) {
           )}
 
           {invites.length === 0 && (
-            <p className="text-xs text-gray-600 text-center py-2">No invites sent yet.</p>
+            <p className="text-sm text-gray-600 text-center py-2">No invites sent yet.</p>
           )}
         </div>
       </div>
