@@ -19,6 +19,7 @@ const { GLOBAL_INSTRUCTIONS_DIR, PROJECT_ROOT } = require('../utils/instructions
 
 const PORT = process.env.PORT || 3001;
 const VALID_REVIEW_LEVELS = ['unacceptable', 'less_acceptable', 'accepted', 'very_good', 'fully_satisfied'];
+const PLANNING_CAPABILITY = 'perm_planning';
 
 let _client;
 function getClient() {
@@ -81,32 +82,43 @@ function firedTool(task, logs) {
   return null;
 }
 
+// Tools that never populate pm_checklist (see agentRunner.js's suggest_split/suggest_abandon
+// handling) — checklist-count checks are meaningless against them and would fail every
+// correct run of these tools, so they're skipped whenever one of these actually fired.
+const TOOLS_WITHOUT_CHECKLIST = ['suggest_split', 'suggest_abandon'];
+
 function scoreDeterministic(task, logs, rubric = {}) {
   const checks = [];
   const tool = firedTool(task, logs);
 
+  // expected_tool may be a single tool name or an array of equally-acceptable tools
+  // (e.g. a task that's ambiguous enough to justify either a clarifying question or a
+  // split proposal) — either shape is scored the same way, against a set of options.
   if (rubric.expected_tool) {
+    const expected = Array.isArray(rubric.expected_tool) ? rubric.expected_tool : [rubric.expected_tool];
     checks.push({
       name: 'expected_tool',
-      passed: tool === rubric.expected_tool,
-      detail: `expected "${rubric.expected_tool}", got "${tool || 'none'}"`,
+      passed: expected.includes(tool),
+      detail: `expected "${expected.join('" or "')}", got "${tool || 'none'}"`,
     });
   }
 
   const checklist = task.pm_checklist ? JSON.parse(task.pm_checklist) : [];
-  if (rubric.checklist_count_min != null) {
-    checks.push({
-      name: 'checklist_count_min',
-      passed: checklist.length >= rubric.checklist_count_min,
-      detail: `min ${rubric.checklist_count_min}, got ${checklist.length}`,
-    });
-  }
-  if (rubric.checklist_count_max != null) {
-    checks.push({
-      name: 'checklist_count_max',
-      passed: checklist.length <= rubric.checklist_count_max,
-      detail: `max ${rubric.checklist_count_max}, got ${checklist.length}`,
-    });
+  if (!TOOLS_WITHOUT_CHECKLIST.includes(tool)) {
+    if (rubric.checklist_count_min != null) {
+      checks.push({
+        name: 'checklist_count_min',
+        passed: checklist.length >= rubric.checklist_count_min,
+        detail: `min ${rubric.checklist_count_min}, got ${checklist.length}`,
+      });
+    }
+    if (rubric.checklist_count_max != null) {
+      checks.push({
+        name: 'checklist_count_max',
+        passed: checklist.length <= rubric.checklist_count_max,
+        detail: `max ${rubric.checklist_count_max}, got ${checklist.length}`,
+      });
+    }
   }
 
   const messageText = [task.pm_pending_question, task.pm_review_comment].filter(Boolean).join('\n').toLowerCase();
@@ -306,12 +318,35 @@ function submitManualReview(runId, { level, notes, reviewerId } = {}) {
 // here; the user reviews/edits the draft in the UI and it's saved via the normal
 // case-creation path (POST /cases), same as a fully manual case.
 
-function listBoardDocs(subscriptionId, projectId) {
+function parseFrontMatter(content) {
+  if (!content.startsWith('---\n')) return { meta: {}, body: content };
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return { meta: {}, body: content };
+  const block = content.slice(4, end);
+  const meta = {};
+  for (const line of block.split('\n')) {
+    const colon = line.indexOf(':');
+    if (colon > 0) meta[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+  }
+  return { meta, body: content.slice(end + 5).trimStart() };
+}
+
+function isVisibleToCapability(meta, capability) {
+  if (!meta.capabilities) return true;
+  return meta.capabilities.split(',').map(c => c.trim()).filter(Boolean).includes(capability);
+}
+
+function listBoardDocs(subscriptionId, projectId, capability) {
   const dir = path.join(GLOBAL_INSTRUCTIONS_DIR, subscriptionId, projectId);
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
     .filter(f => f.endsWith('.md'))
-    .map(f => ({ name: f, content: fs.readFileSync(path.join(dir, f), 'utf8') }));
+    .map(f => {
+      const raw = fs.readFileSync(path.join(dir, f), 'utf8');
+      const { meta, body } = parseFrontMatter(raw);
+      return { name: f, meta, content: body };
+    })
+    .filter(d => isVisibleToCapability(d.meta, capability));
 }
 
 // Shape shared by both the whole-task draft and the rubric-only draft below —
@@ -324,8 +359,17 @@ const RUBRIC_SCHEMA = {
       type: 'object',
       description: 'Mechanical substring/count checks — no judgment involved, so keep every check something you are certain correct handling produces. When in doubt, leave a field out and rely on the judge rubric below instead of guessing.',
       properties: {
-        expected_tool: { type: 'string', enum: ['ask_question', 'approve_task', 'suggest_split', 'suggest_abandon'] },
-        checklist_count_min: { type: 'integer' },
+        expected_tool: {
+          description: 'The tool (or tools) that count as a correct response. Use a plain string for a single correct tool. Use an array of strings when more than one tool is a genuinely correct handling of this scenario — e.g. a task ambiguous enough that either asking a clarifying question OR proposing a split is acceptable. Only include multiple tools when they are truly equally correct, not as a hedge.',
+          oneOf: [
+            { type: 'string', enum: ['ask_question', 'approve_task', 'suggest_split', 'suggest_abandon'] },
+            { type: 'array', items: { type: 'string', enum: ['ask_question', 'approve_task', 'suggest_split', 'suggest_abandon'] } },
+          ],
+        },
+        checklist_count_min: {
+          type: 'integer',
+          description: 'Only checked when the tool that actually fired is ask_question or approve_task — suggest_split and suggest_abandon never populate a checklist, so this is skipped automatically for those. Do not set this if suggest_split/suggest_abandon is among the accepted expected_tool values and is the more likely correct outcome.',
+        },
         checklist_count_max: {
           type: 'integer',
           description: 'Upper bound on checklist length. Leave generous headroom above checklist_count_min — a thorough planner reasonably adds items for already-confirmed facts alongside open questions, not just the bare-minimum questions. Prefer min + 4 or more, or omit this field entirely if unsure.',
@@ -349,9 +393,9 @@ const RUBRIC_SCHEMA = {
   },
 };
 
-async function draftCaseFromBoard(projectId, subscriptionId) {
-  const docs = listBoardDocs(subscriptionId, projectId);
-  if (docs.length === 0) throw new Error('This board has no board-level context docs to probe yet.');
+async function draftCaseFromBoard(projectId, subscriptionId, capability = PLANNING_CAPABILITY) {
+  const docs = listBoardDocs(subscriptionId, projectId, capability);
+  if (docs.length === 0) throw new Error('This board has no context docs visible to the tested capability yet.');
 
   const docsBlock = docs.map(d => `### ${d.name}\n${d.content}`).join('\n\n---\n\n');
 
@@ -400,8 +444,8 @@ async function draftCaseFromBoard(projectId, subscriptionId) {
 // (manual entry or cloned from a real task) — the user never sees or picks tool
 // names; the backend infers what "correct handling" should look like on its own,
 // grounded in the board's real docs when there are any.
-async function draftRubricForTask(title, description, projectId, subscriptionId) {
-  const docs = listBoardDocs(subscriptionId, projectId);
+async function draftRubricForTask(title, description, projectId, subscriptionId, capability = PLANNING_CAPABILITY) {
+  const docs = listBoardDocs(subscriptionId, projectId, capability);
   const docsBlock = docs.length
     ? docs.map(d => `### ${d.name}\n${d.content}`).join('\n\n---\n\n')
     : '(This board has no board-level rule documents yet — judge against general System Rules only.)';

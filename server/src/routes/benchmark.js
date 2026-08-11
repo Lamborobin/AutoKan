@@ -14,6 +14,7 @@ const router = express.Router();
 
 const VALID_SOURCES = ['manual', 'ai_generated', 'ai_edited', 'cloned_task'];
 const VALID_LAYERS = ['workspace', 'board'];
+const TESTED_CAPABILITY = 'perm_planning';
 
 // Returns true for JWT-authenticated users and legacy X-Agent-Id: human — this
 // feature is a human/board-admin tool, never something an AI agent calls itself.
@@ -65,23 +66,26 @@ router.post('/cases', attachAgent, async (req, res) => {
     return res.status(400).json({ error: `layer must be one of: ${VALID_LAYERS.join(', ')}` });
   }
   const resolvedSource = source && VALID_SOURCES.includes(source) ? source : 'manual';
-
-  let resolvedRubric = rubric;
-  if (!resolvedRubric || Object.keys(resolvedRubric).length === 0) {
-    try {
-      resolvedRubric = await draftRubricForTask(title, description, project_id || null, subscription_id);
-    } catch (err) {
-      return res.status(500).json({ error: `Could not prepare scoring for this task: ${err.message}` });
-    }
-  }
+  const needsRubric = !rubric || Object.keys(rubric).length === 0;
 
   const id = 'bmc_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
     INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, rule_reference, title, description, rubric, source, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, subscription_id, project_id || null, layer, rule_reference || null, title, description, JSON.stringify(resolvedRubric || {}), resolvedSource, req.user?.sub || null);
+  `).run(id, subscription_id, project_id || null, layer, rule_reference || null, title, description, JSON.stringify(rubric || {}), resolvedSource, req.user?.sub || null);
 
   res.status(201).json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(id)));
+
+  // Scoring rubric isn't needed until the case is actually run, so don't block the
+  // create response on an LLM round-trip — draft it in the background and patch it in.
+  if (needsRubric) {
+    draftRubricForTask(title, description, project_id || null, subscription_id, TESTED_CAPABILITY)
+      .then(draftedRubric => {
+        db.prepare('UPDATE benchmark_cases SET rubric = ? WHERE id = ?')
+          .run(JSON.stringify(draftedRubric || {}), id);
+      })
+      .catch(err => console.error('[benchmark] background rubric draft failed:', err.message));
+  }
 });
 
 // POST /api/benchmark/cases/draft — AI drafts title/description/rubric from a board's
@@ -93,7 +97,7 @@ router.post('/cases/draft', attachAgent, async (req, res) => {
     return res.status(400).json({ error: 'project_id and subscription_id are required' });
   }
   try {
-    const draft = await draftCaseFromBoard(project_id, subscription_id);
+    const draft = await draftCaseFromBoard(project_id, subscription_id, TESTED_CAPABILITY);
     res.json(draft);
   } catch (err) {
     res.status(500).json({ error: err.message });

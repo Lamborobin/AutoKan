@@ -83,12 +83,14 @@ function toolLabel(tool) {
 // into one line by the caller since they describe the same number.
 function friendlySummary(check) {
   if (check.name === 'expected_tool') {
-    const m = check.detail.match(/expected "([^"]+)", got "([^"]+)"/);
+    const m = check.detail.match(/expected "(.+)", got "([^"]+)"/);
     if (!m) return check.detail;
-    const [, expected, got] = m;
+    const [, expectedRaw, got] = m;
+    const expectedTools = expectedRaw.split('" or "');
+    const expectedLabel = expectedTools.map(toolLabel).join(' or ');
     return check.passed
-      ? `Correctly ${toolLabel(expected)}`
-      : `Expected the planner to have ${toolLabel(expected)} — instead it ${toolLabel(got)}`;
+      ? `Correctly ${toolLabel(got)}`
+      : `Expected the planner to have ${expectedLabel} — instead it ${toolLabel(got)}`;
   }
   if (check.name.startsWith('required:')) {
     const field = check.name.slice('required:'.length);
@@ -401,7 +403,11 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
 
   async function handleRun() {
     setRunning(true);
-    try { await onRun(c.id); }
+    try {
+      const run = await onRun(c.id);
+      setExpanded(true);
+      setSelectedRunId(run?.id || null);
+    }
     catch (err) { alert(err.response?.data?.error || 'Run failed to start'); }
     finally { setRunning(false); }
   }
@@ -492,7 +498,7 @@ export default function BenchmarkPanel({ scope }) {
   }, [scope, currentProjectId, subscription?.id]);
 
   async function handleRun(caseId) {
-    await runBenchmarkCase(caseId, targetProjectId);
+    return runBenchmarkCase(caseId, targetProjectId);
   }
 
   async function handleDelete(caseId) {
