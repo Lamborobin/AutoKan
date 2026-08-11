@@ -323,11 +323,11 @@ function RunCard({ run, caseId }) {
               <button onClick={handleAiReview} disabled={reviewing}
                 title="Re-judges this run's existing output against the case's current rubric — doesn't create a new task or change the checklist"
                 className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
-                {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Review with AI
+                {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} {run.judge_result ? 'Re-review with AI' : 'Review with AI'}
               </button>
               <button onClick={handleManualToggle}
                 className="text-xs px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
-                Review manually
+                {run.manual_review ? 'Re-review manually' : 'Review manually'}
               </button>
             </div>
           </div>
