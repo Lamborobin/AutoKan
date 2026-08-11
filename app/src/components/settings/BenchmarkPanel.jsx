@@ -63,11 +63,13 @@ function friendlySummary(check) {
   }
   if (check.name.startsWith('required:')) {
     const field = check.name.slice('required:'.length);
-    return check.passed ? `Covered "${field}"` : `Missed "${field}"`;
+    return check.passed
+      ? `Its message mentioned "${field}", as expected`
+      : `Its message never literally said "${field}" — worth a manual look, since this only checks for that exact word`;
   }
   if (check.name.startsWith('forbidden:')) {
     const field = check.name.slice('forbidden:'.length);
-    return check.passed ? `Correctly avoided saying "${field}"` : `Incorrectly said "${field}"`;
+    return check.passed ? `Avoided saying "${field}"` : `Said "${field}", which this case flags as the wrong phrasing`;
   }
   return check.detail;
 }
@@ -87,8 +89,8 @@ function mergeChecklistCountChecks(checks) {
     name: 'checklist_count',
     passed,
     detail: passed
-      ? `Checklist had an appropriate number of items (${count})`
-      : `Checklist length was off (${count} items)`,
+      ? `Checklist length looked reasonable (${count} items)`
+      : `Checklist length seemed off (${count} items)`,
   };
 
   const rest = checks.filter(c => c.name !== 'checklist_count_min' && c.name !== 'checklist_count_max');
@@ -181,26 +183,31 @@ function PlannerOutput({ taskId }) {
       </button>
 
       {open && (
-        <div className="mt-2 space-y-2.5">
+        <div className="mt-2 space-y-3">
           {loading && <p className="text-xs text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
 
           {!loading && (task?.pm_pending_question || task?.pm_review_comment) && (
-            <MarkdownText text={task.pm_pending_question || task.pm_review_comment} className="text-xs text-gray-400" />
+            <div className="border-l-2 border-border pl-2.5">
+              <MarkdownText text={task.pm_pending_question || task.pm_review_comment} className="text-xs text-gray-100 leading-relaxed" />
+            </div>
           )}
 
           {!loading && checklist.length > 0 && (
-            <ul className="space-y-1">
-              {checklist.map((entry, i) => {
-                const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
-                const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
-                return (
-                  <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500">
-                    {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
-                    <MarkdownText text={text} className="text-[11px] text-gray-500" />
-                  </li>
-                );
-              })}
-            </ul>
+            <div>
+              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Checklist</p>
+              <ul className="space-y-1">
+                {checklist.map((entry, i) => {
+                  const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
+                  const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
+                  return (
+                    <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500">
+                      {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
+                      <MarkdownText text={text} className="text-[11px] text-gray-500" />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           )}
 
           {!loading && !hasContent && <p className="text-xs text-gray-600">Nothing recorded for this run.</p>}
@@ -253,6 +260,21 @@ function RunCard({ run, caseId }) {
           <p className="text-xs text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the planner…</p>
         )}
 
+        {/* Two independent verdicts, always both visible: the AI judge's status and the
+            human's, so neither one silently overwrites or hides the other. */}
+        {run.status === 'completed' && (
+          <div className="flex items-center gap-4 text-[10px]">
+            <span className="text-gray-600">AI: {run.judge_result
+              ? <span className={`font-medium ${run.judge_result.passed ? 'text-green-400' : 'text-red-400'}`}>{run.judge_result.passed ? 'Passed' : 'Failed'}</span>
+              : <span className="text-gray-600">not reviewed</span>}
+            </span>
+            <span className="text-gray-600">Human: {run.manual_review
+              ? <span className="font-medium text-purple-300">{REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</span>
+              : <span className="text-gray-600">not reviewed</span>}
+            </span>
+          </div>
+        )}
+
         {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
 
         {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
@@ -269,6 +291,7 @@ function RunCard({ run, caseId }) {
         {run.status === 'completed' && (
           <div className="flex items-center gap-2 border-t border-border/50 mt-1 pt-2.5">
             <button onClick={handleAiReview} disabled={reviewing}
+              title="Re-judges this run's existing output against the case's current rubric — doesn't create a new task or change the checklist"
               className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
               {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} {run.judge_result ? 'Re-check with AI' : 'Check rule compliance'}
             </button>
@@ -352,11 +375,19 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
       </div>
 
       {expanded && runs?.length > 0 && (
-        <div className="pt-3 mt-0.5 border-t border-border/60">
-          <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Runs</p>
-          <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-            {runs.map(run => <RunCard key={run.id} run={run} caseId={c.id} />)}
+        <div className="pt-3 mt-0.5 border-t border-border/60 space-y-2.5">
+          <div>
+            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Latest run</p>
+            <RunCard run={runs[0]} caseId={c.id} />
           </div>
+          {runs.length > 1 && (
+            <div>
+              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Earlier runs</p>
+              <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                {runs.slice(1).map(run => <RunCard key={run.id} run={run} caseId={c.id} />)}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
