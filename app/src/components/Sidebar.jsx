@@ -138,11 +138,13 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
 }
 
 function ProjectSwitcher() {
-  const { projects, clients, currentProjectId, setCurrentProject, createProject, user } = useStore();
+  const { projects, clients, currentProjectId, setCurrentProject, createProject, createClient, user } = useStore();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
   const [newClientId, setNewClientId] = useState('');
+  const [addingClient, setAddingClient] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
   const [creating, setCreating] = useState(false);
   const [showBoardsModal, setShowBoardsModal] = useState(false);
   const ref = useRef(null);
@@ -184,12 +186,19 @@ function ProjectSwitcher() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const proj = await createProject({ name: newName.trim(), client_id: newClientId || null });
+      let clientId = newClientId;
+      if (addingClient && newClientName.trim()) {
+        const client = await createClient({ name: newClientName.trim() });
+        clientId = client.id;
+      }
+      const proj = await createProject({ name: newName.trim(), client_id: clientId || null });
       setCurrentProject(proj.id);
       setAdding(false);
       setOpen(false);
       setNewName('');
       setNewClientId('');
+      setAddingClient(false);
+      setNewClientName('');
     } finally {
       setCreating(false);
     }
@@ -224,14 +233,13 @@ function ProjectSwitcher() {
           onClick={() => { setOpen(o => !o); setAdding(false); }}
           className="w-full flex items-center gap-2 px-1 py-1.5 rounded-lg hover:bg-surface-3/50 transition-colors"
         >
-          <Layers size={13} className="text-gray-500 shrink-0" />
           <span className="flex-1 text-sm font-bold text-gray-100 truncate text-left">{currentLabel}</span>
           <ChevronDown size={11} className={`text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 top-full mt-1 bg-surface-2 border border-border rounded-xl shadow-lg z-50 overflow-hidden">
-            <div className="max-h-64 overflow-y-auto">
+          <div className="absolute left-0 top-full mt-1 w-[320px] max-w-[calc(100vw-2rem)] bg-surface-2 border border-border rounded-xl shadow-[0_25px_60px_-10px_rgba(0,0,0,0.8)] z-50 overflow-hidden">
+            <div className="max-h-64 overflow-y-auto mr-1">
               {personalBoards.length > 0 && (
                 <>
                   <p className="px-3 pt-2.5 pb-1 text-xs font-semibold uppercase tracking-widest text-gray-600">Personal</p>
@@ -272,16 +280,35 @@ function ProjectSwitcher() {
                     placeholder="Board name"
                     className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
                   />
-                  <select
-                    value={newClientId}
-                    onChange={e => setNewClientId(e.target.value)}
-                    className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 outline-none focus:border-accent/50"
-                  >
-                    <option value="">No client</option>
-                    {activeClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  {!addingClient ? (
+                    <select
+                      value={newClientId}
+                      onChange={e => {
+                        if (e.target.value === '__new__') { setAddingClient(true); setNewClientId(''); }
+                        else setNewClientId(e.target.value);
+                      }}
+                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 outline-none focus:border-accent/50"
+                    >
+                      <option value="">No client</option>
+                      {activeClients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      <option value="__new__">+ New client…</option>
+                    </select>
+                  ) : (
+                    <div className="flex gap-1.5">
+                      <input
+                        value={newClientName}
+                        onChange={e => setNewClientName(e.target.value)}
+                        placeholder="New client name"
+                        className="flex-1 bg-surface-3 border border-accent/40 rounded-lg px-2 py-1.5 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                      />
+                      <button type="button" onClick={() => { setAddingClient(false); setNewClientName(''); }}
+                        className="px-2 text-gray-500 hover:text-gray-100">
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => setAdding(false)}
+                    <button type="button" onClick={() => { setAdding(false); setAddingClient(false); setNewClientName(''); setNewClientId(''); }}
                       className="flex-1 py-1.5 text-sm text-gray-400 hover:text-gray-200 transition-colors">
                       Cancel
                     </button>
@@ -669,9 +696,9 @@ export default function Sidebar() {
     <>
       <aside className="w-64 bg-surface-1 border-r border-border flex flex-col shrink-0">
         {/* Header — brand + nav */}
-        <div className="px-4 pt-4 pb-3 border-b border-border space-y-2 relative">
+        <div className="px-4 pt-1 pb-3 border-b border-border space-y-2 relative">
           <div className="flex items-center justify-between">
-            <img src={brandImg} alt="AutoKan" className="h-6 w-auto object-contain" />
+            <img src={brandImg} alt="AutoKan" className="h-24 w-auto object-contain" />
             <div className="flex items-center gap-1">
               <button
                 ref={bellRef}

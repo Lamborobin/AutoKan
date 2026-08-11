@@ -91,6 +91,19 @@ export default function SettingsPage() {
   const [section, setSection]         = useState('files');
   const [connRefreshKey, setConnRefreshKey] = useState(0);
   const [openInfoKey, setOpenInfoKey]       = useState(null); // 'board' | 'workspace' | 'ai_context' | null
+  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
+  const workspaceSwitcherRef = useRef(null);
+
+  useEffect(() => {
+    if (!workspaceSwitcherOpen) return;
+    function handleOutside(e) {
+      if (workspaceSwitcherRef.current && !workspaceSwitcherRef.current.contains(e.target)) {
+        setWorkspaceSwitcherOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [workspaceSwitcherOpen]);
 
   // Redirect away from Connections if we're on a personal board
   useEffect(() => {
@@ -579,9 +592,41 @@ export default function SettingsPage() {
         {/* SUBSCRIPTION section (superadmin only) */}
         {isSuperAdmin && (
           <div className="px-2 pt-3 pb-1 shrink-0 border-t border-border">
-            <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Subscription</p>
+            <div className="relative mb-1" ref={workspaceSwitcherRef}>
+              <button
+                onClick={() => setWorkspaceSwitcherOpen(v => !v)}
+                className="w-full flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-surface-3/50 transition-colors group"
+              >
+                <span className="text-xs font-semibold text-gray-600 group-hover:text-gray-400 uppercase tracking-widest flex-1 text-left truncate">
+                  Workspace · {subscription?.name || 'My Workspace'}
+                </span>
+                <ChevronDown size={10} className={`text-gray-600 shrink-0 transition-transform ${workspaceSwitcherOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {workspaceSwitcherOpen && (
+                <div className="absolute left-0 top-full mt-1 w-[260px] bg-surface-2 border border-border rounded-xl shadow-[0_25px_60px_-10px_rgba(0,0,0,0.8)] z-50 overflow-hidden">
+                  <div className="py-1">
+                    <div className="w-full flex items-center gap-2.5 px-3 py-2">
+                      <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-accent" />
+                      <p className="flex-1 text-sm font-medium text-gray-200 text-left truncate">{subscription?.name || 'My Workspace'}</p>
+                      <Check size={12} className="text-accent shrink-0" />
+                    </div>
+                  </div>
+                  <div className="border-t border-border">
+                    <button
+                      onClick={() => setWorkspaceSwitcherOpen(false)}
+                      title="Coming soon"
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
+                    >
+                      <Plus size={13} />
+                      New workspace
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="space-y-0.5">
-              {navBtn('sub_overview', 'Overview', Settings2)}
+              {navBtn('sub_overview', 'General', Settings2)}
               {navBtn('sub_clients',  'Clients',  Building2)}
               {navBtn('sub_files',    'Workspace Context', FileText, null, 'workspace')}
             </div>
@@ -652,6 +697,15 @@ export default function SettingsPage() {
               {navBtn('sub_team',        'Team',         Users)}
               {navBtn('sub_boards',      'Boards',       LayoutGrid)}
               {navBtn('sub_members',     'Members',      UserCheck)}
+            </div>
+          </div>
+        )}
+
+        {/* PLATFORM section — superadmin management sits above workspaces, not inside one */}
+        {isSuperAdmin && (
+          <div className="px-2 pt-3 pb-1 shrink-0 border-t border-border">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Platform</p>
+            <div className="space-y-0.5">
               {navBtn('sub_superadmins', 'Superadmins',  Crown)}
             </div>
           </div>
@@ -704,9 +758,9 @@ export default function SettingsPage() {
           <div className="flex-1 overflow-y-auto px-8 py-8">
             <div className="max-w-lg space-y-8">
               <div>
-                <h2 className="text-base font-semibold text-gray-200 mb-1">Subscription</h2>
+                <h2 className="text-base font-semibold text-gray-200 mb-1">Workspace</h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  Workspace-level settings. Changes apply to all boards and members.
+                  Applies to all boards and members.
                 </p>
 
                 {/* Workspace name */}
@@ -741,12 +795,6 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   )}
-                </div>
-
-                {/* Subscription ID (read-only info) */}
-                <div className="bg-surface-2 border border-border rounded-xl p-4 mt-3 space-y-1">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Subscription ID</p>
-                  <p className="text-sm text-gray-500">{subscription?.id || '—'}</p>
                 </div>
               </div>
             </div>
@@ -952,7 +1000,7 @@ export default function SettingsPage() {
             <div className="max-w-lg">
               <h2 className="text-base font-semibold text-gray-200 mb-1">Superadmins</h2>
               <p className="text-sm text-gray-500 mb-6">
-                Superadmins have full access to all boards, teams, and members in this subscription.
+                Superadmins have full access to all boards, teams, and members across the platform.
               </p>
 
               <div className="space-y-1 mb-4">

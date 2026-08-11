@@ -4,6 +4,22 @@ const { getDb } = require('../db');
 const JWT_SECRET = process.env.JWT_SECRET || 'AutoKan-dev-secret-change-in-production';
 
 /**
+ * Superadmin is a platform-wide role, not scoped to a single subscription/workspace —
+ * a row in subscription_admins for ANY subscription grants it everywhere.
+ */
+function checkIsSuperAdmin(userId) {
+  try {
+    const db = getDb();
+    const isAdmin = db.prepare(
+      'SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1'
+    ).get(userId);
+    return !!isAdmin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Decode a Bearer JWT if present — populates req.user and treats caller as 'human'.
  * Does NOT block if token is missing; call requireAuth to enforce auth.
  */
@@ -16,14 +32,7 @@ function attachUser(req, res, next) {
       const decoded = jwt.verify(raw, JWT_SECRET);
       req.user = decoded;
       req.agent = { id: 'human', role: 'human', permissions: ['*'] };
-      // Check if user is a superadmin for any subscription
-      try {
-        const db = getDb();
-        const isAdmin = db.prepare(
-          'SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1'
-        ).get(decoded.sub);
-        req.isSuperAdmin = !!isAdmin;
-      } catch { req.isSuperAdmin = false; }
+      req.isSuperAdmin = checkIsSuperAdmin(decoded.sub);
     } catch { /* invalid token — ignore, let next layer decide */ }
   }
   next();
@@ -43,14 +52,7 @@ function requireAuth(req, res, next) {
       const decoded = jwt.verify(authHeader.slice(7), JWT_SECRET);
       req.user = decoded;
       req.agent = { id: 'human', role: 'human', permissions: ['*'] };
-      // Check if user is a superadmin for any subscription
-      try {
-        const db = getDb();
-        const isAdmin = db.prepare(
-          'SELECT 1 FROM subscription_admins WHERE user_id = ? LIMIT 1'
-        ).get(decoded.sub);
-        req.isSuperAdmin = !!isAdmin;
-      } catch { req.isSuperAdmin = false; }
+      req.isSuperAdmin = checkIsSuperAdmin(decoded.sub);
       return next();
     } catch {
       return res.status(401).json({ error: 'Invalid or expired token' });

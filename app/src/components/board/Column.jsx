@@ -6,7 +6,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus, Archive, Trash2, MoreHorizontal, X, Pencil, GripVertical } from 'lucide-react';
 import TaskCard from './TaskCard';
 import { useStore } from '../../store';
-import { COLUMN } from '../../constants/columns';
+import { COLUMN, COLUMN_DEFAULT_NAME } from '../../constants/columns';
 
 // Prefix used for the inner task-drop zone so it doesn't conflict with the
 // column sortable id (both would otherwise register the same id in dnd-kit).
@@ -137,26 +137,39 @@ export default function Column({ column, tasks }) {
               <span>⚠</span> Unassigned
             </h3>
           ) : renaming ? (
-            <input
-              ref={renameRef}
-              value={renameValue}
-              onChange={e => setRenameValue(e.target.value)}
-              onBlur={commitRename}
-              onKeyDown={handleRenameKey}
-              className="text-base font-semibold text-gray-200 bg-surface-3 border border-accent/40 rounded-md px-1.5 py-0.5 outline-none min-w-0 w-full"
-            />
+            <div className="min-w-0 flex-1">
+              <input
+                ref={renameRef}
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onBlur={commitRename}
+                onKeyDown={handleRenameKey}
+                className="text-base font-semibold text-gray-200 bg-surface-3 border border-accent/40 rounded-md px-1.5 py-0.5 outline-none min-w-0 w-full"
+              />
+              {isProtected && COLUMN_DEFAULT_NAME[column.id] && (
+                <p className="text-xs text-gray-500 px-1.5 pt-0.5 truncate">
+                  Originally "{COLUMN_DEFAULT_NAME[column.id]}"
+                </p>
+              )}
+            </div>
           ) : (
             <h3
               className="text-base font-semibold text-gray-200 cursor-pointer hover:text-white transition-colors truncate"
-              title="Click to rename"
+              title={
+                isProtected && COLUMN_DEFAULT_NAME[column.id] && COLUMN_DEFAULT_NAME[column.id] !== column.name
+                  ? `Click to rename · Originally "${COLUMN_DEFAULT_NAME[column.id]}"`
+                  : 'Click to rename'
+              }
               onClick={startRename}
             >
               {column.name}
             </h3>
           )}
-          <span className="text-sm font-medium text-gray-100 bg-surface-3 px-1.5 py-0.5 rounded-md shrink-0">
-            {tasks.length}
-          </span>
+          {tasks.length > 0 && (
+            <span className="text-sm font-medium text-gray-100 bg-surface-3 px-1.5 py-0.5 rounded-md shrink-0">
+              {tasks.length}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-0.5 shrink-0">
