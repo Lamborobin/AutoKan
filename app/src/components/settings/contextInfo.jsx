@@ -12,37 +12,37 @@ const LAYERS = [
   {
     key: 'code',
     label: 'Code mechanics',
-    sub: 'How the system actually works — fixed, set by developers. Not editable here.',
+    sub: 'How the system actually works - the app, set by developers (not user-editable).',
     Icon: ShieldCheck,
   },
   {
     key: 'runner',
     label: 'Runner prompts',
-    sub: 'Built-in instructions for how agents carry out their work. System-owned, not user-editable.',
+    sub: 'Built-in instructions for agents work - system owned (not user-editable).',
     Icon: Layers,
   },
   {
     key: 'ai_context',
     label: 'System Rules',
-    sub: 'Global rules with technical depth — the only layer that can invoke code-exposed actions, not just state rules. Edited by superadmins/devs.',
+    sub: 'Global rules with technical depth — the only layer that can invoke code-exposed actions, not just state rules. Edited by superadmins.',
     Icon: BookOpen,
   },
   {
     key: 'workspace',
     label: 'Workspace Context',
-    sub: 'Declarative boundaries shared by every board in this workspace — rules only, no new actions.',
+    sub: 'Declarative boundaries - shared by every board in this workspace such as rules, boundaries etc.',
     Icon: FolderTree,
   },
   {
     key: 'board',
     label: 'Board Context',
-    sub: 'Declarative boundaries for this board only — its domain and rules, no new actions.',
+    sub: 'Declarative boundaries for this board only — its domain and rules, bondaries etc.',
     Icon: FileText,
   },
   {
     key: 'agent',
-    label: 'Template + Agent personality',
-    sub: 'Cosmetic personality — tone, sign-off, phrasing. No effect on the flow.',
+    label: 'Agent personality',
+    sub: 'Cosmetic personality — tone, sign-off, phrasing.',
     Icon: Sparkles,
   },
 ];
@@ -72,10 +72,10 @@ export function HierarchyDiagram({ highlight }) {
             </div>
             <Icon size={12} className={isHighlight ? 'text-accent' : 'text-gray-600'} />
             <div className="flex-1 min-w-0">
-              <p className={`text-xs font-medium truncate ${isHighlight ? 'text-accent' : 'text-gray-400'}`}>
+              <p className={`text-xs font-medium ${isHighlight ? 'text-accent' : 'text-gray-400'}`}>
                 {layer.label}
               </p>
-              <p className="text-xs text-gray-600 truncate">{layer.sub}</p>
+              <p className="text-xs text-gray-500">{layer.sub}</p>
             </div>
             {isHighlight && (
               <span className="text-xs font-semibold uppercase tracking-wider text-accent/80 px-1.5 py-0.5 rounded-md bg-accent/10">
@@ -94,19 +94,19 @@ export function HierarchyDiagram({ highlight }) {
 export const CONTEXT_INFO = {
   board: {
     title: 'Board Context',
-    intro: "Domain knowledge and rules that apply to this board only — constraints, not new actions.",
+    intro: "Domain knowledge and rules that apply to this board only, i.e. rules or constraints.",
     highlight: 'board',
     body: (
       <>
         <p>
           Notes that apply to <span className="text-gray-300 font-medium">this board only</span> — its domain,
           the client's priorities, and any preferences for how work here should be done. Agents read these
-          when planning and working on tasks on this board, whatever the board's sector.
+          when planning and working on tasks on this board.
         </p>
         <p className="text-gray-500 italic">
           Examples: "Every document must follow the seven-section structure and cite the relevant standard." ·
           "Never guess a clinical figure or dose — flag it as missing." ·
-          "On the website, ask a human before changing payment logic."
+          "On the website, ask a human before changing any payment logic."
         </p>
       </>
     ),
@@ -139,15 +139,16 @@ export const CONTEXT_INFO = {
     body: (
       <>
         <p>
-          The top <span className="text-gray-300 font-medium">editable</span> layer — global rules every agent
-          follows on every board, whatever its sector. Edited by superadmins and developers. It sits above
+          The top <span className="text-gray-300 font-medium">editable</span> layer — global rules for the entire app cross any workspace and board.  <br />
+          Can only be edited by superadmins and developers. <br />
+          It sits above 
           Workspace and Board rules and any personality, but below the immutable core: it can add and tighten
           behaviour, never change the flow or contradict the core.
         </p>
         <p>This layer isn't limited to plain rules — it can hold guardrails, information, hard constraints, or actions, shaped as:</p>
         <ul className="list-disc pl-5 space-y-1">
           <li><span className="text-gray-300 font-medium">Behavioural</span> — "Always reply in Spanish." · "Never reveal business secrets." · "Retry up to 3 times before escalating to a human."</li>
-          <li><span className="text-gray-300 font-medium">Conditional / business logic</span> — "When an order exceeds 100 units, summarise the impact before proceeding."</li>
+          <li><span className="text-gray-300 font-medium">Conditional / business logic</span> — "When a board contains sensitive information, apply the appropriate security measures and email the result to security@company.com."</li>
           <li><span className="text-gray-300 font-medium">Informational</span> — plain context the agent should know, not a directive: "Support tickets route through Zendesk, not email."</li>
           <li><span className="text-gray-300 font-medium">Action hook</span> — unique to this layer: if this install exposes an email action, "When an order exceeds 100 units, send a notice to the configured email with the amount."</li>
         </ul>

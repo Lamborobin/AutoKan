@@ -431,7 +431,7 @@ export default function SettingsPage() {
         <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
           <button
             onClick={() => setCurrentPage('board')}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors mb-3"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors mb-5"
           >
             <ArrowLeft size={10} /> Back to board
           </button>

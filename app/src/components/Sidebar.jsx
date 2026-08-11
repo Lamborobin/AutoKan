@@ -204,8 +204,8 @@ function ProjectSwitcher() {
       >
         <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.color || '#6366f1' }} />
         <div className="flex-1 min-w-0 text-left">
-          <p className="text-sm font-medium text-gray-200 truncate">{p.name}</p>
-          {p.client_name && <p className="text-xs text-gray-600 truncate">{p.client_name}</p>}
+          <p className="text-sm font-medium text-gray-200">{p.name}</p>
+          {p.client_name && <p className="text-xs text-gray-400">{p.client_name}</p>}
         </div>
         {p.id === currentProjectId && <Check size={12} className="text-accent shrink-0" />}
       </button>
