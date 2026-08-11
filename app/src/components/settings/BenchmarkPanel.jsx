@@ -30,7 +30,7 @@ const STATUS_STYLE = {
 
 function StatusBadge({ status }) {
   return (
-    <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${STATUS_STYLE[status] || 'bg-surface-3 text-gray-400 border-border'}`}>
+    <span className={`text-[12px] font-medium px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${STATUS_STYLE[status] || 'bg-surface-3 text-gray-400 border-border'}`}>
       {status}
     </span>
   );
@@ -106,24 +106,24 @@ function mergeChecklistCountChecks(checks) {
 // RuleCompliance below, which is grounded in the board's real rule docs).
 function DeterministicChecks({ result }) {
   const [open, setOpen] = useState(false);
-  if (!result) return <p className="text-xs text-gray-600">Pending…</p>;
+  if (!result) return <p className="text-sm text-gray-600">Pending…</p>;
   const checks = mergeChecklistCountChecks(result.checks || []);
   const passedCount = checks.filter(c => c.passed).length;
 
   return (
     <div>
-      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-300 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         Technical check — {result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
         {checks.length > 0 && <span className="text-gray-600">({passedCount}/{checks.length})</span>}
       </button>
       {!open && (
-        <p className="text-[10px] text-gray-600 mt-0.5 pl-[15px]">Tool used &amp; output shape only — not whether the rule itself was followed.</p>
+        <p className="text-[12px] text-gray-600 mt-0.5 pl-[15px]">Tool used &amp; output shape only — not whether the rule itself was followed.</p>
       )}
       {open && (
         <div className="mt-1.5 space-y-1 pl-[15px]">
           {checks.map((c, i) => (
-            <div key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500">
+            <div key={i} className="flex items-start gap-1.5 text-[12px] text-gray-500">
               {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
               <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
             </div>
@@ -140,9 +140,9 @@ function DeterministicChecks({ result }) {
 // pollAndScore); the "Re-check with AI" button below re-runs it on demand.
 function RuleCompliance({ result }) {
   return (
-    <div className={`rounded-lg border p-2.5 text-xs ${result.passed ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
+    <div className={`rounded-lg border p-2.5 text-sm ${result.passed ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
       <p className="font-medium text-gray-300 flex items-center gap-1.5">
-        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${
+        <span className={`text-[12px] font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${
           result.passed ? 'bg-green-500/15 text-green-400 border-green-500/25' : 'bg-red-500/15 text-red-400 border-red-500/25'
         }`}>
           {result.passed ? 'Passed' : 'Failed'}
@@ -178,31 +178,31 @@ function PlannerOutput({ taskId }) {
 
   return (
     <div>
-      <button onClick={handleToggle} className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 hover:text-gray-300 transition-colors">
+      <button onClick={handleToggle} className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-gray-300 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} What the planner said
       </button>
 
       {open && (
         <div className="mt-2 space-y-3">
-          {loading && <p className="text-xs text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
+          {loading && <p className="text-sm text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
 
           {!loading && (task?.pm_pending_question || task?.pm_review_comment) && (
             <div className="border-l-2 border-border pl-2.5">
-              <MarkdownText text={task.pm_pending_question || task.pm_review_comment} className="text-xs text-gray-100 leading-relaxed" />
+              <MarkdownText text={task.pm_pending_question || task.pm_review_comment} className="text-sm text-gray-100 leading-relaxed" />
             </div>
           )}
 
           {!loading && checklist.length > 0 && (
             <div>
-              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Checklist</p>
+              <p className="text-[12px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Checklist</p>
               <ul className="space-y-1">
                 {checklist.map((entry, i) => {
                   const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
                   const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
                   return (
-                    <li key={i} className="flex items-start gap-1.5 text-[11px] text-gray-500">
+                    <li key={i} className="flex items-start gap-1.5 text-[12px] text-gray-500">
                       {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
-                      <MarkdownText text={text} className="text-[11px] text-gray-500" />
+                      <MarkdownText text={text} className="text-[12px] text-gray-500" />
                     </li>
                   );
                 })}
@@ -210,7 +210,7 @@ function PlannerOutput({ taskId }) {
             </div>
           )}
 
-          {!loading && !hasContent && <p className="text-xs text-gray-600">Nothing recorded for this run.</p>}
+          {!loading && !hasContent && <p className="text-sm text-gray-600">Nothing recorded for this run.</p>}
         </div>
       )}
     </div>
@@ -251,28 +251,13 @@ function RunCard({ run, caseId }) {
   return (
     <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-surface-2/40 border-b border-border/60">
-        <span className="text-[10px] text-gray-500 font-mono">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
+        <span className="text-[12px] text-gray-500 font-mono">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
         <StatusBadge status={run.status} />
       </div>
 
       <div className="p-3 space-y-2.5">
         {['pending', 'dispatched'].includes(run.status) && (
-          <p className="text-xs text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the planner…</p>
-        )}
-
-        {/* Two independent verdicts, always both visible: the AI judge's status and the
-            human's, so neither one silently overwrites or hides the other. */}
-        {run.status === 'completed' && (
-          <div className="flex items-center gap-4 text-[10px]">
-            <span className="text-gray-600">AI: {run.judge_result
-              ? <span className={`font-medium ${run.judge_result.passed ? 'text-green-400' : 'text-red-400'}`}>{run.judge_result.passed ? 'Passed' : 'Failed'}</span>
-              : <span className="text-gray-600">not reviewed</span>}
-            </span>
-            <span className="text-gray-600">Human: {run.manual_review
-              ? <span className="font-medium text-purple-300">{REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</span>
-              : <span className="text-gray-600">not reviewed</span>}
-            </span>
-          </div>
+          <p className="text-sm text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the planner…</p>
         )}
 
         {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
@@ -280,7 +265,7 @@ function RunCard({ run, caseId }) {
         {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
 
         {run.manual_review && (
-          <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5 text-xs">
+          <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5 text-sm">
             <p className="font-medium text-gray-300">Manual review — {REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</p>
             {run.manual_review.notes && <MarkdownText text={run.manual_review.notes} className="text-gray-500 mt-1" />}
           </div>
@@ -289,34 +274,48 @@ function RunCard({ run, caseId }) {
         {run.status === 'completed' && <PlannerOutput taskId={run.probing_task_id} />}
 
         {run.status === 'completed' && (
-          <div className="flex items-center gap-2 border-t border-border/50 mt-1 pt-2.5">
-            <button onClick={handleAiReview} disabled={reviewing}
-              title="Re-judges this run's existing output against the case's current rubric — doesn't create a new task or change the checklist"
-              className="flex items-center gap-1 text-[10px] px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
-              {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} {run.judge_result ? 'Re-check with AI' : 'Check rule compliance'}
-            </button>
-            <button onClick={() => setShowManual(v => !v)}
-              className="text-[10px] px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
-              Mark reviewed manually
-            </button>
+          <div className="border-t border-border/50 mt-1 pt-2.5 space-y-2">
+            {/* Two independent verdicts, always both visible: the AI judge's status and the
+                human's, so neither one silently overwrites or hides the other. */}
+            <div className="flex items-center gap-4 text-[12px]">
+              <span className="text-gray-600">AI: {run.judge_result
+                ? <span className={`font-medium ${run.judge_result.passed ? 'text-green-400' : 'text-red-400'}`}>{run.judge_result.passed ? 'Passed' : 'Failed'}</span>
+                : <span className="text-gray-600">not reviewed</span>}
+              </span>
+              <span className="text-gray-600">Human: {run.manual_review
+                ? <span className="font-medium text-purple-300">{REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</span>
+                : <span className="text-gray-600">not reviewed</span>}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={handleAiReview} disabled={reviewing}
+                title="Re-judges this run's existing output against the case's current rubric — doesn't create a new task or change the checklist"
+                className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
+                {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Review with AI
+              </button>
+              <button onClick={() => setShowManual(v => !v)}
+                className="text-[12px] px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
+                Review manually
+              </button>
+            </div>
           </div>
         )}
 
         {showManual && (
           <div className="space-y-1.5 pt-1">
             <select value={level} onChange={e => setLevel(e.target.value)}
-              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 outline-none focus:border-accent/50">
+              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-sm text-gray-200 outline-none focus:border-accent/50">
               {REVIEW_LEVELS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional note…" rows={2}
-              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 resize-none" />
+              className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 resize-none" />
             <div className="flex items-center gap-2">
               <button onClick={handleManualSubmit} disabled={submitting}
-                className="text-[10px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
+                className="text-[12px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
                 {submitting ? '…' : 'Save'}
               </button>
               <button onClick={handleManualCancel} disabled={submitting}
-                className="text-[10px] px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
+                className="text-[12px] px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
                 Cancel
               </button>
             </div>
@@ -345,25 +344,25 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-200 truncate">{c.title}</p>
           <button onClick={() => setShowDescription(v => !v)}
-            className="mt-1 flex items-center gap-1 text-[11px] text-gray-600 hover:text-gray-400 transition-colors">
+            className="mt-1 flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 transition-colors">
             {showDescription ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
             {showDescription ? 'Hide description' : 'Show description'}
           </button>
-          {showDescription && <MarkdownText text={c.description} className="text-xs text-gray-500 mt-1.5" />}
+          {showDescription && <MarkdownText text={c.description} className="text-sm text-gray-500 mt-1.5" />}
         </div>
-        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
+        <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
           {SOURCE_LABEL[c.source] || c.source}
         </span>
       </div>
 
       <div className="flex items-center gap-2">
         <button onClick={handleRun} disabled={running || !targetProjectId}
-          className="flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
+          className="flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
           {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
         </button>
         {runs?.length > 0 && (
           <button onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-1 text-[11px] text-gray-500 hover:text-gray-300 transition-colors">
+            className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-300 transition-colors">
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {expanded ? 'Hide' : 'Show'} {runs.length} run{runs.length === 1 ? '' : 's'}
           </button>
@@ -377,12 +376,12 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
       {expanded && runs?.length > 0 && (
         <div className="pt-3 mt-0.5 border-t border-border/60 space-y-2.5">
           <div>
-            <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Latest run</p>
+            <p className="text-[12px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Latest run</p>
             <RunCard run={runs[0]} caseId={c.id} />
           </div>
           {runs.length > 1 && (
             <div>
-              <p className="text-[9px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Earlier runs</p>
+              <p className="text-[12px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Earlier runs</p>
               <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
                 {runs.slice(1).map(run => <RunCard key={run.id} run={run} caseId={c.id} />)}
               </div>
@@ -447,20 +446,20 @@ export default function BenchmarkPanel({ scope }) {
 
       {scope === 'workspace' && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-500">Target board:</span>
+          <span className="text-sm text-gray-500">Target board:</span>
           <select value={targetProjectId} onChange={e => setTargetProjectId(e.target.value)}
-            className="bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-200 outline-none focus:border-accent/50">
+            className="bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-sm text-gray-200 outline-none focus:border-accent/50">
             <option value="">Choose a board…</option>
             {boardOptions.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
           </select>
         </div>
       )}
 
-      {benchmarkLoading && <p className="text-xs text-gray-600 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Loading…</p>}
+      {benchmarkLoading && <p className="text-sm text-gray-600 flex items-center gap-1.5"><Loader2 size={12} className="animate-spin" /> Loading…</p>}
 
       {!benchmarkLoading && benchmarkCases.length === 0 && (
         <div className="border border-dashed border-border rounded-xl p-5 text-center">
-          <p className="text-xs text-gray-500">No benchmark tasks yet.</p>
+          <p className="text-sm text-gray-500">No benchmark tasks yet.</p>
         </div>
       )}
 
