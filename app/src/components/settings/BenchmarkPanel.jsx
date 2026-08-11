@@ -30,7 +30,7 @@ const STATUS_STYLE = {
 
 function StatusBadge({ status }) {
   return (
-    <span className={`text-[12px] font-medium px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${STATUS_STYLE[status] || 'bg-surface-3 text-gray-400 border-border'}`}>
+    <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${STATUS_STYLE[status] || 'bg-surface-3 text-gray-400 border-border'}`}>
       {status}
     </span>
   );
@@ -49,7 +49,7 @@ const VERDICT_TONES = {
 function VerdictChip({ who, value, icon: Icon, tone }) {
   const t = VERDICT_TONES[tone] || VERDICT_TONES.idle;
   return (
-    <span className={`inline-flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border text-[12px] ${t.chip}`}>
+    <span className={`inline-flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full border text-xs ${t.chip}`}>
       <span className={`flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${t.badge}`}>
         <Icon size={12} />
       </span>
@@ -135,18 +135,18 @@ function DeterministicChecks({ result }) {
 
   return (
     <div>
-      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-[12px] text-gray-500 hover:text-gray-300 transition-colors">
+      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         Technical check — {result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
         {checks.length > 0 && <span className="text-gray-600">({passedCount}/{checks.length})</span>}
       </button>
       {!open && (
-        <p className="text-[12px] text-gray-600 mt-0.5 pl-[15px]">Tool used &amp; output shape only — not whether the rule itself was followed.</p>
+        <p className="text-xs text-gray-600 mt-0.5 pl-[15px]">Tool used &amp; output shape only — not whether the rule itself was followed.</p>
       )}
       {open && (
         <div className="mt-1.5 space-y-1 pl-[15px]">
           {checks.map((c, i) => (
-            <div key={i} className="flex items-start gap-1.5 text-[12px] text-gray-500">
+            <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
               {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
               <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
             </div>
@@ -165,7 +165,7 @@ function RuleCompliance({ result }) {
   return (
     <div className={`rounded-lg border p-2.5 text-sm ${result.passed ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
       <p className="font-medium text-gray-300 flex items-center gap-1.5">
-        <span className={`text-[12px] font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${
+        <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full border uppercase tracking-wide ${
           result.passed ? 'bg-green-500/15 text-green-400 border-green-500/25' : 'bg-red-500/15 text-red-400 border-red-500/25'
         }`}>
           {result.passed ? 'Passed' : 'Failed'}
@@ -201,7 +201,7 @@ function PlannerOutput({ taskId }) {
 
   return (
     <div>
-      <button onClick={handleToggle} className="flex items-center gap-1.5 text-[12px] font-medium text-gray-500 hover:text-gray-300 transition-colors">
+      <button onClick={handleToggle} className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} What the planner said
       </button>
 
@@ -217,15 +217,15 @@ function PlannerOutput({ taskId }) {
 
           {!loading && checklist.length > 0 && (
             <div>
-              <p className="text-[12px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Checklist</p>
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Checklist</p>
               <ul className="space-y-1">
                 {checklist.map((entry, i) => {
                   const text = typeof entry === 'string' ? entry : entry?.item ?? JSON.stringify(entry);
                   const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
                   return (
-                    <li key={i} className="flex items-start gap-1.5 text-[12px] text-gray-500">
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
                       {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
-                      <MarkdownText text={text} className="text-[12px] text-gray-500" />
+                      <MarkdownText text={text} className="text-xs text-gray-500" />
                     </li>
                   );
                 })}
@@ -255,6 +255,16 @@ function RunCard({ run, caseId }) {
     finally { setReviewing(false); }
   }
 
+  function handleManualToggle() {
+    if (!showManual) {
+      // Re-opening to re-review — prefill with whatever's already on record instead
+      // of silently resetting to the default, so re-review starts from the last verdict.
+      setLevel(run.manual_review?.level || 'accepted');
+      setNotes(run.manual_review?.notes || '');
+    }
+    setShowManual(v => !v);
+  }
+
   function handleManualCancel() {
     setShowManual(false);
     setLevel('accepted');
@@ -274,7 +284,7 @@ function RunCard({ run, caseId }) {
   return (
     <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-surface-2/40 border-b border-border/60">
-        <span className="text-[12px] text-gray-500 font-mono">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
+        <span className="text-xs text-gray-500 font-mono">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
         <StatusBadge status={run.status} />
       </div>
 
@@ -286,13 +296,6 @@ function RunCard({ run, caseId }) {
         {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
 
         {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
-
-        {run.manual_review && (
-          <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-2.5 text-sm">
-            <p className="font-medium text-gray-300">Manual review — {REVIEW_LEVELS.find(l => l.value === run.manual_review.level)?.label || run.manual_review.level}</p>
-            {run.manual_review.notes && <MarkdownText text={run.manual_review.notes} className="text-gray-500 mt-1" />}
-          </div>
-        )}
 
         {run.status === 'completed' && <PlannerOutput taskId={run.probing_task_id} />}
 
@@ -319,11 +322,11 @@ function RunCard({ run, caseId }) {
             <div className="flex items-center gap-2">
               <button onClick={handleAiReview} disabled={reviewing}
                 title="Re-judges this run's existing output against the case's current rubric — doesn't create a new task or change the checklist"
-                className="flex items-center gap-1 text-[12px] px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 transition-colors disabled:opacity-40">
                 {reviewing ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Review with AI
               </button>
-              <button onClick={() => setShowManual(v => !v)}
-                className="text-[12px] px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
+              <button onClick={handleManualToggle}
+                className="text-xs px-2 py-1 rounded-md bg-surface-3 text-gray-400 border border-border hover:text-gray-200 transition-colors">
                 Review manually
               </button>
             </div>
@@ -340,11 +343,11 @@ function RunCard({ run, caseId }) {
               className="w-full bg-surface-2 border border-border rounded-md px-2 py-1 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50 resize-none" />
             <div className="flex items-center gap-2">
               <button onClick={handleManualSubmit} disabled={submitting}
-                className="text-[12px] px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
+                className="text-xs px-2 py-1 rounded-md bg-accent text-white hover:bg-accent/80 transition-colors disabled:opacity-40">
                 {submitting ? '…' : 'Save'}
               </button>
               <button onClick={handleManualCancel} disabled={submitting}
-                className="text-[12px] px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
+                className="text-xs px-2 py-1 rounded-md text-gray-500 hover:text-gray-300 transition-colors">
                 Cancel
               </button>
             </div>
@@ -362,7 +365,7 @@ function CompactRunRow({ run, onClick }) {
   return (
     <button onClick={onClick}
       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-surface-1 hover:border-accent/40 hover:bg-surface-2/40 transition-colors text-left">
-      <span className="text-[11px] text-gray-500 font-mono shrink-0">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
+      <span className="text-xs text-gray-500 font-mono shrink-0">{format(new Date(run.started_at), 'yyyy-MM-dd HH:mm:ss')}</span>
       <StatusBadge status={run.status} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <VerdictChip
@@ -409,7 +412,7 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
           </button>
           {showDescription && <MarkdownText text={c.description} className="text-sm text-gray-500 mt-1.5" />}
         </div>
-        <span className="text-[12px] font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
+        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
           {SOURCE_LABEL[c.source] || c.source}
         </span>
       </div>
@@ -421,7 +424,7 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
         </button>
         {runs?.length > 0 && (
           <button onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-gray-300 transition-colors">
+            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors">
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {expanded ? 'Hide' : 'Show'} {runs.length} run{runs.length === 1 ? '' : 's'}
           </button>
@@ -438,14 +441,14 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
         return (
           <div className="pt-3 mt-0.5 border-t border-border/60 space-y-2.5">
             <div>
-              <p className="text-[12px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2.5">
                 {selectedRun.id === runs[0].id ? 'Latest run' : 'Selected run'}
               </p>
               <RunCard run={selectedRun} caseId={c.id} />
             </div>
             {otherRuns.length > 0 && (
               <div>
-                <p className="text-[12px] font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Other runs</p>
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2.5">Other runs</p>
                 <div className="space-y-1.5 max-h-96 overflow-y-auto pr-1">
                   {otherRuns.map(run => (
                     <CompactRunRow key={run.id} run={run} onClick={() => setSelectedRunId(run.id)} />
@@ -500,7 +503,7 @@ export default function BenchmarkPanel({ scope }) {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-sm font-semibold text-gray-200">
+        <h2 className="text-base font-semibold text-gray-200">
           Benchmark Tasks {scope === 'board'
             ? `— ${currentBoard?.name || 'this board'}${currentBoard?.client_name ? ` (${currentBoard.client_name})` : ''}`
             : '— workspace'}
