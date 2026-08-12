@@ -123,7 +123,7 @@ function TeamDetailPanel({ team, users, onMembersChanged }) {
               <button
                 onClick={() => setConfirmRemove(tm.email)}
                 disabled={!!removing}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-30"
               >
                 <Trash2 size={12} />
               </button>
@@ -332,7 +332,7 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
               <button
                 onClick={() => { setRenamingTeam(team.id); setRenameValue(team.name); }}
                 title="Rename"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors"
+                className="p-1.5 rounded-lg text-accent hover:text-accent/80 hover:bg-surface-3 transition-colors"
               >
                 <Pencil size={12} />
               </button>
@@ -358,7 +358,7 @@ export default function TeamsPanel({ teams, loadTeams, createTeam, deleteTeam, u
                 <button
                   onClick={() => handleDeleteTeam(team)}
                   title="Delete team"
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
                 >
                   <Trash2 size={13} />
                 </button>

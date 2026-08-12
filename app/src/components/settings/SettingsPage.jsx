@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
-  X, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
+  X, XCircle, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
   BookOpen, Info, Mail, UserPlus, FlaskConical, Link2 as LinkIcon,
 } from 'lucide-react';
@@ -483,18 +483,18 @@ export default function SettingsPage() {
                     actions={
                       <>
                         <button onClick={() => selectFile(f, 'board')} title="Edit content & visibility"
-                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent hover:text-accent/80 transition-colors">
                           <Pencil size={13} />
                         </button>
                         <button onClick={() => setArchiveConfirm({ file: f, scope: 'board' })} title="Archive"
-                          className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
+                          className="p-0.5 text-amber-400 hover:text-amber-300 transition-colors">
                           <Archive size={13} />
                         </button>
                       </>
                     }
                     deleteAction={
                       <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete"
-                        className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                        className="p-0.5 text-red-400 hover:text-red-300 transition-colors">
                         <Trash2 size={13} />
                       </button>
                     }
@@ -536,7 +536,7 @@ export default function SettingsPage() {
                     onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); setNewFileCapabilities([]); }}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-sm text-gray-400 hover:text-gray-200 transition-colors rounded-lg"
                   >
-                    <Plus size={11} /> New file
+                    <Plus size={11} className="text-accent" /> New file
                   </button>
                 )}
               </div>
@@ -555,13 +555,13 @@ export default function SettingsPage() {
                     <FileRow key={f.name} file={f} scope="board"
                       actions={
                         <button onClick={() => handleUnarchive(f, 'board')} title="Restore"
-                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent hover:text-accent/80 transition-colors">
                           <RotateCcw size={13} />
                         </button>
                       }
                       deleteAction={
                         <button onClick={() => setDeleteConfirm({ file: f, scope: 'board' })} title="Delete permanently"
-                          className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                          className="p-0.5 text-red-400 hover:text-red-300 transition-colors">
                           <Trash2 size={13} />
                         </button>
                       }
@@ -600,7 +600,7 @@ export default function SettingsPage() {
                 <span className="text-xs font-semibold text-gray-600 group-hover:text-gray-400 uppercase tracking-widest flex-1 text-left truncate">
                   Workspace · {subscription?.name || 'My Workspace'}
                 </span>
-                <ChevronDown size={10} className={`text-gray-600 shrink-0 transition-transform ${workspaceSwitcherOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={10} className={`text-gray-400 shrink-0 transition-transform ${workspaceSwitcherOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {workspaceSwitcherOpen && (
@@ -618,7 +618,7 @@ export default function SettingsPage() {
                       title="Coming soon"
                       className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
                     >
-                      <Plus size={13} />
+                      <Plus size={13} className="text-accent" />
                       New workspace
                     </button>
                   </div>
@@ -642,13 +642,13 @@ export default function SettingsPage() {
                   <FileRow key={f.name} file={f} scope="subscription"
                     actions={f.protected ? null : (
                       <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
-                        className="p-0.5 text-amber-400/70 hover:text-amber-400 transition-colors">
+                        className="p-0.5 text-amber-400 hover:text-amber-300 transition-colors">
                         <Archive size={13} />
                       </button>
                     )}
                     deleteAction={f.protected ? null : (
                       <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
-                        className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                        className="p-0.5 text-red-400 hover:text-red-300 transition-colors">
                         <Trash2 size={13} />
                       </button>
                     )}
@@ -671,13 +671,13 @@ export default function SettingsPage() {
                     <FileRow key={f.name} file={f} scope="subscription"
                       actions={
                         <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
-                          className="p-0.5 text-accent/70 hover:text-accent transition-colors">
+                          className="p-0.5 text-accent hover:text-accent/80 transition-colors">
                           <RotateCcw size={13} />
                         </button>
                       }
                       deleteAction={
                         <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete permanently"
-                          className="p-0.5 text-red-400/70 hover:text-red-400 transition-colors">
+                          className="p-0.5 text-red-400 hover:text-red-300 transition-colors">
                           <Trash2 size={13} />
                         </button>
                       }
@@ -729,13 +729,13 @@ export default function SettingsPage() {
             <div className="max-w-lg">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2.5">
-                  <GitBranch size={15} className="text-accent" />
+                  <GitBranch size={15} className="text-gray-400" />
                   <h2 className="text-base font-semibold text-gray-200">Connections</h2>
                 </div>
                 <button
                   onClick={() => { loadProjects(); setConnRefreshKey(k => k + 1); }}
                   title="Refresh connection status"
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-2 transition-colors"
+                  className="p-1.5 rounded-lg text-accent hover:text-accent/80 hover:bg-surface-2 transition-colors"
                 >
                   <RotateCcw size={13} />
                 </button>
@@ -790,7 +790,7 @@ export default function SettingsPage() {
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-gray-200">{subscription?.name || '—'}</p>
                       <button onClick={() => { setEditingSubName(true); setSubNameError(''); }}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors" title="Rename">
+                        className="p-1.5 rounded-md text-accent hover:text-accent/80 hover:bg-surface-3 transition-colors" title="Rename">
                         <Pencil size={12} />
                       </button>
                     </div>
@@ -946,14 +946,14 @@ export default function SettingsPage() {
                   <button
                     onClick={() => { setEditingClientId(client.id); setEditClientName(client.name); }}
                     title="Rename"
-                    className="p-1.5 rounded-md text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors"
+                    className="p-1.5 rounded-md text-accent hover:text-accent/80 hover:bg-surface-3 transition-colors"
                   >
                     <Pencil size={12} />
                   </button>
                   <button
                     onClick={() => archiveClient(client.id)}
                     title="Archive"
-                    className="p-1.5 rounded-md text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                    className="p-1.5 rounded-md text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors"
                   >
                     <Archive size={12} />
                   </button>
@@ -1077,7 +1077,7 @@ export default function SettingsPage() {
             <>
               <div className="flex items-center justify-between px-6 py-3.5 border-b border-border shrink-0 bg-surface-1">
                 <div className="flex items-center gap-2.5">
-                  <FileText size={13} className="text-accent" />
+                  <FileText size={13} className="text-gray-400" />
                   <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
                   {selectedFile.scope === 'subscription' && (
                     <span className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
@@ -1093,7 +1093,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3">
                   {saving && <span className="text-xs text-gray-500">Saving…</span>}
                   {saveStatus === 'saved' && (
-                    <span className="flex items-center gap-1 text-xs text-emerald-400">
+                    <span className="flex items-center gap-1 text-xs text-green-400">
                       <Check size={10} /> Saved
                     </span>
                   )}
@@ -1693,7 +1693,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
       )}
 
       {/* Feedback */}
-      {error && <p className="text-red-400 text-sm flex items-center gap-2"><AlertTriangle size={13} />{error}</p>}
+      {error && <p className="text-red-400 text-sm flex items-center gap-2"><XCircle size={13} />{error}</p>}
     </div>
   );
 }

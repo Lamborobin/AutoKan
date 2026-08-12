@@ -97,6 +97,12 @@ export const createBoardSlice = (set, get) => ({
     return updated;
   },
 
+  async toggleChecklistItem(id, index) {
+    const updated = await tasksApi.toggleChecklistItem(id, index);
+    set(s => ({ tasks: s.tasks.map(t => t.id === id ? updated : t) }));
+    return updated;
+  },
+
   async deleteTask(id) {
     await tasksApi.delete(id);
     set(s => ({ tasks: s.tasks.filter(t => t.id !== id), selectedTask: s.selectedTask?.id === id ? null : s.selectedTask }));

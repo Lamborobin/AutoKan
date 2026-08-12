@@ -95,7 +95,7 @@ export default function ArchivedTasksModal({ onClose }) {
                       onClick={e => { e.stopPropagation(); handleRestore(task); }}
                       disabled={restoring === task.id}
                       title="Restore task"
-                      className="shrink-0 flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-gray-500 hover:text-accent hover:bg-accent/10 border border-border hover:border-accent/30 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                      className="shrink-0 flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-accent hover:text-accent/80 hover:bg-accent/10 border border-border hover:border-accent/30 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                     >
                       <RotateCcw size={10} className={restoring === task.id ? 'animate-spin' : ''} />
                       Restore

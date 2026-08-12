@@ -61,7 +61,7 @@ export default function InviteModal({ onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <UserPlus size={15} className="text-accent" />
+            <UserPlus size={15} className="text-gray-400" />
             <span className="text-base font-semibold text-gray-200">Invite team member</span>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-100 transition-colors p-0.5">
@@ -148,7 +148,7 @@ export default function InviteModal({ onClose }) {
                     {!invite.used_at && (
                       <button
                         onClick={() => handleRevoke(invite.id)}
-                        className="text-gray-400 hover:text-red-400 transition-colors p-0.5 shrink-0"
+                        className="text-red-400 hover:text-red-300 transition-colors p-0.5 shrink-0"
                         title="Revoke invite"
                       >
                         <Trash2 size={12} />

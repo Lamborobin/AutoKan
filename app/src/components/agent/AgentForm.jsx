@@ -110,6 +110,7 @@ export function ColorField({ value, onChange }) {
 export function TemplatePromptField({ form, onChange }) {
   const [showInfo, setShowInfo] = useState(false);
   const charCount = (form.system_prompt || '').length;
+  const maxLength = 1000;
 
   return (
     <div className="space-y-2">
@@ -128,14 +129,14 @@ export function TemplatePromptField({ form, onChange }) {
       </div>
       <textarea
         value={form.system_prompt || ''}
-        onChange={e => onChange(e.target.value.slice(0, 1000))}
-        maxLength={1000}
+        onChange={e => onChange(e.target.value.slice(0, maxLength))}
+        maxLength={maxLength}
         rows={4}
         placeholder="Optional additional personality or context for this agent…"
         className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-y"
       />
       <p className={`text-right text-xs ${charCount > 900 ? 'text-amber-400' : 'text-gray-600'}`}>
-        {charCount} / 1000
+        {charCount} / {maxLength}
       </p>
     </div>
   );

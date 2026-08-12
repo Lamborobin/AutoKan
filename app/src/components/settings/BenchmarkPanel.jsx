@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, X, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles, Trash2, User } from 'lucide-react';
+import { Check, XCircle, Circle, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles, Trash2, User } from 'lucide-react';
 import { useStore } from '../../store';
 import { tasksApi } from '../../api';
 import MarkdownText from '../shared/MarkdownText';
@@ -143,7 +143,7 @@ function DeterministicChecks({ result }) {
 
   return (
     <div>
-      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-100 transition-colors">
+      <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         Technical check — {result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
         {checks.length > 0 && <span className="text-gray-600">({passedCount}/{checks.length})</span>}
@@ -155,7 +155,7 @@ function DeterministicChecks({ result }) {
         <div className="mt-1.5 space-y-1 pl-[15px]">
           {checks.map((c, i) => (
             <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
-              {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-red-400 mt-0.5 shrink-0" />}
+              {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />}
               <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
             </div>
           ))}
@@ -209,7 +209,7 @@ function PlannerOutput({ taskId }) {
 
   return (
     <div>
-      <button onClick={handleToggle} className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-100 transition-colors">
+      <button onClick={handleToggle} className="flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} What the planner said
       </button>
 
@@ -232,7 +232,7 @@ function PlannerOutput({ taskId }) {
                   const resolved = typeof entry === 'string' ? true : entry?.resolved !== false;
                   return (
                     <li key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
-                      {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <X size={11} className="text-amber-400 mt-0.5 shrink-0" />}
+                      {resolved ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <Circle size={11} className="text-gray-400 mt-0.5 shrink-0" />}
                       <MarkdownText text={text} className="text-xs text-gray-500" />
                     </li>
                   );
@@ -314,7 +314,7 @@ function RunCard({ run, caseId }) {
             <div className="flex items-center gap-2 flex-wrap">
               <VerdictChip
                 who="AI"
-                icon={run.judge_result ? (run.judge_result.passed ? Check : X) : Sparkles}
+                icon={run.judge_result ? (run.judge_result.passed ? Check : XCircle) : Sparkles}
                 value={run.judge_result ? (run.judge_result.passed ? 'Passed' : 'Failed') : '-'}
                 tone={run.judge_result ? (run.judge_result.passed ? 'green' : 'red') : 'idle'}
               />
@@ -378,7 +378,7 @@ function CompactRunRow({ run, onClick }) {
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <VerdictChip
           who="AI"
-          icon={run.judge_result ? (run.judge_result.passed ? Check : X) : Sparkles}
+          icon={run.judge_result ? (run.judge_result.passed ? Check : XCircle) : Sparkles}
           value={run.judge_result ? (run.judge_result.passed ? 'Passed' : 'Failed') : '-'}
           tone={run.judge_result ? (run.judge_result.passed ? 'green' : 'red') : 'idle'}
         />
@@ -436,13 +436,13 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
         </button>
         {runs?.length > 0 && (
           <button onClick={() => setExpanded(v => !v)}
-            className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-100 transition-colors">
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors">
             {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             {expanded ? 'Hide' : 'Show'} {runs.length} run{runs.length === 1 ? '' : 's'}
           </button>
         )}
         <button onClick={() => onDelete(c.id)} title="Delete this benchmark task"
-          className="ml-auto p-1.5 rounded-lg text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          className="ml-auto p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors">
           <Trash2 size={13} />
         </button>
       </div>

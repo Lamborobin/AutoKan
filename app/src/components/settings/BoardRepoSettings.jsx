@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { GitBranch, FolderOpen, Github, X, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { GitBranch, FolderOpen, Github, X, XCircle, Check, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { projectsApi } from '../../api';
 import { useStore } from '../../store';
 
@@ -111,7 +111,7 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
       {isConnected && (
         <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs ${
           project.path_exists
-            ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+            ? 'bg-green-500/10 border border-green-500/20 text-green-400'
             : 'bg-amber-500/10 border border-amber-500/20 text-amber-400'
         }`}>
           {project.path_exists
@@ -248,12 +248,12 @@ export default function BoardRepoSettings({ project, onClose, onUpdated }) {
       {/* Feedback */}
       {error && (
         <p className="text-red-400 text-xs flex items-center gap-1.5">
-          <AlertTriangle size={11} />
+          <XCircle size={11} />
           {error}
         </p>
       )}
       {success && (
-        <p className="text-emerald-400 text-xs flex items-center gap-1.5">
+        <p className="text-green-400 text-xs flex items-center gap-1.5">
           <Check size={11} />
           {success}
         </p>

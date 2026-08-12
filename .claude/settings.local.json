@@ -34,7 +34,9 @@
       "mcp__Claude_in_Chrome__navigate",
       "mcp__Claude_in_Chrome__computer",
       "mcp__Claude_in_Chrome__read_console_messages",
-      "Bash(curl -s -D - -o /dev/null 'https://accounts.google.com/o/oauth2/v2/auth?client_id=16161844699-41hcpgqtg7s9do6k5m4tls8de6jjesca.apps.googleusercontent.com&response_type=code&scope=openid+email+profile&redirect_uri=http://localhost:5173')"
+      "Bash(curl -s -D - -o /dev/null 'https://accounts.google.com/o/oauth2/v2/auth?client_id=16161844699-41hcpgqtg7s9do6k5m4tls8de6jjesca.apps.googleusercontent.com&response_type=code&scope=openid+email+profile&redirect_uri=http://localhost:5173')",
+      "Bash(git diff *)",
+      "Bash(git rev-list *)"
     ]
   }
 }

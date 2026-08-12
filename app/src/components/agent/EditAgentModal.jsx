@@ -280,7 +280,7 @@ export default function EditAgentModal() {
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                   confirmingArchive
                     ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
-                    : 'btn-ghost text-gray-400 hover:text-amber-400'
+                    : 'btn-ghost text-amber-400 hover:text-amber-300'
                 }`}
               >
                 <Archive size={13} />
@@ -300,7 +300,7 @@ export default function EditAgentModal() {
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors ${
                   confirming
                     ? 'bg-red-500/20 border border-red-500/40 text-red-400'
-                    : 'btn-ghost text-gray-400 hover:text-red-400'
+                    : 'btn-ghost text-red-400 hover:text-red-300'
                 }`}
               >
                 <Trash2 size={13} />

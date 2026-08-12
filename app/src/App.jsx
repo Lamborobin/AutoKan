@@ -329,7 +329,7 @@ export default function App() {
                       className="flex flex-col items-center justify-center gap-1.5 h-16 w-16 rounded-xl border border-dashed border-border text-gray-400 hover:text-gray-200 hover:border-gray-500 transition-colors"
                       title="Add column"
                     >
-                      <Plus size={14} />
+                      <Plus size={14} className="text-accent" />
                     </button>
                   </div>
                 )}
@@ -342,7 +342,7 @@ export default function App() {
                     className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
                   >
                     {showArchivedCols ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-                    <Archive size={11} />
+                    <Archive size={11} className="text-amber-400" />
                     Archived columns ({archivedColumns.length})
                   </button>
                   {showArchivedCols && (
@@ -353,7 +353,7 @@ export default function App() {
                           <span className="text-sm text-gray-400">{col.name}</span>
                           <span className="text-xs text-gray-600">{tasks.filter(t => t.column_id === col.id).length} tasks</span>
                           <button onClick={() => unarchiveColumn(col.id)} title="Restore column"
-                            className="p-0.5 text-gray-400 hover:text-accent transition-colors">
+                            className="p-0.5 text-accent hover:text-accent/80 transition-colors">
                             <RotateCcw size={11} />
                           </button>
                           <button onClick={() => deleteColumn(col.id)} title="Delete column permanently"

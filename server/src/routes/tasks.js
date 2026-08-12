@@ -335,7 +335,7 @@ router.post('/:id/toggle_checklist_item', requirePermission('task:update'), (req
   checklist[index] = { ...checklist[index], resolved: nowResolved, manuallyResolved: nowResolved || undefined };
   db.prepare('UPDATE tasks SET pm_checklist = ? WHERE id = ?').run(JSON.stringify(checklist), task.id);
 
-  const agentId = req.agent?.id || null;
+  const agentId = req.agent && db.prepare('SELECT id FROM agents WHERE id = ?').get(req.agent.id) ? req.agent.id : null;
   const item = checklist[index];
   db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
     .run(uuidv4(), task.id, agentId, 'updated',
@@ -826,7 +826,9 @@ router.post('/:id/approve', requirePermission('task:update'), (req, res) => {
   }
 
   const { comment } = req.body;
-  db.prepare(`UPDATE tasks SET human_approval_status = 'approved', human_review_comment = ?, human_review_date = CURRENT_TIMESTAMP WHERE id = ?`)
+  // Human sign-off is the reset point for the planning checklist/progress bar —
+  // it's done its job (drove the PM's questioning) and the task is unlocked now.
+  db.prepare(`UPDATE tasks SET human_approval_status = 'approved', human_review_comment = ?, human_review_date = CURRENT_TIMESTAMP, pm_checklist = NULL WHERE id = ?`)
     .run(comment || null, task.id);
 
   const agentId = req.agent && db.prepare('SELECT id FROM agents WHERE id = ?').get(req.agent.id) ? req.agent.id : null;
@@ -916,7 +918,7 @@ router.post('/:id/bypass_pm', attachAgent, (req, res) => {
     SET pm_approval_status = 'approved', human_approval_status = 'approved',
         pm_review_comment = 'Bypassed by human override',
         pm_review_date = CURRENT_TIMESTAMP, human_review_date = CURRENT_TIMESTAMP,
-        pm_pending_question = NULL
+        pm_pending_question = NULL, pm_checklist = NULL
     WHERE id = ?
   `).run(task.id);
 

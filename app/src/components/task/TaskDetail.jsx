@@ -7,9 +7,10 @@ import MarkdownText from '../shared/MarkdownText';
 import TaskComments from './TaskComments';
 import { PRIORITIES, COMPLEXITIES, PRIORITY_COLORS, PM_STATUS, HUMAN_STATUS, LOG_ACTION } from '../../constants/tasks';
 import { COLUMN } from '../../constants/columns';
+import { getChecklistProgress } from '../../utils/checklist';
 
 export default function TaskDetail() {
-  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, setEditingAgent, currentProjectId, projects } = useStore();
+  const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, toggleChecklistItem, setEditingAgent, currentProjectId, projects } = useStore();
   const [task, setTask] = useState(null);
   const [logs, setLogs] = useState([]);
 
@@ -175,9 +176,8 @@ export default function TaskDetail() {
   const splitProposal = task.metadata?.split_proposal || null;
   const abandonProposal = task.metadata?.abandon_proposal || null;
 
-  const resolvedCount = checklist.filter(i => i.resolved).length;
+  const { resolved: resolvedCount, percent: checklistProgress } = getChecklistProgress(checklist);
   const allItemsChecked = checklist.length > 0 && resolvedCount === checklist.length;
-  const checklistProgress = checklist.length > 0 ? (resolvedCount / checklist.length) * 100 : 0;
 
   // Bypass: show when all items are checked but PM is still not satisfied
   const showBypass = isPmPlanning && !fullyReady && allItemsChecked && !pmDone;
@@ -225,7 +225,7 @@ export default function TaskDetail() {
     );
     setTask(t => ({ ...t, pm_checklist: nextChecklist }));
 
-    const updated = await tasksApi.toggleChecklistItem(task.id, index);
+    const updated = await toggleChecklistItem(task.id, index);
     setTask(t => ({ ...t, pm_checklist: updated.pm_checklist || nextChecklist }));
 
     // PM will re-evaluate — start polling
@@ -435,7 +435,7 @@ export default function TaskDetail() {
                 title="Click to edit title"
               >
                 <span className="truncate">{task.title}</span>
-                <Pencil size={11} className="shrink-0 opacity-0 group-hover:opacity-40 transition-opacity" />
+                <Pencil size={11} className="shrink-0 text-accent opacity-0 group-hover:opacity-40 transition-opacity" />
               </button>
             )}
           </div>
@@ -445,7 +445,7 @@ export default function TaskDetail() {
                 onClick={handleSyncGithub}
                 disabled={syncingGithub}
                 title={githubSyncedAt ? `Sync GitHub — last synced ${formatDistanceToNow(new Date(githubSyncedAt), { addSuffix: true })}` : 'Sync GitHub activity'}
-                className="btn-ghost p-1.5 rounded-lg text-gray-500 hover:text-blue-400 disabled:opacity-40 transition-colors"
+                className="btn-ghost p-1.5 rounded-lg text-accent hover:text-accent/80 disabled:opacity-40 transition-colors"
               >
                 <RotateCcw size={14} className={syncingGithub ? 'animate-spin' : ''} />
               </button>
@@ -454,7 +454,7 @@ export default function TaskDetail() {
               <button
                 onClick={handleArchive}
                 title="Archive task"
-                className={`p-1.5 rounded-lg transition-colors ${confirmArchive ? 'bg-amber-500/20 text-amber-300' : 'btn-ghost text-gray-400 hover:text-amber-400'}`}
+                className={`p-1.5 rounded-lg transition-colors ${confirmArchive ? 'bg-amber-500/20 text-amber-300' : 'btn-ghost text-amber-400 hover:text-amber-300'}`}
               >
                 <Archive size={13} />
               </button>
@@ -924,12 +924,12 @@ export default function TaskDetail() {
                   <div className="border-t border-surface-3 px-4 py-3 space-y-2">
                     <p className="text-xs text-gray-500">All items are checked but the planning agent hasn't approved. You can bypass if you're satisfied.</p>
                     <div className="flex gap-2">
-                      <button onClick={handleBypass} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg transition-colors ${confirmBypass ? 'bg-orange-500/25 text-orange-300 border border-orange-500/30' : 'bg-surface-3 text-gray-500 hover:text-orange-300 hover:bg-orange-500/10'}`}>
+                      <button onClick={handleBypass} className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg transition-colors ${confirmBypass ? 'bg-amber-500/25 text-amber-300 border border-amber-500/30' : 'bg-surface-3 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'}`}>
                         <Unlock size={11} />
                         {confirmBypass ? 'Confirm bypass?' : 'Bypass planning checks'}
                       </button>
                       <button onClick={() => { setShowNewTask(true); setSelectedTask(null); }} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-lg bg-surface-3 text-gray-500 hover:text-accent hover:bg-accent/10 transition-colors">
-                        <Plus size={11} />
+                        <Plus size={11} className="text-accent" />
                         New task instead
                       </button>
                     </div>
@@ -947,7 +947,7 @@ export default function TaskDetail() {
                     onClick={() => { setDescriptionDraft(task.description || ''); setEditingDescription(true); }}
                     className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors"
                   >
-                    <Pencil size={10} /> Edit
+                    <Pencil size={10} className="text-accent" /> Edit
                   </button>
                 )}
               </div>
@@ -1010,7 +1010,7 @@ export default function TaskDetail() {
                     onClick={() => { setCriteriaDraft(task.acceptance_criteria || ''); setEditingCriteria(true); }}
                     className="text-xs text-gray-400 hover:text-gray-200 flex items-center gap-1 transition-colors"
                   >
-                    <Pencil size={10} /> Edit
+                    <Pencil size={10} className="text-accent" /> Edit
                   </button>
                 )}
               </div>
@@ -1128,10 +1128,10 @@ export default function TaskDetail() {
                 {task.assigned_agent_id && (
                   <button
                     onClick={handleOpenEditAgent}
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-accent transition-colors"
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
                     title="Edit this agent"
                   >
-                    <Pencil size={10} />
+                    <Pencil size={10} className="text-accent shrink-0" />
                     Edit agent
                   </button>
                 )}

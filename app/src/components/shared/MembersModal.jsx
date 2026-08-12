@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, X, Plus, Trash2, UserPlus, ChevronDown, ChevronRight, Check, Copy, AlertCircle, Mail, Pencil, Shield } from 'lucide-react';
+import { Users, X, XCircle, Plus, Trash2, UserPlus, ChevronDown, ChevronRight, Check, Copy, Mail, Pencil, Shield } from 'lucide-react';
 import { useStore } from '../../store';
 import { teamsApi } from '../../api';
 
@@ -243,7 +243,7 @@ export default function MembersModal({ onClose }) {
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <Users size={16} className="text-accent" />
+            <Users size={16} className="text-gray-400" />
             <h2 className="text-base font-semibold text-gray-200">Members</h2>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-100 hover:bg-surface-3 transition-colors">
@@ -310,14 +310,14 @@ export default function MembersModal({ onClose }) {
                         {!isSuperAdmin && (
                           <button
                             onClick={() => isEditing ? closeRoleEditor() : openRoleEditor(member)}
-                            className={`p-1.5 rounded-lg transition-all ${isEditing ? 'text-accent bg-accent/10' : 'text-gray-400 hover:text-gray-100 hover:bg-surface-3 opacity-0 group-hover:opacity-100'}`}
+                            className={`p-1.5 rounded-lg transition-all ${isEditing ? 'text-accent bg-accent/10' : 'text-accent hover:bg-surface-3 opacity-0 group-hover:opacity-100'}`}
                             title="Edit roles"
                           >
                             <Pencil size={12} />
                           </button>
                         )}
                         <button onClick={() => handleRemoveMember(member.id)} disabled={removingMember === member.id}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30">
+                          className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-30">
                           <Trash2 size={13} />
                         </button>
                       </div>
@@ -460,7 +460,7 @@ export default function MembersModal({ onClose }) {
 
                 {inviteError && (
                   <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <AlertCircle size={13} className="text-red-400 shrink-0" />
+                    <XCircle size={13} className="text-red-400 shrink-0" />
                     <p className="text-sm text-red-400">{inviteError}</p>
                   </div>
                 )}
@@ -508,8 +508,8 @@ export default function MembersModal({ onClose }) {
                         <span className="text-sm font-medium text-gray-200 flex-1 truncate">{team.name}</span>
                         <span className="text-sm text-gray-600">{team.member_count} member{team.member_count !== 1 ? 's' : ''}</span>
                         {expandedTeam === team.id
-                          ? <ChevronDown size={13} className="text-gray-500 shrink-0" />
-                          : <ChevronRight size={13} className="text-gray-500 shrink-0" />}
+                          ? <ChevronDown size={13} className="text-gray-400 shrink-0" />
+                          : <ChevronRight size={13} className="text-gray-400 shrink-0" />}
                       </button>
                       {confirmDeleteTeam === team.id ? (
                         <div className="flex items-center gap-1 px-2 shrink-0">
@@ -519,7 +519,7 @@ export default function MembersModal({ onClose }) {
                         </div>
                       ) : (
                         <button onClick={() => handleDeleteTeam(team)} title={team.member_count > 0 ? 'Archive team (has members)' : 'Delete team'}
-                          className="p-2 mr-1 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0">
+                          className="p-2 mr-1 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors shrink-0">
                           <Trash2 size={13} />
                         </button>
                       )}
@@ -566,7 +566,7 @@ export default function MembersModal({ onClose }) {
                                 ) : (
                                   <button onClick={() => setConfirmRemoveTeamMember(key)}
                                     disabled={removingTeamMember === key}
-                                    className="p-1 rounded-md text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-30">
+                                    className="p-1 rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all disabled:opacity-30">
                                     <Trash2 size={12} />
                                   </button>
                                 )
@@ -650,7 +650,7 @@ export default function MembersModal({ onClose }) {
               ) : (
                 <button onClick={() => setShowNewTeamForm(true)}
                   className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-border text-gray-500 hover:text-gray-100 hover:border-gray-500 text-sm transition-colors">
-                  <Plus size={14} /> New team
+                  <Plus size={14} className="text-accent" /> New team
                 </button>
               )}
             </div>

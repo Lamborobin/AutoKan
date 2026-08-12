@@ -123,7 +123,7 @@ export default function Column({ column, tasks }) {
           <button
             {...attributes}
             {...listeners}
-            className="p-0.5 text-gray-400 hover:text-gray-500 cursor-grab active:cursor-grabbing shrink-0 touch-none"
+            className="p-0.5 text-gray-400 hover:text-gray-200 cursor-grab active:cursor-grabbing shrink-0 touch-none"
             title="Drag to reorder"
             tabIndex={-1}
           >
@@ -178,7 +178,7 @@ export default function Column({ column, tasks }) {
               onClick={() => setShowNewTask(true)}
               className="p-1 rounded-lg text-gray-200 hover:text-white hover:bg-surface-3 transition-colors"
             >
-              <Plus size={14} />
+              <Plus size={14} className="text-accent" />
             </button>
           )}
           {isUnassigned ? null : isProtected ? (
@@ -212,7 +212,7 @@ export default function Column({ column, tasks }) {
                     onClick={startRename}
                     className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-3 transition-colors"
                   >
-                    <Pencil size={11} />
+                    <Pencil size={11} className="text-accent" />
                     Rename
                   </button>
                   <button
@@ -220,7 +220,7 @@ export default function Column({ column, tasks }) {
                     className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${
                       confirmArchive
                         ? 'text-amber-300 bg-amber-500/10'
-                        : 'text-gray-400 hover:text-amber-400 hover:bg-surface-3'
+                        : 'text-amber-400 hover:text-amber-300 hover:bg-surface-3'
                     }`}
                   >
                     <Archive size={11} />
@@ -237,7 +237,7 @@ export default function Column({ column, tasks }) {
                     className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors ${
                       confirmDelete
                         ? 'text-red-300 bg-red-500/10'
-                        : 'text-gray-400 hover:text-red-400 hover:bg-surface-3'
+                        : 'text-red-400 hover:text-red-300 hover:bg-surface-3'
                     }`}
                   >
                     <Trash2 size={11} />

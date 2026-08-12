@@ -242,14 +242,14 @@ export default function TaskComments({ taskId }) {
                 <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 mt-0.5 shrink-0 transition-all">
                   <button
                     onClick={() => handleEditStart(c)}
-                    className="text-gray-400 hover:text-accent p-0.5"
+                    className="text-accent hover:text-accent/80 p-0.5"
                     title="Edit comment"
                   >
                     <Pencil size={11} />
                   </button>
                   <button
                     onClick={() => handleDelete(c.id)}
-                    className="text-gray-400 hover:text-red-400 p-0.5"
+                    className="text-red-400 hover:text-red-300 p-0.5"
                     title="Delete comment"
                   >
                     <Trash2 size={11} />

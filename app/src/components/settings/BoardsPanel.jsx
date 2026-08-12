@@ -209,7 +209,7 @@ export default function BoardsPanel({
           <button
             onClick={() => handleUnarchive(p.id)}
             title="Restore board"
-            className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-accent/10 transition-colors"
+            className="p-1.5 rounded-lg text-accent hover:text-accent/80 hover:bg-accent/10 transition-colors"
           >
             <RotateCcw size={12} />
           </button>
@@ -220,7 +220,7 @@ export default function BoardsPanel({
               <button onClick={() => setConfirmDelete(null)} className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors">No</button>
             </span>
           ) : (
-            <button onClick={() => setConfirmDelete(p.id)} title="Delete permanently" className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+            <button onClick={() => setConfirmDelete(p.id)} title="Delete permanently" className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors">
               <Trash2 size={12} />
             </button>
           )}
@@ -242,7 +242,7 @@ export default function BoardsPanel({
         <button
           onClick={() => { setRenamingId(p.id); setRenameValue(p.name); }}
           title="Rename"
-          className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-3 transition-colors"
+          className="p-1.5 rounded-lg text-accent hover:text-accent/80 hover:bg-surface-3 transition-colors"
         >
           <Pencil size={12} />
         </button>
@@ -253,7 +253,7 @@ export default function BoardsPanel({
             <button onClick={() => setConfirmArchive(null)} className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors">No</button>
           </span>
         ) : (
-          <button onClick={() => setConfirmArchive(p.id)} title="Archive" className="p-1.5 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors">
+          <button onClick={() => setConfirmArchive(p.id)} title="Archive" className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 transition-colors">
             <Archive size={12} />
           </button>
         )}
@@ -264,7 +264,7 @@ export default function BoardsPanel({
             <button onClick={() => setConfirmDelete(null)} className="px-1.5 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded-md transition-colors">No</button>
           </span>
         ) : (
-          <button onClick={() => setConfirmDelete(p.id)} title="Delete" className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+          <button onClick={() => setConfirmDelete(p.id)} title="Delete" className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors">
             <Trash2 size={12} />
           </button>
         )}

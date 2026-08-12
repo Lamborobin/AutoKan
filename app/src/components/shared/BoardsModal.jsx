@@ -237,7 +237,7 @@ export default function BoardsModal({ onClose }) {
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
+        <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
       </div>
     );
   }
@@ -257,7 +257,7 @@ export default function BoardsModal({ onClose }) {
 
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center gap-3 shrink-0">
-          <LayoutGrid size={16} className="text-accent" />
+          <LayoutGrid size={16} className="text-gray-400" />
           <h2 className="text-base font-semibold text-gray-200 flex-1">Boards</h2>
           <button
             onClick={() => setCreating(c => !c)}

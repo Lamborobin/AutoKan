@@ -165,12 +165,12 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
           {isArchived ? (
             <>
               <button onClick={onUnarchive} title="Restore"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-surface-1 transition-colors">
+                className="p-1.5 rounded-lg text-accent hover:text-accent/80 hover:bg-surface-1 transition-colors">
                 <RotateCcw size={12} />
               </button>
               <div className="relative">
                 <button onClick={handleDelete} title="Delete permanently"
-                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-surface-1'}`}>
+                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-red-400 hover:text-red-300 hover:bg-surface-1'}`}>
                   <Trash2 size={12} />
                 </button>
                 {confirmDelete && (
@@ -184,16 +184,16 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
           ) : (
             <>
               <button onClick={onEdit} title="Edit"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-accent hover:bg-surface-1 transition-colors">
+                className="p-1.5 rounded-lg text-accent hover:text-accent/80 hover:bg-surface-1 transition-colors">
                 <Pencil size={12} />
               </button>
               <button onClick={onArchive} title="Archive"
-                className="p-1.5 rounded-lg text-gray-400 hover:text-amber-400 hover:bg-surface-1 transition-colors">
+                className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-surface-1 transition-colors">
                 <Archive size={12} />
               </button>
               <div className="relative">
                 <button onClick={handleDelete} title="Delete permanently"
-                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-gray-400 hover:text-red-400 hover:bg-surface-1'}`}>
+                  className={`p-1.5 rounded-lg transition-colors ${confirmDelete ? 'text-red-400 bg-red-500/10' : 'text-red-400 hover:text-red-300 hover:bg-surface-1'}`}>
                   <Trash2 size={12} />
                 </button>
                 {confirmDelete && (
@@ -270,7 +270,7 @@ export default function TemplatesModal() {
               onClick={() => { setCreating(true); setEditingId(null); }}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-dashed border-border text-sm text-gray-500 hover:text-accent hover:border-accent/40 transition-colors"
             >
-              <Plus size={13} />
+              <Plus size={13} className="text-accent" />
               New Template
             </button>
           )}

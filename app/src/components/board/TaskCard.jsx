@@ -5,10 +5,12 @@ import { AlertTriangle, Clock, Lock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useStore } from '../../store';
 import { PRIORITY_STYLES } from '../../constants/tasks';
+import { getChecklistProgress } from '../../utils/checklist';
 
 export default function TaskCard({ task }) {
   const { agents, setSelectedTask, isDraggingAgent } = useStore();
   const isLocked = task.is_locked;
+  const planningProgress = getChecklistProgress(task.pm_checklist);
 
   const { attributes, listeners, setNodeRef: setSortableRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -93,6 +95,28 @@ export default function TaskCard({ task }) {
         <p className="text-sm text-gray-500 line-clamp-2 mb-3 leading-relaxed">
           {task.description}
         </p>
+      )}
+
+      {/* Planning progress — per-role bar derived from the PM's checklist. Hidden until
+          the PM has written at least one item; cleared (and hidden again) once the
+          human hits Approve — see POST /tasks/:id/approve. */}
+      {planningProgress.total > 0 && (
+        <div className="mb-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs text-gray-400">Planning</span>
+            <span className="text-xs font-medium text-gray-300">
+              {planningProgress.resolved}/{planningProgress.total} &middot; {planningProgress.percent}%
+            </span>
+          </div>
+          <div className="h-1 bg-surface-4 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                planningProgress.percent === 100 ? 'bg-emerald-500' : 'bg-accent'
+              }`}
+              style={{ width: `${planningProgress.percent}%` }}
+            />
+          </div>
+        </div>
       )}
 
       {/* Progress */}
