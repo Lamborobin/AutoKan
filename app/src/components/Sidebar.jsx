@@ -137,7 +137,7 @@ function DraggableAgentRow({ agent, isSelected, showTemplateBadge, templateArchi
   );
 }
 
-function ProjectSwitcher() {
+export function ProjectSwitcher() {
   const { projects, clients, currentProjectId, setCurrentProject, createProject, createClient, user } = useStore();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);

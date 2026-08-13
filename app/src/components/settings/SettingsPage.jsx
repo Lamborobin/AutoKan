@@ -3,7 +3,7 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, XCircle, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info, Mail, UserPlus, FlaskConical, Link2 as LinkIcon,
+  BookOpen, Info, Mail, UserPlus, FlaskConical, Link2 as LinkIcon, Wrench, Undo2, Redo2,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
 import BenchmarkPanel from './BenchmarkPanel';
@@ -11,6 +11,7 @@ import InfoModal from './InfoModal';
 import TeamsPanel from './TeamsPanel';
 import BoardsPanel from './BoardsPanel';
 import SettingsTable from './SettingsTable';
+import { ProjectSwitcher } from '../Sidebar';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi, invitesApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
@@ -78,6 +79,8 @@ export default function SettingsPage() {
     createTeam,
     deleteTeam,
     roles,
+    autoSaveContextFiles,
+    setAutoSaveContextFiles,
   } = useStore();
 
   const currentProject = projects.find(p => p.id === currentProjectId);
@@ -185,6 +188,30 @@ export default function SettingsPage() {
   const [editingCaps, setEditingCaps]     = useState(false);
   const [savingCaps, setSavingCaps]       = useState(false);
   const saveTimerRef = useRef(null);
+  const savedContentRef = useRef(''); // last-persisted content, for Cancel to revert to
+
+  // ── Undo/redo — coalesced by typing pause, not per-keystroke ────────────
+  // history/future hold past content snapshots for the currently open file.
+  // burstAnchorRef captures the pre-edit content once per uninterrupted typing
+  // burst; it's committed to history when typing pauses for HISTORY_DEBOUNCE_MS.
+  const HISTORY_DEBOUNCE_MS = 500;
+  const HISTORY_LIMIT = 100;
+  const [history, setHistory] = useState([]);
+  const [future, setFuture]   = useState([]);
+  const historyTimerRef = useRef(null);
+  const burstAnchorRef  = useRef(null);
+
+  function resetHistory() {
+    clearTimeout(historyTimerRef.current);
+    burstAnchorRef.current = null;
+    setHistory([]); setFuture([]);
+  }
+
+  // Capability Behavior files never auto-save, regardless of the preference —
+  // they drive real agent behaviour, so a save should always be a deliberate act.
+  function shouldAutoSave() {
+    return !!selectedFile && selectedFile.kind !== 'capability_behavior' && autoSaveContextFiles;
+  }
 
   // Refresh project + subscription data on mount
   useEffect(() => {
@@ -200,7 +227,7 @@ export default function SettingsPage() {
 
   // Load subscription files + other subscription data when entering subscription section
   useEffect(() => {
-    if (section === 'sub_files') {
+    if (section === 'sub_files' || section === 'sub_capability') {
       loadSubscriptionInstructionFiles().catch(() => {});
       setSelectedFile(null);
     }
@@ -218,8 +245,9 @@ export default function SettingsPage() {
   const CLIENT_BOARD_FILES = new Set(['client', 'project']);
   const customActive   = instructionFiles.filter(f => !f.archived  && (isClientBoard || !CLIENT_BOARD_FILES.has(f.name)));
   const customArchived = instructionFiles.filter(f =>  f.archived  && (isClientBoard || !CLIENT_BOARD_FILES.has(f.name)));
-  const subFilesActive   = subscriptionInstructionFiles.filter(f => !f.archived);
-  const subFilesArchived = subscriptionInstructionFiles.filter(f => f.archived);
+  const capabilityFilesActive  = subscriptionInstructionFiles.filter(f => !f.archived && f.kind === 'capability_behavior');
+  const workspaceFilesActive   = subscriptionInstructionFiles.filter(f => !f.archived && f.kind !== 'capability_behavior');
+  const workspaceFilesArchived = subscriptionInstructionFiles.filter(f =>  f.archived && f.kind !== 'capability_behavior');
 
   // scope = 'board' | 'subscription'
   function getApiScope(scope) {
@@ -229,18 +257,33 @@ export default function SettingsPage() {
   }
 
   async function selectFile(file, scope) {
-    if (dirty && selectedFile) await saveCurrentContent();
+    // Only save-on-navigate for files that are allowed to auto-save at all — for
+    // Capability Behavior (and context files with the toggle off), leaving a dirty
+    // file discards the edit rather than silently persisting it. Use Save or Cancel
+    // explicitly instead; that's the whole point of "never auto-save behaviour files."
+    if (dirty && selectedFile && shouldAutoSave()) await saveCurrentContent();
     setSelectedFile({ ...file, scope });
     setContent(''); setDirty(false); setSaveStatus(null); setLoadingContent(true);
     setEditingCaps(false);
+    resetHistory();
     try {
       const { projectId, subscriptionId } = getApiScope(scope);
       const data = await instructionsApi.get(file.name + '.md', projectId, subscriptionId);
       setContent(data.content);
-      // GET returns authoritative capabilities + protected flag (front matter stripped)
-      setSelectedFile({ ...file, scope, capabilities: data.capabilities || [], protected: !!data.protected, archived: !!data.archived });
+      savedContentRef.current = data.content;
+      // GET returns authoritative capabilities + protected/kind flags (front matter stripped)
+      setSelectedFile({ ...file, scope, capabilities: data.capabilities || [], protected: !!data.protected, kind: data.kind, archived: !!data.archived });
     } catch { setContent(''); }
     finally { setLoadingContent(false); }
+  }
+
+  // Discards the pending edit and reverts to the last-persisted content — the
+  // explicit counterpart to Save for files that never auto-save.
+  function handleCancel() {
+    clearTimeout(saveTimerRef.current);
+    resetHistory();
+    setContent(savedContentRef.current);
+    setDirty(false); setSaveStatus(null);
   }
 
   // Change which capabilities a board file is visible to. Persists immediately
@@ -259,9 +302,45 @@ export default function SettingsPage() {
   }
 
   function handleContentChange(v) {
+    // Capture the pre-edit state once per burst; commit it as an undo step once
+    // typing pauses. Redo stack is invalidated by any new edit, same as usual.
+    if (burstAnchorRef.current === null) burstAnchorRef.current = content;
+    clearTimeout(historyTimerRef.current);
+    historyTimerRef.current = setTimeout(() => {
+      const anchor = burstAnchorRef.current;
+      burstAnchorRef.current = null;
+      if (anchor === null) return;
+      setHistory(h => (h[h.length - 1] === anchor ? h : [...h, anchor].slice(-HISTORY_LIMIT)));
+      setFuture([]);
+    }, HISTORY_DEBOUNCE_MS);
+
     setContent(v); setDirty(true); setSaveStatus(null);
     clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => autoSave(v), 1500);
+    if (shouldAutoSave()) saveTimerRef.current = setTimeout(() => autoSave(v), 1500);
+  }
+
+  function handleUndo() {
+    if (history.length === 0) return;
+    clearTimeout(historyTimerRef.current);
+    burstAnchorRef.current = null;
+    const prev = history[history.length - 1];
+    setFuture(f => [content, ...f]);
+    setHistory(h => h.slice(0, -1));
+    setContent(prev); setDirty(true); setSaveStatus(null);
+    clearTimeout(saveTimerRef.current);
+    if (shouldAutoSave()) saveTimerRef.current = setTimeout(() => autoSave(prev), 1500);
+  }
+
+  function handleRedo() {
+    if (future.length === 0) return;
+    clearTimeout(historyTimerRef.current);
+    burstAnchorRef.current = null;
+    const next = future[0];
+    setHistory(h => [...h, content]);
+    setFuture(f => f.slice(1));
+    setContent(next); setDirty(true); setSaveStatus(null);
+    clearTimeout(saveTimerRef.current);
+    if (shouldAutoSave()) saveTimerRef.current = setTimeout(() => autoSave(next), 1500);
   }
 
   async function autoSave(val) {
@@ -270,6 +349,7 @@ export default function SettingsPage() {
     try {
       const { projectId, subscriptionId } = getApiScope(selectedFile.scope);
       await instructionsApi.update(selectedFile.name + '.md', val, projectId, subscriptionId);
+      savedContentRef.current = val;
       setDirty(false); setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
     } catch { setSaveStatus('error'); }
@@ -283,6 +363,7 @@ export default function SettingsPage() {
     try {
       const { projectId, subscriptionId } = getApiScope(selectedFile.scope);
       await instructionsApi.update(selectedFile.name + '.md', content, projectId, subscriptionId);
+      savedContentRef.current = content;
       setDirty(false); setSaveStatus('saved');
       setTimeout(() => setSaveStatus(null), 2000);
     } catch { setSaveStatus('error'); }
@@ -322,15 +403,17 @@ export default function SettingsPage() {
     catch (err) { setActionError(err.response?.data?.error || 'Failed to restore'); }
   }
 
-  async function handleCreate(e) {
+  async function handleCreate(e, scope = 'board') {
     e?.preventDefault();
     const trimmed = newFileName.trim();
     if (!trimmed) { setNewFileError('Name is required'); return; }
     setNewFileError('');
     try {
-      const file = await createInstructionFile(trimmed, `# ${trimmed}\n\n`, newFileCapabilities);
+      const file = scope === 'subscription'
+        ? await createSubscriptionInstructionFile(trimmed, `# ${trimmed}\n\n`, newFileCapabilities)
+        : await createInstructionFile(trimmed, `# ${trimmed}\n\n`, newFileCapabilities);
       setAddingFile(false); setNewFileName(''); setNewFileCapabilities([]);
-      selectFile(file, 'board');
+      selectFile(file, scope);
     } catch (err) { setNewFileError(err.response?.data?.error || 'Failed to create'); }
   }
 
@@ -438,32 +521,32 @@ export default function SettingsPage() {
     <div className="flex h-screen overflow-hidden bg-surface-0 font-sans">
 
       {/* ── Left panel ──────────────────────────────────────────────────── */}
-      <div className="w-60 shrink-0 flex flex-col border-r border-border bg-surface-1 overflow-y-auto">
+      <div className="w-60 shrink-0 flex flex-col border-r border-border bg-surface-1">
 
-        {/* Header */}
+        {/* Header — kept OUTSIDE the scrollable nav body below, and neither this nor
+            the outer container has overflow-hidden/auto — any overflow: auto/hidden
+            ancestor clips horizontal overflow too (not just the axis you set), which is
+            what was cutting the board switcher's dropdown off. Only the nav body below
+            scrolls; the header (and its dropdown) sits in an unconstrained sibling, same
+            as the main app Sidebar. "Settings" is the largest text here on purpose: this
+            is the official settings surface for the whole app (workspace, platform,
+            system), not just this one board, so the board identity reads as context,
+            not title. */}
         <div className="px-4 pt-4 pb-3 border-b border-border shrink-0">
           <button
             onClick={() => setCurrentPage('board')}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors mb-5"
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors mb-3"
           >
-            <ArrowLeft size={10} /> Back to board
+            <ArrowLeft size={10} /> Back to start
           </button>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Settings</p>
-          {currentProject && (
-            <button
-              onClick={() => setCurrentPage('board')}
-              className="flex flex-col mt-2 w-full text-left group"
-              title="Go to board"
-            >
-              <span className="text-sm font-medium text-gray-300 truncate group-hover:text-accent transition-colors">
-                {currentProject.name}
-              </span>
-              {currentProject.client_name && (
-                <span className="text-xs text-gray-600 truncate">{currentProject.client_name}</span>
-              )}
-            </button>
-          )}
+          <h1 className="text-lg font-bold text-gray-100 mb-2">Settings</h1>
+          {/* Same board switcher as the main app sidebar — selecting a board here only
+              changes which board's context you're editing, it never navigates away. */}
+          <ProjectSwitcher />
         </div>
+
+        {/* Scrollable nav body — everything below the header */}
+        <div className="flex-1 overflow-y-auto flex flex-col">
 
         {/* BOARD section */}
         <div className="px-2 pt-3 pb-1 shrink-0">
@@ -626,48 +709,110 @@ export default function SettingsPage() {
               )}
             </div>
             <div className="space-y-0.5">
-              {navBtn('sub_overview', 'General', Settings2)}
-              {navBtn('sub_clients',  'Clients',  Building2)}
-              {navBtn('sub_files',    'Workspace Context', FileText, null, 'workspace')}
+              {navBtn('sub_overview',   'Settings', Settings2)}
+              {navBtn('sub_benchmark',  'Benchmark Tasks', FlaskConical)}
             </div>
           </div>
         )}
 
-        {/* Subscription file list — directly below the Instruction Files nav item */}
-        {section === 'sub_files' && isSuperAdmin && (
-          <div className="mx-2 mb-2 shrink-0 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+        {/* Lists — clients, team, boards, members */}
+        {isSuperAdmin && (
+          <div className="px-2 pt-3 pb-1 shrink-0">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Lists</p>
+            <div className="space-y-0.5">
+              {navBtn('sub_clients', 'Clients', Building2)}
+              {navBtn('sub_team',    'Team',    Users)}
+              {navBtn('sub_boards',  'Boards',  LayoutGrid)}
+              {navBtn('sub_members', 'Members', UserCheck)}
+            </div>
+          </div>
+        )}
+
+        {/* Context — workspace rules + capability behavior files. Each nav button is
+            immediately followed by its own file-list panel (not both buttons, then both
+            panels) so the visible panel always sits under the button that opened it,
+            regardless of which of the two is active. */}
+        {isSuperAdmin && (
+          <div className="px-2 pt-3 pb-1 shrink-0">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">Context</p>
+
+            <div className="space-y-0.5">
+              {navBtn('sub_files', 'Workspace Context', FileText, null, 'workspace')}
+            </div>
+
+            {/* Workspace Context file list — genuine workspace-wide rules, creatable */}
+            {section === 'sub_files' && (
+              <div className="my-1.5 shrink-0 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
             <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-340px)]">
               <div>
-                {subFilesActive.map(f => (
+                {workspaceFilesActive.map(f => (
                   <FileRow key={f.name} file={f} scope="subscription"
-                    actions={f.protected ? null : (
+                    actions={
                       <button onClick={() => setArchiveConfirm({ file: f, scope: 'subscription' })} title="Archive"
                         className="p-0.5 text-amber-400 hover:text-amber-300 transition-colors">
                         <Archive size={13} />
                       </button>
-                    )}
-                    deleteAction={f.protected ? null : (
+                    }
+                    deleteAction={
                       <button onClick={() => setDeleteConfirm({ file: f, scope: 'subscription' })} title="Delete"
                         className="p-0.5 text-red-400 hover:text-red-300 transition-colors">
                         <Trash2 size={13} />
                       </button>
-                    )}
+                    }
                   />
                 ))}
-                <p className="text-xs text-gray-600 px-2.5 py-1">Workspace files are fixed — edit their content, but no new files can be added here.</p>
+
+                {addingFile ? (
+                  <form onSubmit={e => handleCreate(e, 'subscription')} className="mt-1.5 px-1 space-y-1.5">
+                    <input
+                      autoFocus value={newFileName}
+                      onChange={e => { setNewFileName(e.target.value); setNewFileError(''); }}
+                      onKeyDown={e => e.key === 'Escape' && (setAddingFile(false), setNewFileName(''), setNewFileCapabilities([]))}
+                      placeholder="e.g. ISO certification, review policy…"
+                      className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1 text-xs text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50"
+                    />
+                    {newFileName.trim() && (
+                      safeFileName(newFileName)
+                        ? <p className="text-xs text-gray-600 px-0.5">Saved as <span className="text-gray-500">{safeFileName(newFileName)}.md</span></p>
+                        : <p className="text-xs text-amber-500/80 px-0.5">Needs at least one letter or number</p>
+                    )}
+                    {newFileError && <p className="text-xs text-red-400">{newFileError}</p>}
+                    <div className="flex gap-1.5">
+                      <button type="submit" disabled={!safeFileName(newFileName)}
+                        className="flex-1 py-1 text-xs font-medium text-white bg-accent hover:bg-accent/80 disabled:opacity-40 rounded-md transition-colors">
+                        Create
+                      </button>
+                      <button type="button" onClick={() => { setAddingFile(false); setNewFileName(''); setNewFileCapabilities([]); setNewFileError(''); }}
+                        className="px-3 py-1 text-xs text-gray-400 hover:text-gray-200 border border-border rounded-md transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="space-y-1 pt-0.5">
+                      <p className="text-xs text-gray-600 uppercase tracking-wide font-medium px-0.5">Visible to</p>
+                      <CapabilityPicker selected={newFileCapabilities} onChange={setNewFileCapabilities} />
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    onClick={() => { setAddingFile(true); setNewFileName(''); setNewFileError(''); setNewFileCapabilities([]); }}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 w-full text-sm text-gray-400 hover:text-gray-200 transition-colors rounded-lg"
+                  >
+                    <Plus size={11} className="text-accent" /> New file
+                  </button>
+                )}
               </div>
 
-              {/* Archived subscription files */}
-              {subFilesArchived.length > 0 && (
+              {/* Archived workspace files */}
+              {workspaceFilesArchived.length > 0 && (
                 <div>
                   <button
                     onClick={() => setShowArchived(v => !v)}
                     className="flex items-center gap-1.5 px-1.5 py-1 w-full text-xs font-semibold text-gray-400 uppercase tracking-widest hover:text-gray-200 transition-colors"
                   >
                     {showArchived ? <ChevronDown size={9} /> : <ChevronRight size={9} />}
-                    Archived ({subFilesArchived.length})
+                    Archived ({workspaceFilesArchived.length})
                   </button>
-                  {showArchived && subFilesArchived.map(f => (
+                  {showArchived && workspaceFilesArchived.map(f => (
                     <FileRow key={f.name} file={f} scope="subscription"
                       actions={
                         <button onClick={() => handleUnarchive(f, 'subscription')} title="Restore"
@@ -686,18 +831,26 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {/* Remaining subscription nav items — after the Workspace Context file list, not sandwiched inside it */}
-        {isSuperAdmin && (
-          <div className="px-2 pb-3 shrink-0">
             <div className="space-y-0.5">
-              {navBtn('sub_benchmark',   'Benchmark Tasks', FlaskConical)}
-              {navBtn('sub_team',        'Team',         Users)}
-              {navBtn('sub_boards',      'Boards',       LayoutGrid)}
-              {navBtn('sub_members',     'Members',      UserCheck)}
+              {navBtn('sub_capability', 'Capability Behavior', Wrench, null, 'capability')}
             </div>
+
+            {/* Capability Behavior file list — fixed set, one per capability, read/edit only */}
+            {section === 'sub_capability' && (
+              <div className="my-1.5 shrink-0 border border-border rounded-xl bg-surface-0/50 overflow-hidden">
+                <div className="px-2 py-2.5 space-y-3 overflow-y-auto max-h-[calc(100vh-340px)]">
+                  <div>
+                    {capabilityFilesActive.map(f => (
+                      <FileRow key={f.name} file={f} scope="subscription" actions={null} deleteAction={null} />
+                    ))}
+                    <p className="text-xs text-gray-600 px-2.5 py-1">One file per capability — fixed set, edit their content, but no new ones can be added here.</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -717,6 +870,8 @@ export default function SettingsPage() {
           <div className="space-y-0.5">
             {navBtn('ai_context', 'System Rules', BookOpen, null, 'ai_context')}
           </div>
+        </div>
+
         </div>
       </div>
 
@@ -795,6 +950,36 @@ export default function SettingsPage() {
                       </button>
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-base font-semibold text-gray-200 mb-1">Editing</h2>
+                <p className="text-sm text-gray-500 mb-6">
+                  How changes to markdown files are saved in this workspace.
+                </p>
+                <div className="bg-surface-2 border border-border rounded-xl p-4 flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-gray-200">Auto-save context files</p>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-sm">
+                      Applies to <b>Board Context</b> and <b>Workspace Context</b> — automatically saves shortly after you stop typing. <br /><br />
+                      If turned off, edits only save when you click <b>Save</b>. 
+                      <br /><br />
+                      <b>Capability Behavior</b> and <b>System Rules</b> files must never auto-save because of capability and action constraints.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setAutoSaveContextFiles(!autoSaveContextFiles)}
+                    role="switch"
+                    aria-checked={autoSaveContextFiles}
+                    style={{ width: 40, height: 22, flexShrink: 0 }}
+                    className={`relative rounded-full transition-colors mt-0.5 ${autoSaveContextFiles ? 'bg-accent' : 'bg-surface-4 border border-border'}`}
+                  >
+                    <span
+                      style={{ width: 16, height: 16, top: 3, left: autoSaveContextFiles ? 21 : 3 }}
+                      className="absolute rounded-full bg-white shadow transition-[left]"
+                    />
+                  </button>
                 </div>
               </div>
             </div>
@@ -1071,8 +1256,8 @@ export default function SettingsPage() {
         {section === 'benchmark' && <BenchmarkPanel scope="board" />}
         {section === 'sub_benchmark' && isSuperAdmin && <BenchmarkPanel scope="workspace" />}
 
-        {/* Editor panel — shared by board files ('files') and subscription files ('sub_files') */}
-        {(section === 'files' || section === 'sub_files') && (<>
+        {/* Editor panel — shared by board files ('files') and subscription files ('sub_files' / 'sub_capability') */}
+        {(section === 'files' || section === 'sub_files' || section === 'sub_capability') && (<>
           {selectedFile ? (
             <>
               <div className="flex items-center justify-between px-6 py-3.5 border-b border-border shrink-0 bg-surface-1">
@@ -1081,7 +1266,7 @@ export default function SettingsPage() {
                   <span className="text-sm font-semibold text-gray-200">{selectedFile.name}.md</span>
                   {selectedFile.scope === 'subscription' && (
                     <span className="flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20 uppercase tracking-wide">
-                      workspace
+                      {selectedFile.kind === 'capability_behavior' ? 'capability' : 'workspace'}
                     </span>
                   )}
                   {selectedFile.archived && (
@@ -1099,12 +1284,20 @@ export default function SettingsPage() {
                   )}
                   {saveStatus === 'error' && <span className="text-xs text-red-400">Save failed</span>}
                   {dirty && !saving && (
-                    <button
-                      onClick={saveCurrentContent}
-                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
-                    >
-                      <Save size={10} /> Save
-                    </button>
+                    <>
+                      <button
+                        onClick={handleCancel}
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-300 hover:text-gray-100 hover:bg-surface-3 rounded-lg transition-colors"
+                      >
+                        <XCircle size={10} /> Cancel
+                      </button>
+                      <button
+                        onClick={saveCurrentContent}
+                        className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-white bg-accent hover:bg-accent/80 rounded-lg transition-colors"
+                      >
+                        <Save size={10} /> Save
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1137,6 +1330,24 @@ export default function SettingsPage() {
                 </div>
               )}
 
+              {/* Editor toolbar — undo/redo today; room for format, AI validation, etc. later */}
+              {!selectedFile.archived && (
+                <div className="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-border bg-surface-2">
+                  <button
+                    onClick={handleUndo} disabled={history.length === 0} title="Undo"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-300 hover:text-gray-100 hover:bg-surface-3 disabled:text-gray-600 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <Undo2 size={15} /> Undo
+                  </button>
+                  <button
+                    onClick={handleRedo} disabled={future.length === 0} title="Redo"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-300 hover:text-gray-100 hover:bg-surface-3 disabled:text-gray-600 disabled:hover:bg-transparent transition-colors"
+                  >
+                    <Redo2 size={15} /> Redo
+                  </button>
+                </div>
+              )}
+
               {loadingContent ? (
                 <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">Loading…</div>
               ) : (
@@ -1156,7 +1367,9 @@ export default function SettingsPage() {
               )}
               {selectedFile.scope === 'subscription' && (
                 <div className="shrink-0 px-8 py-2 bg-accent/5 border-t border-accent/10 text-xs text-accent/60">
-                  Workspace file — shared by all boards in this subscription.
+                  {selectedFile.kind === 'capability_behavior'
+                    ? 'Capability Behavior — shapes how every agent of this capability works, across every board in this workspace.'
+                    : 'Workspace file — shared by all boards in this subscription.'}
                 </div>
               )}
             </>

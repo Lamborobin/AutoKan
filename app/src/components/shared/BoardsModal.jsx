@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
-import { X, Search, Plus, LayoutGrid, ChevronDown, GitBranch, Settings2, AlertTriangle } from 'lucide-react';
+import { X, Search, Plus, LayoutGrid, ChevronDown } from 'lucide-react';
 import { useStore } from '../../store';
-import BoardRepoSettings from '../settings/BoardRepoSettings';
 
 export default function BoardsModal({ onClose }) {
   const { projects, clients, user, isSuperAdmin, setCurrentProject, createProject, createClient } = useStore();
@@ -71,10 +70,14 @@ export default function BoardsModal({ onClose }) {
     return result;
   }, [active, scope, clientFilter, creatorFilter, search, user]);
 
-  // Group filtered boards by client for the grid view
+  // Group filtered boards by client for the grid view. No-client boards split further
+  // by creator: mine = "Personal", someone else's = a board I was invited onto that
+  // just doesn't belong to a client — not the same thing as "mine".
   const grouped = useMemo(() => {
     const withClient = filtered.filter(p => p.client_id);
     const withoutClient = filtered.filter(p => !p.client_id);
+    const personal = withoutClient.filter(p => p.created_by === user?.id);
+    const sharedNoClient = withoutClient.filter(p => p.created_by !== user?.id);
     const byClient = {};
     for (const p of withClient) {
       if (!byClient[p.client_id]) {
@@ -85,8 +88,8 @@ export default function BoardsModal({ onClose }) {
       }
       byClient[p.client_id].boards.push(p);
     }
-    return { byClient: Object.values(byClient), noClient: withoutClient };
-  }, [filtered, activeClients]);
+    return { byClient: Object.values(byClient), personal, sharedNoClient };
+  }, [filtered, activeClients, user]);
 
   // Whether any secondary filter is active (determines ungrouped vs grouped rendering)
   const hasSecondaryFilter = !!(clientFilter || creatorFilter || search.trim());
@@ -119,24 +122,13 @@ export default function BoardsModal({ onClose }) {
 
   function BoardCard({ p }) {
     const client = activeClients.find(c => c.id === p.client_id);
-    const [showRepo, setShowRepo] = useState(false);
-    const { projects, loadProjects } = useStore();
-
-    // Repo status
-    const repoStatus = !p.client_path ? 'none'
-      : p.path_exists ? 'connected'
-      : 'missing';
-
-    function handleRepoUpdated(updated) {
-      loadProjects();
-    }
 
     return (
       <div className="bg-surface-2 border border-border rounded-xl hover:border-accent/40 transition-all group">
         <div className="flex items-start gap-2.5 p-3">
           <button
             onClick={() => { setCurrentProject(p.id); onClose(); }}
-            className="flex-1 flex items-start gap-2.5 text-left min-w-0"
+            className="flex-1 flex items-center gap-2.5 text-left min-w-0"
           >
             <span className="text-xl shrink-0">{p.emoji || '📋'}</span>
             <div className="flex-1 min-w-0">
@@ -151,26 +143,6 @@ export default function BoardsModal({ onClose }) {
               )}
             </div>
           </button>
-
-          {/* Repo status + settings toggle */}
-          <div className="flex items-center gap-1 shrink-0">
-            {repoStatus === 'connected' && (
-              <span title={p.client_path} className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-            )}
-            {repoStatus === 'missing' && (
-              <AlertTriangle size={11} className="text-amber-400" title={`Folder not found: ${p.client_path}`} />
-            )}
-            {repoStatus === 'none' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-gray-700 shrink-0" title="No repository connected" />
-            )}
-            <button
-              onClick={e => { e.stopPropagation(); setShowRepo(v => !v); }}
-              className={`p-1 rounded-md transition-colors ${showRepo ? 'text-accent' : 'text-gray-400 hover:text-gray-200'}`}
-              title="Repository settings"
-            >
-              <GitBranch size={12} />
-            </button>
-          </div>
         </div>
 
         {/* Creator row */}
@@ -184,17 +156,6 @@ export default function BoardsModal({ onClose }) {
               </div>
             )}
             <span className="text-xs text-gray-500 truncate">{p.created_by_name?.trim() || p.created_by_email}</span>
-          </div>
-        )}
-
-        {/* Inline repo settings panel */}
-        {showRepo && (
-          <div className="px-3 pb-3">
-            <BoardRepoSettings
-              project={p}
-              onClose={() => setShowRepo(false)}
-              onUpdated={handleRepoUpdated}
-            />
           </div>
         )}
       </div>
@@ -373,8 +334,10 @@ export default function BoardsModal({ onClose }) {
               />
             )}
 
-            {/* Creator dropdown — only show when there are multiple creators or user is superadmin */}
-            {(isSuperAdmin || creators.length > 1) && (
+            {/* Creator dropdown — All boards tab only, same as the client dropdown above.
+                "My boards" is always just this user's own personal boards, so a creator
+                filter there is never meaningful. */}
+            {scope === 'all' && (isSuperAdmin || creators.length > 1) && (
               <FilterDropdown
                 value={creatorFilter}
                 onChange={setCreatorFilter}
@@ -414,11 +377,14 @@ export default function BoardsModal({ onClose }) {
                   color={client?.color}
                 />
               ))}
-              {grouped.noClient.length > 0 && (
+              {grouped.personal.length > 0 && (
                 <Section
-                  title={scope === 'all' && grouped.byClient.length > 0 ? 'No client' : undefined}
-                  boards={grouped.noClient}
+                  title={scope === 'all' ? 'Personal' : undefined}
+                  boards={grouped.personal}
                 />
+              )}
+              {grouped.sharedNoClient.length > 0 && (
+                <Section title="Shared with me" boards={grouped.sharedNoClient} />
               )}
             </>
           )}

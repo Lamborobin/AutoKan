@@ -119,6 +119,27 @@ export const CONTEXT_INFO = {
     ),
   },
 
+  capability: {
+    title: 'Capability Behavior',
+    intro: "How a capability (Planner, Coder, Tester, …) does its job — methodology, tone, and when it fires its own actions.",
+    highlight: 'capability',
+    body: (
+      <>
+        <p>
+          One file per capability, shared by <span className="text-gray-300 font-medium">every agent of that
+          capability</span> in this workspace — not a specific board. This is where you shape *how* that kind of
+          agent works: what it prioritises, how it talks, and — unlike Workspace Context — when it should use one
+          of its own tools (for example, sending a notification at a specific point in its process).
+        </p>
+        <p className="text-gray-500 italic">
+          Examples: "Always summarise what you understand before asking questions." ·
+          "Lead with the plain-language outcome, not the technical detail." ·
+          "When you approve a task for the first time, notify the team."
+        </p>
+      </>
+    ),
+  },
+
   workspace: {
     title: 'Workspace Context',
     intro: 'Rules and context shared by every board in this workspace — constraints, not new actions.',

@@ -473,6 +473,15 @@ function folderPrefix(subscriptionId, projectId) {
   return 'instructions';
 }
 
+// Which of the three UI-facing buckets a file belongs to — distinct from `protected`,
+// which is just "can this be deleted." Board-scope files are always board_rules; at
+// subscription scope, capability behavior files are the fixed set matched against the
+// runner registry, everything else is a genuine workspace rule.
+function fileKind(filename, projectId) {
+  if (projectId) return 'board_rules';
+  return RUNNER_PERSONALITY_FILES.has(filename) ? 'capability_behavior' : 'workspace_rules';
+}
+
 function listInstructionFiles(includeArchived, subscriptionId, projectId) {
   const { dir, archivedDir } = getInstructionsDirs(subscriptionId, projectId);
   const prefix = folderPrefix(subscriptionId, projectId);
@@ -489,6 +498,7 @@ function listInstructionFiles(includeArchived, subscriptionId, projectId) {
             archived: false,
             capabilities: caps || [],
             protected: RUNNER_PERSONALITY_FILES.has(f),
+            kind: fileKind(f, projectId),
           };
         })
     : [];
@@ -505,6 +515,7 @@ function listInstructionFiles(includeArchived, subscriptionId, projectId) {
           archived: true,
           capabilities: readCapabilities(path.join(archivedDir, f)),
           protected: RUNNER_PERSONALITY_FILES.has(f),
+          kind: fileKind(f, projectId),
         }))
     : [];
 
@@ -543,7 +554,7 @@ instructionsRouter.get('/:filename', attachAgent, (req, res) => {
   // Returns { content (body, no front matter), capabilities, protected, archived }
   const respond = (filePath, archived) => {
     const { capabilities, body } = splitFrontMatter(fs.readFileSync(filePath, 'utf8'));
-    return res.json({ content: body, capabilities, protected: RUNNER_PERSONALITY_FILES.has(filename), archived });
+    return res.json({ content: body, capabilities, protected: RUNNER_PERSONALITY_FILES.has(filename), kind: fileKind(filename, projectId), archived });
   };
 
   if (fs.existsSync(path.join(dir, filename))) return respond(path.join(dir, filename), false);
@@ -590,12 +601,6 @@ instructionsRouter.patch('/:filename', (req, res) => {
 instructionsRouter.post('/', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create instruction files' });
 
-  const subscriptionIdCheck = req.query.subscription_id || req.body.subscription_id || null;
-  const projectIdCheck = req.query.project_id || req.body.project_id || null;
-  if (subscriptionIdCheck && !projectIdCheck) {
-    return res.status(403).json({ error: 'Workspace context files are fixed — edit existing ones rather than adding new ones.' });
-  }
-
   const { name, content = '', capabilities } = req.body;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
@@ -626,7 +631,7 @@ instructionsRouter.post('/', (req, res) => {
 
   const caps = Array.isArray(capabilities) ? capabilities.filter(c => typeof c === 'string' && c.startsWith('perm_')) : [];
   writeMdWithFrontMatter(filePath, content, caps);
-  res.status(201).json({ path: `${prefix}/${filename}`, name: safeName, archived: false, capabilities: caps, protected: false });
+  res.status(201).json({ path: `${prefix}/${filename}`, name: safeName, archived: false, capabilities: caps, protected: false, kind: fileKind(filename, projectId) });
 });
 
 // POST /api/instructions/:filename/archive?subscription_id=xxx&project_id=yyy

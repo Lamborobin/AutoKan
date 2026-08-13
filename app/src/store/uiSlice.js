@@ -2,6 +2,7 @@ import { DEFAULT_AGENT_MODEL, MODELS } from '../constants/agents';
 import { notificationsApi } from '../api';
 
 const DEFAULT_AGENT_MODEL_STORAGE_KEY = 'fa_default_agent_model';
+const AUTOSAVE_CONTEXT_STORAGE_KEY = 'fa_autosave_context_files';
 
 function normalizeAgentModel(value) {
   return MODELS.some(model => model.value === value) ? value : DEFAULT_AGENT_MODEL;
@@ -18,6 +19,10 @@ export const createUiSlice = (set) => ({
   currentPage: 'board',
   theme: localStorage.getItem('theme') || 'dark',
   defaultAgentModel: normalizeAgentModel(localStorage.getItem(DEFAULT_AGENT_MODEL_STORAGE_KEY)),
+  // Context files (board/workspace) auto-save by default, matching prior behaviour.
+  // Capability Behavior and System Rules files never auto-save regardless of this —
+  // gated at the call site, not here, since it's a fixed rule, not a preference.
+  autoSaveContextFiles: localStorage.getItem(AUTOSAVE_CONTEXT_STORAGE_KEY) !== 'false',
   isDraggingAgent: false,
   notifications: [],
   unreadCount: 0,
@@ -76,5 +81,10 @@ export const createUiSlice = (set) => ({
     const isLight = theme === 'light' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: light)').matches);
     document.documentElement.classList.toggle('light', isLight);
     set({ theme });
+  },
+
+  setAutoSaveContextFiles(value) {
+    localStorage.setItem(AUTOSAVE_CONTEXT_STORAGE_KEY, value ? 'true' : 'false');
+    set({ autoSaveContextFiles: !!value });
   },
 });

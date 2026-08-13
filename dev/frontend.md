@@ -77,24 +77,35 @@ Split at 400 lines — when splitting, one file per resource group, re-export fr
 
 Settings/admin surfaces are used by non-technical roles (PMs, admins), not only developers. Never render raw backend output — rubric field names, comparison strings, internal check identifiers, JSON shapes — directly in these views. The backend can return whatever's useful for debugging; translating it into something a non-technical reader can act on is the frontend's job, not something pushed onto the viewer.
 
+## Color & Contrast
+
+The app is dark-mode-first (dark `surface-0`…`surface-4` backgrounds). Text/icon color choice follows established usage, not gut feel:
+- `gray-100` / `gray-200` — primary content (headings, active/selected state, body text being read)
+- `gray-300` / `gray-400` — secondary but still-interactive elements (default state of buttons/icons, labels)
+- `gray-500` — de-emphasized hints, still legible
+- `gray-600` — the floor. Never go darker (`gray-700`+) for anything a user needs to read or recognize as interactive — it disappears against the dark surfaces.
+
+**Don't stack a low opacity on top of an already-dim color for disabled states** (e.g. `text-gray-400 disabled:opacity-30`) — the two compound into something close to invisible. Step to a still-legible shade instead (`disabled:text-gray-600`, no opacity multiplier) so a disabled control reads as *disabled*, not *missing*.
+
+A new interactive control (toolbar button, icon action) needs enough visual weight to be found, not just enough contrast to pass a checker: its own row or a bordered/`bg-surface-2`+ container with a visible `hover:bg-surface-3` state, sized and labelled like the buttons already in that view — not a bare low-contrast icon dropped into a dense header. This came up once already (undo/redo buttons shipped too small and too dark to notice) — check new controls against this before calling them done, not after a report.
+
 ## Settings Page
 
 Single full-page view (`app/src/components/settings/SettingsPage.jsx`) — left nav + right panel. The left nav has three groups:
 
 **Board** (per-board):
-- **Board Context** — lists this board's instruction files; create / archive / delete, with auto-save on a 1.5s debounce. `client.md` and `project.md` are hidden on personal boards (no `client_id`).
+- **Board Context** — lists this board's instruction files; create / archive / delete. `client.md` and `project.md` are hidden on personal boards (no `client_id`).
 - **Connections** — board ↔ client folder/repo link (client boards only).
 
-**Subscription** (superadmin only):
-- **Overview** — workspace name + subscription ID.
-- **Clients** — manage client entities.
-- **Workspace Context** — subscription-level instruction files shared by all boards (same editor as Board Context).
-- **Team**, **Boards**, **Members** (placeholder), **Superadmins**.
+**Subscription** (superadmin only), itself split into sub-groups:
+- **Settings** — workspace name + the auto-save preference (below). **Benchmark Tasks** sits alongside it.
+- **Lists** — **Clients**, **Team**, **Boards**, **Members** (placeholder).
+- **Context** — **Workspace Context** (genuine workspace-wide rules; creatable) and **Capability Behavior** (the fixed, per-capability `runners[].personality_file` set — protected, editable, never creatable/deletable here). Distinguished server-side by `kind` (`workspace_rules` / `capability_behavior` / `board_rules`), not by filename-matching in the UI.
 
 **System**:
-- **System Rules** — edits the governance docs surfaced from `agent.config.json`'s `ai_context` groups (component: `AiContextPanel`); edits are versioned server-side.
+- **System Rules** — edits the governance docs surfaced from `agent.config.json`'s `ai_context` groups (component: `AiContextPanel`); always manual-save with a confirm dialog, and versioned server-side. Never had auto-save to begin with.
 
-The right-panel **instruction-file editor** is shared by Board Context and Workspace Context: auto-saves (1.5s debounce), archived files are read-only, and a delete that would orphan an agent reference returns `409` → the UI nudges toward archive. An `InfoModal` gives a per-section "what is this?" explainer.
+The right-panel **instruction-file editor** is shared by Board Context, Workspace Context, and Capability Behavior. Auto-save (1.5s debounce) applies to Board Context and Workspace Context only, gated by the "Auto-save context files" toggle in Settings (`uiSlice.autoSaveContextFiles`, localStorage-backed, default on). Capability Behavior never auto-saves regardless of that toggle — it drives real agent behaviour, so a save is always a deliberate click. A dedicated toolbar row above the textarea holds Undo/Redo (burst-coalesced history, not per-keystroke — see `handleContentChange` in `SettingsPage.jsx`) and is the intended slot for future editor actions (format, AI validation, …). Archived files are read-only, and a delete that would orphan an agent reference returns `409` → the UI nudges toward archive. An `InfoModal` gives a per-section "what is this?" explainer.
 
 ### Connections panel (`ConnectionsPanel`)
 Defined inline in `SettingsPage.jsx`. Links a board to a client folder.
