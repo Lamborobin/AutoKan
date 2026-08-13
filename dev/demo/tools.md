@@ -4,17 +4,23 @@ A catalog of proof-of-concept agent tools built for testing, kept here for refer
 
 ---
 
-## notify_all — Planner capability tool
+## Action hooks — generic, any capability
+
+`invoke_action_hook` is a generic tool available to every capability's tool set, backed by a small developer-curated registry (`ACTION_HOOKS` in `server/src/services/actionHooks.js`). Nothing is invokable unless it has an entry there — that registry is the actual safety boundary, since there's deliberately no per-capability or per-install permission gating on top of it yet.
+
+**Convention for referencing an action in prose:** wrap the bare name in underscores, e.g. `_notify_all_`, in System Rules or any capability behavior file. The model passes the bare name (no underscores) as the `action` argument when it calls `invoke_action_hook`.
+
+### notify_all
 
 **What it does:** sends an in-app notification to every user in the app, via the existing notification pipeline.
 
-**Why it exists:** proof-of-concept for a capability behavior file instructing an agent to fire a real action mid-task — not just ask a question or approve.
+**Why it exists:** the first entry in the action-hooks registry — proof-of-concept for both the mechanism itself and the underscore-naming convention, evolved from an earlier Planner-only tool of the same name.
 
-**Where the trigger lives:** the Planner's capability behavior file, under "Notification Test — Broadcast Tool." Fires once per task, on first contact, in the same turn as the Planner's first question or approval.
+**Where the trigger lives:** System Rules, worded capability-neutral ("the first time you begin working on a task — no prior actions taken yet") so it's not tied to any one capability's interaction shape. Deliberately *not* in the Planner's capability behavior file — an earlier version lived there, which only proved the Planner could call it, not that the mechanism was actually capability-agnostic.
 
-**How to test it:** create (or benchmark-run) a task assigned to a Planner-capable agent, then check the notifications table / bell icon for a "New task: <title>" entry. Benchmark scoring also surfaces this automatically — any `note`-action task log shows up as "Also fired" under a benchmark run's Technical Check.
+**How to test it:** create (or benchmark-run) a task assigned to any capability, then check the notifications table / bell icon for a "New task: <title>" entry. Benchmark scoring also surfaces this automatically — any `note`-action task log shows up as "Also fired" under a benchmark run's Technical Check.
 
-**Tested:** confirmed working via a benchmark run, 2026-08-13. A duplicate copy was briefly placed in the System Rules layer to test whether a generic (capability-agnostic) trigger location worked the same way — it did, for the Planner specifically, since `notify_all` is still only wired into the Planner's tool set. Removed from System Rules afterward to avoid the layer confusion that not being wired to any specific capability's tool set would eventually cause for other capabilities reading the same instruction.
+**Tested:** confirmed working as a Planner-only tool via a benchmark run, 2026-08-13. That version only fired through the Planner's own tool set, which is what proved the mechanism needed to be capability-agnostic rather than staying Planner-only — leading to `invoke_action_hook`/`ACTION_HOOKS`, and then to moving the trigger itself out of the Planner's file into System Rules so it's no longer coupled to one capability at all. Not yet re-verified from System Rules with the new wording — worth a fresh benchmark run.
 
 ---
 

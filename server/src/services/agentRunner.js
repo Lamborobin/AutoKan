@@ -8,9 +8,63 @@ const util = require('util');
 const { getDb } = require('../db');
 const { broadcast } = require('../sse');
 const { resolveInstructionPath } = require('../utils/instructions');
-const { notifyHumanActionMembers, notifyAllUsers } = require('./notificationsService');
+const { notifyHumanActionMembers } = require('./notificationsService');
 const { writeFileSafe } = require('../utils/writeGuard');
+const { ACTION_HOOKS } = require('./actionHooks');
 const runnersRegistry = require('../seed/runners.json');
+
+// Generic tool for invoking a registered action hook — added to every
+// capability's tool set below. What it may actually DO is entirely code-curated
+// (ACTION_HOOKS, in actionHooks.js); WHEN it does it is governed by whatever
+// prompt layer references the action by name, same trust model as any other
+// tool (ask_question, approve_task, ...) — no separate permission check here.
+const ACTION_HOOK_TOOL = {
+  name: 'invoke_action_hook',
+  description: 'Invoke a named action referenced in your instructions (System Rules or your own capability behavior file). Action names appear in that prose wrapped in underscores, e.g. "_notify_all_" — pass the bare name here, without the underscores. Only call this when your instructions explicitly reference an action by name; never invent an action name.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      action: {
+        type: 'string',
+        enum: Object.keys(ACTION_HOOKS),
+        description: 'The bare action name, e.g. "notify_all" (no underscores).',
+      },
+      params: {
+        type: 'object',
+        description: 'Arguments for the action — the exact fields depend on which action this is; your instructions should specify them.',
+      },
+    },
+    required: ['action'],
+  },
+};
+
+// Shared by all three tool-dispatch loops below — looks up the action in the
+// registry and runs it, logging a 'note' entry either way (so benchmark
+// scoring picks it up automatically, same as any other side-effect tool).
+// Returns a result object for the multi-turn loops (implement/test), which
+// need one per tool_use for the API's tool_result; the single-turn Planner
+// handler ignores the return value, same as it does for its other tools.
+async function runActionHook(action, params, task, agent) {
+  const db = getDb();
+  const hook = ACTION_HOOKS[action];
+  if (!hook) {
+    const message = `Tried to invoke "${action}" — not a registered action hook.`;
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), task.id, agent.id, 'note', message);
+    return { error: message };
+  }
+  try {
+    const message = await hook.run(params, { taskId: task.id });
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), task.id, agent.id, 'note', message || `Invoked "${action}"`);
+    return { success: true, message };
+  } catch (err) {
+    const message = `Action "${action}" failed: ${err.message}`;
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), task.id, agent.id, 'note', message);
+    return { error: message };
+  }
+}
 
 // ── Runner registry helpers ──────────────────────────────────────────────────
 // Single source of truth for (capability, column) → handler mapping lives in
@@ -340,24 +394,7 @@ If nothing genuinely reusable was learned in this conversation, omit this field 
       required: ['message', 'reason']
     }
   },
-  {
-    name: 'notify_all',
-    description: 'Send an in-app notification to every user in the app. Demo/test tool — only call it when your instructions explicitly tell you to.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        title: {
-          type: 'string',
-          description: 'Short notification title.'
-        },
-        body: {
-          type: 'string',
-          description: '(Optional) short sentence detail shown under the title.'
-        }
-      },
-      required: ['title']
-    }
-  }
+  ACTION_HOOK_TOOL,
 ];
 
 // Reads an instruction file. Returns '' if missing — instruction files are ADDITIVE
@@ -689,12 +726,10 @@ async function runClarifyAndApprove(task, agent, runner) {
       console.log(`[AgentRunner][${runner.id}][${taskId}] suggested abandon (out of scope)`);
       broadcastTask(db, taskId);
 
-    } else if (block.name === 'notify_all') {
-      const { title, body = '' } = block.input;
-      notifyAllUsers(title, body || null, `?task=${taskId}`);
-      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Broadcast notification sent: "${title}"`);
-      console.log(`[AgentRunner][${runner.id}][${taskId}] sent broadcast notification`);
+    } else if (block.name === 'invoke_action_hook') {
+      const { action, params } = block.input;
+      await runActionHook(action, params, task, agent);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] invoked action hook "${action}"`);
     }
   }
 
@@ -788,7 +823,8 @@ const IMPLEMENTATION_TOOLS = [
       },
       required: ['reason']
     }
-  }
+  },
+  ACTION_HOOK_TOOL,
 ];
 
 const BASH_FORBIDDEN = [
@@ -964,6 +1000,10 @@ async function runImplementInWorktree(task, agent, runner) {
         completed = true; // stop the loop; human must resume
         if (worktreePath) removeWorktree(worktreePath);
         result = { success: true };
+
+      } else if (block.name === 'invoke_action_hook') {
+        const { action, params } = block.input;
+        result = await runActionHook(action, params, task, agent);
       }
 
       toolResults.push({
@@ -1055,7 +1095,8 @@ const TESTING_TOOLS = [
       },
       required: ['reason']
     }
-  }
+  },
+  ACTION_HOOK_TOOL,
 ];
 
 
@@ -1186,6 +1227,10 @@ async function runTestWithRetry(task, agent, runner) {
         broadcastTask(db, taskId);
         completed = true;
         result = { success: true };
+
+      } else if (block.name === 'invoke_action_hook') {
+        const { action, params } = block.input;
+        result = await runActionHook(action, params, task, agent);
       }
 
       toolResults.push({
