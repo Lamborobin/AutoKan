@@ -868,7 +868,7 @@ export default function SettingsPage() {
         <div className="px-2 pt-3 pb-3 shrink-0 border-t border-border">
           <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest px-2.5 mb-1">System</p>
           <div className="space-y-0.5">
-            {navBtn('ai_context', 'System Rules', BookOpen, null, 'ai_context')}
+            {navBtn('ai_context', 'System Behavior', BookOpen, null, 'ai_context')}
           </div>
         </div>
 
@@ -965,7 +965,7 @@ export default function SettingsPage() {
                       Applies to <b>Board Context</b> and <b>Workspace Context</b> — automatically saves shortly after you stop typing. <br /><br />
                       If turned off, edits only save when you click <b>Save</b>. 
                       <br /><br />
-                      <b>Capability Behavior</b> and <b>System Rules</b> files must never auto-save because of capability and action constraints.
+                      <b>Capability Behavior</b> and <b>System Behavior</b> files must never auto-save because of capability and action constraints.
                     </p>
                   </div>
                   <button
@@ -1249,7 +1249,7 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* System Rules panel */}
+        {/* System Behavior panel */}
         {section === 'ai_context' && <AiContextPanel />}
 
         {/* Benchmark Tasks panels */}
@@ -1385,7 +1385,7 @@ export default function SettingsPage() {
         </>)}
       </div>
 
-      {/* Section info modal (Board Context / Workspace Context / System Rules explainer) */}
+      {/* Section info modal (Board Context / Workspace Context / System Behavior explainer) */}
       <InfoModal openKey={openInfoKey} onClose={() => setOpenInfoKey(null)} />
 
       {/* ── Action errors ───────────────────────────────────────────────── */}

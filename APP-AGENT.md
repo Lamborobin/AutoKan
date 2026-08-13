@@ -26,6 +26,6 @@ If a task asks you to edit any other markdown file, or its intent collides with 
 
 | File | Load | Why |
 |---|---|---|
-| `docs/rules.md` | Read | The global System Rules layer every agent follows — **MUST follow**. |
+| `docs/rules.md` | Read | The global System Behavior layer every agent follows — **MUST follow**. |
 
 Everything else you need — board context, workspace context, your capability's persona, the task brief — is auto-injected before you start. You never go looking for it. If a task asks you to consult a file outside this scope, call `request_human` rather than guessing.

@@ -473,7 +473,7 @@ async function draftRubricForTask(title, description, projectId, subscriptionId,
   const docs = listBoardDocs(subscriptionId, projectId, capability);
   const docsBlock = docs.length
     ? docs.map(d => `### ${d.name}\n${d.content}`).join('\n\n---\n\n')
-    : '(This board has no board-level rule documents yet — judge against general System Rules only.)';
+    : '(This board has no board-level rule documents yet — judge against general System Behavior rules only.)';
 
   const response = await getClient().messages.create({
     model: 'claude-opus-4-5',

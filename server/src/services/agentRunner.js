@@ -20,7 +20,7 @@ const runnersRegistry = require('../seed/runners.json');
 // tool (ask_question, approve_task, ...) — no separate permission check here.
 const ACTION_HOOK_TOOL = {
   name: 'invoke_action_hook',
-  description: 'Invoke a named action referenced in your instructions (System Rules or your own capability behavior file). Action names appear in that prose wrapped in underscores, e.g. "_notify_all_" — pass the bare name here, without the underscores. Only call this when your instructions explicitly reference an action by name; never invent an action name.',
+  description: 'Invoke a named action referenced in your instructions (System Behavior or your own capability behavior file). Action names appear in that prose wrapped in underscores, e.g. "_notify_all_" — pass the bare name here, without the underscores. Only call this when your instructions explicitly reference an action by name; never invent an action name.',
   input_schema: {
     type: 'object',
     properties: {

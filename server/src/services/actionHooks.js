@@ -5,7 +5,7 @@
 // registered action via the invoke_action_hook tool (see agentRunner.js);
 // per-capability/per-action permission gating is deliberately not built yet.
 //
-// Referenced in System Rules (or any capability behavior file) by wrapping the
+// Referenced in System Behavior (or any capability behavior file) by wrapping the
 // bare name in underscores, e.g. `_notify_all_` — a plain-text convention so an
 // agent reading free-form rules text can visually tell "this word names a
 // callable action" apart from ordinary prose. The model passes the BARE name

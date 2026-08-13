@@ -23,7 +23,7 @@ AutoKan/
 │           └── archived/
 ├── server/
 │   └── src/
-│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (System Rules panel groups)
+│       ├── config/          # App configuration — constants.js (stable IDs), agent.config.json (System Behavior panel groups)
 │       ├── db/              # Schema only — CREATE TABLE definitions, calls seed/ on init
 │       ├── middleware/      # JWT verification, isSuperAdmin, agent header passthrough
 │       ├── routes/          # One file per resource group (tasks, agents, projects, members…)

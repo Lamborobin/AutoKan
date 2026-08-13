@@ -24,8 +24,8 @@ const LAYERS = [
   },
   {
     key: 'ai_context',
-    label: 'System Rules',
-    sub: 'Global rules with technical depth — the only layer that can invoke code-exposed actions, not just state rules. Edited by superadmins.',
+    label: 'System Behavior',
+    sub: 'Global rules with technical depth — can invoke code-exposed actions, not just state rules. Shares that ability with Capability Behavior now, not exclusive to it. Edited by superadmins.',
     Icon: BookOpen,
   },
   {
@@ -161,7 +161,7 @@ export const CONTEXT_INFO = {
   },
 
   ai_context: {
-    title: 'System Rules',
+    title: 'System Behavior',
     intro: 'Global, editable rules every agent follows across every board and capability.',
     highlight: 'ai_context',
     body: (
@@ -169,7 +169,7 @@ export const CONTEXT_INFO = {
         <p>
           The top <span className="text-gray-300 font-medium">editable</span> layer — global rules for the entire app cross any workspace and board.  <br />
           Can only be edited by superadmins and developers. <br />
-          It sits above 
+          It sits above
           Workspace and Board rules and any personality, but below the immutable core: it can add and tighten
           behaviour, never change the flow or contradict the core.
         </p>
@@ -178,7 +178,7 @@ export const CONTEXT_INFO = {
           <li><span className="text-gray-300 font-medium">Behavioural</span> — "Always reply in Spanish." · "Never reveal business secrets." · "Retry up to 3 times before escalating to a human."</li>
           <li><span className="text-gray-300 font-medium">Conditional / business logic</span> — "When a board contains sensitive information, apply the appropriate security measures and email the result to security@company.com."</li>
           <li><span className="text-gray-300 font-medium">Informational</span> — plain context the agent should know, not a directive: "Support tickets route through Zendesk, not email."</li>
-          <li><span className="text-gray-300 font-medium">Action hook</span> — unique to this layer: if this install exposes an email action, "When an order exceeds 100 units, send a notice to the configured email with the amount."</li>
+          <li><span className="text-gray-300 font-medium">Action hook</span> — if this install exposes an action (e.g. a notification), reference it here to make it fire for every capability at once; a specific capability's own behavior file can invoke the same action too, just scoped to that capability.</li>
         </ul>
         <p>
           Keep each entry a single, checkable statement so an agent can follow it without interpretation. It

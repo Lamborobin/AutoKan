@@ -34,9 +34,9 @@ Auth: `Authorization: Bearer <jwt>` for humans · `X-Agent-Id: <agent_id>` for a
 
 ---
 
-## System Rules Docs (superadmin)
+## System Behavior Docs (superadmin)
 
-The `/api/docs` group serves the editable doc files driven by `agent.config.json`'s `ai_context` groups (consumed by the Settings → System Rules panel). Edit history is stored in `docs/.versions/` and is wiped by `npm run db:reset`.
+The `/api/docs` group serves the editable doc files driven by `agent.config.json`'s `ai_context` groups (consumed by the Settings → System Behavior panel). Edit history is stored in `docs/.versions/` and is wiped by `npm run db:reset`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

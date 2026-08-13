@@ -55,7 +55,7 @@ The three default agents (PM, Developer, Tester) are seeded from a single source
 ```
 AutoKan/
 ├── client/          # Live client repos — one subfolder per connected board
-├── docs/            # System Rules — the one file the AI Context panel exposes to admins
+├── docs/            # System Behavior — the one file the AI Context panel exposes to admins
 ├── dev/             # Technical reference for contributors — architecture, API, decisions
 ├── instructions/    # Instruction files scoped by subscription and board
 ├── server/          # Node.js + Express + SQLite API (port 3001)

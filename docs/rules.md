@@ -1,8 +1,8 @@
 # Rules
 
-The **System Rules** layer — global, editable rules that every agent on every board follows. Superadmins and developers edit this from Settings → System Rules; changes are versioned and reversible.
+The **System Behavior** layer — global, editable rules that every agent on every board follows. Superadmins and developers edit this from Settings → System Behavior; changes are versioned and reversible.
 
-This layer sits on top of the immutable core — the code mechanics and runner prompts layers, which never change. It may **add or tighten** behaviour and, uniquely, **invoke code-exposed actions/hooks** — but it can never change the flow itself, and it must never contradict the core or loosen a rule the core sets.
+This layer sits on top of the immutable core — the code mechanics and runner prompts layers, which never change. It may **add or tighten** behaviour and **invoke code-exposed actions/hooks** — a capability's own behavior file can do the latter too, scoped to that one capability — but it can never change the flow itself, and it must never contradict the core or loosen a rule the core sets.
 
 Keep each rule a single, checkable statement so an agent can follow it without interpretation.
 

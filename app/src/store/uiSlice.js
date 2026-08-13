@@ -20,7 +20,7 @@ export const createUiSlice = (set) => ({
   theme: localStorage.getItem('theme') || 'dark',
   defaultAgentModel: normalizeAgentModel(localStorage.getItem(DEFAULT_AGENT_MODEL_STORAGE_KEY)),
   // Context files (board/workspace) auto-save by default, matching prior behaviour.
-  // Capability Behavior and System Rules files never auto-save regardless of this —
+  // Capability Behavior and System Behavior files never auto-save regardless of this —
   // gated at the call site, not here, since it's a fixed rule, not a preference.
   autoSaveContextFiles: localStorage.getItem(AUTOSAVE_CONTEXT_STORAGE_KEY) !== 'false',
   isDraggingAgent: false,

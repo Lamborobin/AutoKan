@@ -1,6 +1,6 @@
 # Development Conventions
 
-Constraints for anyone (human or AI dev-assistant) changing AutoKan's own code. These are platform-development rules — they are **not** agent behaviour rules (those live in the editable System Rules layer).
+Constraints for anyone (human or AI dev-assistant) changing AutoKan's own code. These are platform-development rules — they are **not** agent behaviour rules (those live in the editable System Behavior layer).
 
 **Code & architecture**
 1. Read the full file before editing — never edit by filename alone.
