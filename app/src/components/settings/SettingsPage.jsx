@@ -1538,7 +1538,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
       )}
 
       {/* Mode tabs — disabled when connected */}
-      <div className={`flex gap-1 p-1 bg-surface-2 rounded-xl w-fit ${isConnected ? 'opacity-40 pointer-events-none' : ''}`}>
+      <div className={`flex gap-1 p-1 bg-surface-2 rounded-xl w-fit ${isConnected ? 'opacity-60 pointer-events-none' : ''}`}>
         {[
           { id: 'github', label: 'Clone from GitHub', icon: Github },
           { id: 'local',  label: 'Link local folder', icon: FolderOpen },
@@ -1617,7 +1617,7 @@ function ConnectionsPanel({ project, onUpdated, updateProject, refreshKey = 0 })
           )}
 
           {/* Folder list — grayed out when connected and not switching */}
-          <div className={isConnected && !switchingFolder ? 'opacity-40 pointer-events-none' : ''}>
+          <div className={isConnected && !switchingFolder ? 'opacity-60 pointer-events-none' : ''}>
             {loadingFolders ? (
               <div className="flex items-center gap-2 text-gray-500 text-sm py-2">
                 <Loader2 size={13} className="animate-spin" /> Loading…

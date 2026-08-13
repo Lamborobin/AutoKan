@@ -64,4 +64,16 @@ async function notifyHumanActionMembers(db, taskId, reason) {
   }
 }
 
-module.exports = { createNotification, notifyHumanActionMembers };
+/**
+ * Notify every user in the app, regardless of subscription/board membership.
+ * POC broadcast tool for agent-triggered notifications — no tenant scoping.
+ */
+function notifyAllUsers(title, body = null, link = null) {
+  const db = getDb();
+  const users = db.prepare('SELECT id FROM users').all();
+  for (const user of users) {
+    createNotification(user.id, 'agent_broadcast', title, body, link);
+  }
+}
+
+module.exports = { createNotification, notifyHumanActionMembers, notifyAllUsers };

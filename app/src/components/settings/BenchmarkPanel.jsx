@@ -161,6 +161,21 @@ function DeterministicChecks({ result }) {
           ))}
         </div>
       )}
+      {/* Anything the agent did beyond the outcome tool above — e.g. a notification fired
+          from a markdown-configured instruction. Not pass/fail: just visibility into
+          whether admin-added behaviour actually ran, shown regardless of collapse state
+          since it's easy to miss otherwise. */}
+      {result.side_effects?.length > 0 && (
+        <div className="mt-1.5 space-y-1 pl-[15px]">
+          <p className="text-xs text-gray-600 uppercase tracking-wide">Also fired</p>
+          {result.side_effects.map((msg, i) => (
+            <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
+              <Sparkles size={11} className="text-accent mt-0.5 shrink-0" />
+              <span>{msg}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

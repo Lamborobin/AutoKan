@@ -346,7 +346,7 @@ export default function MembersModal({ onClose }) {
                                 ))}
                                 <div className="border-t border-border my-1 opacity-40" />
                                 {columnRoles.filter(r => r.id !== 'role_access_any').map(role => (
-                                  <label key={role.id} className={`flex items-center gap-2 cursor-pointer group/r ${allColumnsChecked(editRoleIds) ? 'opacity-40 pointer-events-none' : ''}`}>
+                                  <label key={role.id} className={`flex items-center gap-2 cursor-pointer group/r ${allColumnsChecked(editRoleIds) ? 'opacity-60 pointer-events-none' : ''}`}>
                                     <div
                                       onClick={() => toggleRole(member.id, role.id)}
                                       className={`w-3.5 h-3.5 rounded-md border flex items-center justify-center transition-colors shrink-0 ${

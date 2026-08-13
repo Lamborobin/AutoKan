@@ -69,17 +69,35 @@ function snapshotContextVersion(subscriptionId, projectId) {
 }
 
 // ── Deterministic scoring ──────────────────────────────────────────────────
-// Which of the 4 real planner tools fired. suggest_split/suggest_abandon log
+// Which OUTCOME tool fired — the one that decides how the task was left
+// (questioning / approved / split / abandoned). suggest_split/suggest_abandon log
 // the same 'pm_question' action as a plain ask_question — they're only
-// distinguishable via task.metadata (split_proposal / abandon_proposal),
-// mirroring agentRunner.js's own handling.
+// distinguishable via task.metadata (split_proposal / abandon_proposal), mirroring
+// agentRunner.js's own handling. A new outcome tool (one that changes task state in
+// a new way, not just a side effect) needs a row here — see dev/agents.md's
+// "Adding a New Agent Tool" checklist.
+const OUTCOME_TOOL_SIGNALS = [
+  { tool: 'approve_task', test: (task) => task.pm_approval_status === 'approved' },
+  { tool: 'suggest_split', test: (task, metadata) => !!metadata.split_proposal },
+  { tool: 'suggest_abandon', test: (task, metadata) => !!metadata.abandon_proposal },
+  { tool: 'ask_question', test: (task, metadata, logs) => logs.some(l => l.action === 'pm_question') },
+];
+
 function firedTool(task, logs) {
   const metadata = JSON.parse(task.metadata || '{}');
-  if (task.pm_approval_status === 'approved') return 'approve_task';
-  if (metadata.split_proposal) return 'suggest_split';
-  if (metadata.abandon_proposal) return 'suggest_abandon';
-  if (logs.some(l => l.action === 'pm_question')) return 'ask_question';
-  return null;
+  const signal = OUTCOME_TOOL_SIGNALS.find(s => s.test(task, metadata, logs));
+  return signal ? signal.tool : null;
+}
+
+// Any OTHER tool the agent called — one that doesn't determine the task's outcome,
+// just does something on the side (e.g. notify_all). These never touch task state, so
+// firedTool() above can't see them. Every such tool logs a plain 'note' entry instead
+// (the same convention runPlaceholder already used) — reading that convention back
+// here means a brand-new side-effect tool needs ZERO changes in this file to become
+// visible to the judge and the benchmark UI. Only add real detection logic (a rubric
+// field, a pass/fail check) if the tool's behaviour needs to be enforced, not just seen.
+function sideEffectsFired(logs) {
+  return logs.filter(l => l.action === 'note').map(l => l.message);
 }
 
 // Tools that never populate pm_checklist (see agentRunner.js's suggest_split/suggest_abandon
@@ -137,7 +155,12 @@ function scoreDeterministic(task, logs, rubric = {}) {
     });
   }
 
-  return { passed: checks.length > 0 && checks.every(c => c.passed), tool_fired: tool, checks };
+  return {
+    passed: checks.length > 0 && checks.every(c => c.passed),
+    tool_fired: tool,
+    checks,
+    side_effects: sideEffectsFired(logs),
+  };
 }
 
 // ── Run creation & dispatch ─────────────────────────────────────────────────
@@ -194,11 +217,13 @@ async function createRunAndDispatch(caseRow, { projectId, userId } = {}) {
 // whether the shape of the output looked roughly right. This is why judging runs
 // automatically on completion instead of staying a manual "maybe later" action.
 async function callJudge(task, logs, judgeRubric) {
+  const sideEffects = sideEffectsFired(logs);
   const outputSummary = [
     `Tool fired: ${firedTool(task, logs) || '(none)'}`,
     `Question/message: ${task.pm_pending_question || '(none)'}`,
     `Review comment: ${task.pm_review_comment || '(none)'}`,
     `Checklist: ${task.pm_checklist || '(none)'}`,
+    `Other actions taken: ${sideEffects.length ? sideEffects.join('; ') : '(none)'}`,
   ].join('\n');
 
   const response = await getClient().messages.create({

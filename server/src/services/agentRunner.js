@@ -8,7 +8,7 @@ const util = require('util');
 const { getDb } = require('../db');
 const { broadcast } = require('../sse');
 const { resolveInstructionPath } = require('../utils/instructions');
-const { notifyHumanActionMembers } = require('./notificationsService');
+const { notifyHumanActionMembers, notifyAllUsers } = require('./notificationsService');
 const { writeFileSafe } = require('../utils/writeGuard');
 const runnersRegistry = require('../seed/runners.json');
 
@@ -338,6 +338,24 @@ If nothing genuinely reusable was learned in this conversation, omit this field 
         }
       },
       required: ['message', 'reason']
+    }
+  },
+  {
+    name: 'notify_all',
+    description: 'Send an in-app notification to every user in the app. Demo/test tool — only call it when your instructions explicitly tell you to.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: {
+          type: 'string',
+          description: 'Short notification title.'
+        },
+        body: {
+          type: 'string',
+          description: '(Optional) short sentence detail shown under the title.'
+        }
+      },
+      required: ['title']
     }
   }
 ];
@@ -670,6 +688,13 @@ async function runClarifyAndApprove(task, agent, runner) {
         .run(uuidv4(), taskId, agent.id, 'pm_question', message);
       console.log(`[AgentRunner][${runner.id}][${taskId}] suggested abandon (out of scope)`);
       broadcastTask(db, taskId);
+
+    } else if (block.name === 'notify_all') {
+      const { title, body = '' } = block.input;
+      notifyAllUsers(title, body || null, `?task=${taskId}`);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'note', `Broadcast notification sent: "${title}"`);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] sent broadcast notification`);
     }
   }
 

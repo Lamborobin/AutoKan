@@ -4,20 +4,66 @@ Read this file when working on: agent logic, behavior prompts, the instruction f
 
 ---
 
-## Context layer model
+## Layer Stack
 
 Every agent's behaviour is assembled from a fixed stack of layers — most general at the top, most specific at the bottom. **The stack and its order are wired in code and never change.** Each layer is *additive*: it may tighten or extend the layers above it, but **a lower layer can never loosen, contradict, or reorder a higher one.** That is the waterfall invariant — the property to validate whenever context files change. Only a code change can alter the flow itself.
 
+This is one stack, not two — it merges what used to be a separate "authority" table and a separate "runtime assembly" table. Keeping them apart caused real confusion (two different things both called "layer 2"), so each row here states both: who can edit it and what power it has, *and* which file/DB field it actually lives in.
+
+A layer is only listed here if it's genuinely a distinct rung — content that can *add* something the layer above didn't have. A fallback used when a layer is empty isn't a rung of its own; it's just that layer resolving from a second source, folded into the same row:
+- If **capability behavior** and **agent personality** are both empty, `bakedBaseline()` (in code) supplies a final safety string so the model always has *something* identifying its capability + column. That's a property of layer 1 (code mechanics decides what happens when the stack is empty), not a separate layer.
+- **Agent personality** itself is one resolution slot with two possible sources, not two layers: `agent.system_prompt` always wins when set; otherwise it inherits live from its template (`agent_templates.template_system_prompt`). Editing the template only matters for agents that haven't set their own value — same layer, same authority, same effect on the prompt either way.
+
 | # | Layer | Editable by | What it may do |
 |---|---|---|---|
-| 1 | **Code mechanics** | Developer (code only) | The flow itself — which tool fires, which column a task moves to, what an agent may write, and the order of these layers. Immutable from any prompt. |
-| 2 | **Runner prompts** | Developer (code only) | Per-capability methodology baked into the runner. System-owned. |
-| 3 | **System Rules** | Superadmin / dev | Global, cross-subscription rules with technical depth. The **only** layer that may invoke code-exposed actions/hooks (e.g. "at 100 units → call the email endpoint") on top of plain rules ("reply in Spanish", "never reveal business secrets"). Cannot change the flow. |
-| 4 | **Workspace rules** | Admin | Declarative boundaries shared across a workspace's boards — no new actions ("don't generate reports about X — GDPR"). |
-| 5 | **Board rules** | Board owner / admin | The same, scoped to one board ("don't send the PR-ready email here — it spams person X"). |
-| 6 | **Personality** (template / agent) | UI editor | Cosmetic traits only — tone, sign-off, phrasing. Effectively no effect on logic. |
+| 1 | **Code mechanics** | Developer (code only) | The flow itself — which tool fires, which column a task moves to, what an agent may write, the order of every layer below, and the fallback text (`bakedBaseline()`) used if every layer below is empty. Immutable from any prompt; not itself injected as content. |
+| 2 | **Runner mechanics prompts** (`server/src/services/runner-prompts/*.md`, loaded via `loadRunnerPrompt()`) | Developer (code only) | The "## Instructions" block sent alongside every task brief — git workflow, exit semantics, tool usage. System-owned; deliberately outside `instructions/` so it can never become user-editable. |
+| 3 | **System Behavior** (`docs/rules.md`, loaded like any capability doc via `context_docs` in `runners.json`; editable through the Settings panel still labelled "System Rules" today — UI rename to match this layer's name is planned, not yet applied; configured in `agent.config.json`) | Superadmin / dev | Global, cross-subscription rules with technical depth. Meant to invoke code-exposed actions/hooks that are **capability-agnostic** — applying across whichever capabilities are relevant (e.g. "at 100 units → call the email endpoint") — on top of plain rules ("reply in Spanish", "never reveal business secrets"). **Not actually wired up yet** — there's no registry connecting this layer's text to a real function call, so this is documented capability without a live mechanism today. Cannot change the flow. |
+| 4 | **Capability Behavior** (`runners[].personality_file`, e.g. `instructions/{sub}/dev-implement.md` — code field name unchanged) | Operator | Methodology and tone for *any* agent of this capability — how it approaches its work. Real behavioural weight, not cosmetic. Can invoke actions too, but **capability-scoped**: only tools already wired into that capability's own tool set (e.g. the Planner's `notify_all`) — not shared with other capabilities the way layer 3's actions are meant to be. Still cannot change the flow itself (which tool fires, which column, what may be written). |
+| 5 | **Workspace rules** (every top-level `.md` in `instructions/{subscriptionId}/`, excluding capability behavior files) | Admin / operator | Declarative boundaries shared across a workspace's boards — no new actions ("don't generate reports about X — GDPR"). |
+| 6 | **Board rules** (`instructions/{sub}/{projId}/*.md`, e.g. `client.md`, `project.md`) | Board owner / admin | The same, scoped to one board ("don't send the PR-ready email here — it spams person X"). |
+| 7 | **Agent personality** (`agents.system_prompt`, falling back to `agent_templates.template_system_prompt` if unset) | UI editor | Cosmetic only (tone, sign-off, phrasing). Supports `[STYLE]` + `[CONSTRAINTS]`. |
 
-The gradient is **actions → constraints → cosmetics**: layer 3 can add new actions (within code-exposed extension points); layers 4–5 can only add constraints; layer 6 is cosmetic. These layers are the **extension surface** — a fork or tenant customises behaviour through them without touching core code.
+The gradient is **actions → constraints → methodology → cosmetics**, though action-invoking power isn't confined to a single point on it the way constraints and cosmetics are: layer 3's actions are meant to be capability-agnostic (aspirational — no live mechanism yet); layer 4's are capability-scoped, wired through that capability's own tool set (real, built). Layers 5–6 add methodology or constraints but never new actions; layer 7 is cosmetic only, with effectively no effect on logic. Layers 3–7 are the **extension surface** — a fork or tenant customises behaviour through them without touching core code (layers 1–2).
+
+### Worked example — a single Coder agent
+
+| Layer | Example content |
+|---|---|
+| 4 — Capability Behavior (`dev-implement.md`) | "You're a professional coder. Read before you change. Smallest change that satisfies the spec. Don't fake completion." |
+| 5 — Workspace (`coding-standards.md`) | "We use Clean Architecture. Never bypass the service layer." |
+| 6 — Board (`project.md` for a client board) | "When touching the cart, always ask for human verification before merging." |
+| 7 — Agent personality | This agent ("Camila") has her own value set, which wins outright: "Your name is Camila. You write commit messages in Spanish." Had she left it blank, she'd inherit her template's live value instead: "[STYLE] direct, no hedging. [CONSTRAINTS] Never reveal business logic in PR descriptions." |
+
+*(Layers 1–3 are omitted here: layer 1 has no content of its own, the runner mechanics prompt (2) is identical for every Coder regardless of board, and System Behavior (3) is rarely set at all. If layers 4 and 7 were both empty for this agent, layer 1's baked-in baseline would be the only thing identifying its role.)*
+
+These layers, plus the always-loaded files below, are assembled **once** into the agent's starting context when a run begins — layers 4 and 7 form the system prompt; the context files (layers 5 & 6, plus the always-loaded base files) are injected as the agent's initial message. Where each piece lands is just SDK placement — conceptually it is **one bundle**: everything the agent knows for that run. From there the agent works the task within that single session, on that context alone — it does not re-read instruction or doc files mid-run.
+
+None of these layers can change which tool fires, which column a task moves to, or what files the agent can write — those are enforced at the runner/tool layer.
+
+### `[STYLE]` and `[CONSTRAINTS]`
+
+The personality text at layer 7 supports two semantic sections:
+- `[STYLE]` — tone modifier (e.g. warm vs direct). Adjusts how the agent writes.
+- `[CONSTRAINTS]` — hard rules, enforced above everything else (e.g. `Never ask about pricing`).
+
+### What each agent loads as context
+
+Assembled once into the agent's starting context bundle (see the layering note above), all dedup'd:
+
+- **Capability Behavior** — the runner's `personality_file` (e.g. `dev-implement.md`), resolved to the most specific version that exists.
+- **Runner mechanics prompt** — the `server/src/services/runner-prompts/*.md` file matching the current turn (e.g. first-contact vs follow-up for the Planner). Not user-editable — this is Layer 2 above.
+- **Capability docs** — the `docs/` files mapped to the agent's capability, picked up from `context_docs` in `runners.json` (every capability currently maps to `docs/rules.md` — Layer 3, System Behavior, above; the registry is the source of truth for the mapping, not duplicated here).
+- **Workspace files** — every top-level `.md` in `instructions/{sub}/` (excluding capability behavior files, already in the system prompt).
+- **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring.
+- **Always** — the app agent's base instruction file, for every agent; the project's human-facing setup file, additionally, for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
+
+### Path resolution
+
+The `personality_file` is stored as a short reference (e.g. `instructions/dev-implement.md`) without subscription or project IDs. At runtime, `resolveInstructionPath()` expands it to the most specific file that exists on disk:
+
+1. `instructions/{subscriptionId}/{projectId}/X.md` — board-level (most specific, overrides subscription)
+2. `instructions/{subscriptionId}/X.md` — subscription-level (shared, applies to all boards)
 
 ---
 
@@ -73,55 +119,15 @@ When in doubt, escalate. A human review is cheaper than a wrong assumption.
 
 ---
 
-## Personality Layering
+## Adding a New Agent Tool
 
-Every agent's behaviour is shaped by stacked personality layers — each layer is **additive**, **optional**, and **cannot affect runner mechanics**. The runner's flow (which tool fires when, which column the task moves to, what the agent can write) lives in code and is immutable from these layers. If every personality layer is missing, the runner falls back to a baked-in baseline and still functions.
+Every new tool touches up to four places. Steps 1–2 are always required; 3–4 only apply if they fit.
 
-### The layers, ordered from most general to most specific
+1. **Tool schema** — add the tool definition (name, description, `input_schema`) to the relevant tool-set array in `agentRunner.js` (e.g. `CLARIFICATION_TOOLS`). Reuse an existing set; only start a new one for a capability that doesn't have one yet.
+2. **Handler branch** — add an `else if (block.name === '<tool>')` case to that runner's tool-dispatch loop. Log what happened:
+   - If the tool determines how the task was **left** (a new outcome alongside questioning/approved/split/abandoned), also add a row to `OUTCOME_TOOL_SIGNALS` in `benchmarkRunner.js` so blind-tested runs can detect it.
+   - Otherwise (a side effect that doesn't change task state — a notification, an external call), just log a plain `'note'`-action entry. Benchmark scoring already surfaces every `'note'` entry to the AI judge and the Benchmark UI automatically — no further wiring needed there.
+3. **Backing logic** — reuse an existing service where the behaviour already fits its pattern (e.g. a new kind of user-facing alert belongs next to `notifyHumanActionMembers`). Only add a new service file for a genuinely new capability area.
+4. **Capability Behavior file** — tell the agent when and how to call it, in the exact format you want (title/body shape, trigger condition). The tool's JSON schema constrains the *arguments*; it does not tell the model *when* to call it — that only comes from this file's prose.
 
-| # | Layer | Editable by | What it's for |
-|---|---|---|---|
-| 1 | **Baked-in baseline** (in code) | Developer | Final safety net — identifies the agent's capability + column so it always has *something* if every other layer is empty |
-| 2 | **Capability personality file** (`runners[].personality_file` — e.g. `instructions/{sub}/dev-implement.md`) | Operator | General tone + methodology for *any* agent of this capability |
-| 3 | **Subscription-level context files** (in `instructions/{subscriptionId}/`) | Operator | Cross-board standards, coding conventions, things that apply workspace-wide |
-| 4 | **Board-level context files** (`client.md`, `project.md` in `instructions/{sub}/{projId}/`) | Board owner / planning agent | Board-specific domain knowledge, client priorities, board-only rules |
-| 5 | **Template personality** (`agent_templates.template_system_prompt`) | UI editor | Persona shared across all agents created from that template. Fetched live at runtime — editing the template propagates to every agent that hasn't customised — supports `[STYLE]` + `[CONSTRAINTS]` |
-| 6 | **Agent personality** (`agents.system_prompt`) | UI editor of the specific agent | Per-agent override that wins over the template's value. Leave blank to inherit from the template. |
-
-### Worked example — a single Coder agent
-
-| Layer | Example content |
-|---|---|
-| 1 — Baseline | (auto, used only if everything else is empty) "You are an agent operating in AutoKan with capability perm_coding…" |
-| 2 — Capability (`dev-implement.md`) | "You're a professional coder. Read before you change. Smallest change that satisfies the spec. Don't fake completion." |
-| 3 — Subscription (`coding-standards.md`) | "We use Clean Architecture. Never bypass the service layer." |
-| 4 — Board (`project.md` for a client board) | "When touching the cart, always ask for human verification before merging." |
-| 5 — Template (`agent_templates.template_system_prompt` for "Senior Backend Coder") | "[STYLE] direct, no hedging. [CONSTRAINTS] Never reveal business logic in PR descriptions." |
-| 6 — Agent (`agents.system_prompt` for "Camila") | "Your name is Camila. You write commit messages in Spanish." (overrides layer 5) |
-
-These layers, plus the always-loaded files below, are assembled **once** into the agent's starting context when a run begins — the personality layers (1, 2, 5, 6) form the system prompt; the context files (layers 3 & 4, plus the always-loaded base files) are injected as the agent's initial message. Where each piece lands is just SDK placement — conceptually it is **one bundle**: everything the agent knows for that run. From there the agent works the task within that single session, on that context alone — it does not re-read instruction or doc files mid-run.
-
-None of these layers can change which tool fires, which column a task moves to, or what files the agent can write — those are enforced at the runner/tool layer.
-
-### `[STYLE]` and `[CONSTRAINTS]`
-
-The personality text at layers 5 and 6 supports two semantic sections:
-- `[STYLE]` — tone modifier (e.g. warm vs direct). Adjusts how the agent writes.
-- `[CONSTRAINTS]` — hard rules, enforced above everything else (e.g. `Never ask about pricing`).
-
-### What each agent loads as context
-
-Assembled once into the agent's starting context bundle (see the layering note above), all dedup'd:
-
-- **Capability personality** — the runner's `personality_file` (e.g. `dev-implement.md`), resolved to the most specific version that exists.
-- **Capability docs** — the `docs/` files mapped to the agent's capability, picked up from `context_docs` in `runners.json` (the registry holds the mapping — not listed here).
-- **Subscription files** — every top-level `.md` in `instructions/{sub}/` (excluding runner personality files, already in the system prompt).
-- **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring.
-- **Always** — the app agent's base instruction file, for every agent; the project's human-facing setup file, additionally, for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
-
-### Path resolution
-
-The `personality_file` is stored as a short reference (e.g. `instructions/dev-implement.md`) without subscription or project IDs. At runtime, `resolveInstructionPath()` expands it to the most specific file that exists on disk:
-
-1. `instructions/{subscriptionId}/{projectId}/X.md` — board-level (most specific, overrides subscription)
-2. `instructions/{subscriptionId}/X.md` — subscription-level (shared, applies to all boards)
+A tool that skips step 2's logging convention is invisible to benchmark runs regardless of whether it actually fires — there is no other place that detects tool activity.

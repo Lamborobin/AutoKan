@@ -207,7 +207,7 @@ export function RoleField({ selectedRoleIds, onToggle }) {
           <div className="border-t border-border my-1 opacity-50" />
           {/* Individual column roles — dimmed when All Columns is on */}
           {columnRoles.filter(r => r.id !== 'role_access_any').map(role => (
-            <div key={role.id} className={allColumnsChecked ? 'opacity-40 pointer-events-none' : ''}>
+            <div key={role.id} className={allColumnsChecked ? 'opacity-60 pointer-events-none' : ''}>
               <RoleCheckbox
                 checked={selectedRoleIds.includes(role.id)}
                 onToggle={() => onToggle(role.id)}

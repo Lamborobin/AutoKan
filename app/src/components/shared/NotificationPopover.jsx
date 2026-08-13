@@ -98,7 +98,7 @@ export default function NotificationPopover({ anchorRef, onClose }) {
                   {notif.body && (
                     <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 leading-snug">{notif.body}</p>
                   )}
-                  <p className="text-xs text-gray-600 mt-1">{formatRelativeTime(notif.created_at)}</p>
+                  <p className="text-xs text-gray-400 mt-1">{formatRelativeTime(notif.created_at)}</p>
                 </div>
               </div>
             </button>

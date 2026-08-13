@@ -2,12 +2,13 @@
 // Title, body, and the layer the diagram highlights live here as data so they're
 // easy to edit without touching the modal/sidebar components.
 
-import { FolderTree, BookOpen, FileText, Layers, ShieldCheck, Sparkles } from 'lucide-react';
+import { FolderTree, BookOpen, FileText, Layers, ShieldCheck, Sparkles, Wrench } from 'lucide-react';
 
-// ── The six-layer authority stack ────────────────────────────────────────────
+// ── The seven-layer authority stack ──────────────────────────────────────────
 // Most general (immutable, system-owned) at the top → most specific (per-agent
 // personality) at the bottom. Layers below ADD to the layers above; nothing
-// below can override what's above it.
+// below can override what's above it. Mirrors the "Layer Stack" table in
+// dev/agents.md — keep the two in sync if either changes.
 const LAYERS = [
   {
     key: 'code',
@@ -26,6 +27,12 @@ const LAYERS = [
     label: 'System Rules',
     sub: 'Global rules with technical depth — the only layer that can invoke code-exposed actions, not just state rules. Edited by superadmins.',
     Icon: BookOpen,
+  },
+  {
+    key: 'capability',
+    label: 'Capability personality',
+    sub: 'Methodology and tone for any agent of this capability — how it approaches its work. Operator-edited; real behavioural weight, not just cosmetic.',
+    Icon: Wrench,
   },
   {
     key: 'workspace',
