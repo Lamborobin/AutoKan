@@ -291,6 +291,7 @@ function applySchema(db) {
       subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
       layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
+      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying')),
       rule_reference TEXT,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
@@ -308,6 +309,10 @@ function applySchema(db) {
       case_id TEXT NOT NULL REFERENCES benchmark_cases(id) ON DELETE CASCADE,
       project_id TEXT REFERENCES projects(id),
       probing_task_id TEXT REFERENCES tasks(id),
+      -- Only set for perm_verifying runs: the produce_document probing task dispatched
+      -- first so there's a real document to verify. probing_task_id is always the task
+      -- actually scored (the verify stage); source_task_id is that upstream produce stage.
+      source_task_id TEXT REFERENCES tasks(id),
       status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','dispatched','completed','error','timeout')),
       deterministic_result TEXT,
       judge_result TEXT,

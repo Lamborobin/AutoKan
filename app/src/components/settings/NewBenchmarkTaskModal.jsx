@@ -6,15 +6,23 @@ import { tasksApi } from '../../api';
 // Mirrors NewTaskModal.jsx's exact layout/classes — same modal chrome, same field
 // styling, same button treatment. Trimmed to just the fields a probing task needs
 // (no priority/complexity/assignee/tags/auto-complete). Scoring (which tool should
-// fire, what the judge checks) is decided entirely server-side — the user is never
-// asked about it.
+// fire, what the judge checks) is decided entirely server-side — the user only
+// picks which capability is under test, never the scoring mechanics themselves.
+const CAPABILITY_OPTIONS = [
+  { value: 'perm_planning', label: 'Planning', placeholder: 'What should the planner review?', brief: 'The brief the planner will actually see…' },
+  { value: 'perm_producing', label: 'Producing', placeholder: 'What document should be produced?', brief: 'The brief the document producer will actually see…' },
+  { value: 'perm_verifying', label: 'Verifying', placeholder: 'What should verification check for?', brief: 'The same brief is first sent to Producing to generate a real document, then Verifying checks that document against this brief…' },
+];
+
 export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscriptionId, onClose, onCreated }) {
   const { saveBenchmarkCase, draftBenchmarkCase } = useStore();
+  const [capability, setCapability] = useState('perm_planning');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [source, setSource] = useState('manual');
   const [rubric, setRubric] = useState(null); // carried silently from an AI draft, never shown
   const [ruleReference, setRuleReference] = useState(null);
+  const capabilityInfo = CAPABILITY_OPTIONS.find(c => c.value === capability) || CAPABILITY_OPTIONS[0];
 
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,10 +64,20 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
     setShowResults(false);
   }
 
+  function handleCapabilityChange(value) {
+    setCapability(value);
+    // A drafted rubric/rule_reference is scored against the previously-selected
+    // capability's outcome tools — carrying it over to a different capability
+    // would silently score against the wrong shape, so clear it on switch.
+    setRubric(null);
+    setRuleReference(null);
+    setSource('manual');
+  }
+
   async function handleGenerate() {
     setError(''); setGenerating(true);
     try {
-      const draft = await draftBenchmarkCase(targetProjectId, subscriptionId);
+      const draft = await draftBenchmarkCase(targetProjectId, subscriptionId, capability);
       setTitle(draft.title);
       setDescription(draft.description);
       setRubric(draft.rubric || null);
@@ -79,6 +97,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
         subscription_id: subscriptionId,
         project_id: scope === 'board' ? targetProjectId : null,
         layer: scope,
+        capability,
         title: title.trim(),
         description: description.trim(),
         rule_reference: ruleReference,
@@ -105,11 +124,10 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-400 mb-1.5">Capability being tested</label>
-            <select disabled value="perm_planning"
-              className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-400 outline-none cursor-not-allowed">
-              <option value="perm_planning">Planning</option>
+            <select value={capability} onChange={e => handleCapabilityChange(e.target.value)}
+              className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 outline-none focus:border-accent transition-colors">
+              {CAPABILITY_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
-            <p className="text-xs text-gray-600 mt-1">Only planning is testable this way today — other capabilities (like coding) need a different kind of verification and aren't wired up yet.</p>
           </div>
 
           <div className="relative">
@@ -161,7 +179,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
               autoFocus
               value={title}
               onChange={e => { setTitle(e.target.value); markEdited(); }}
-              placeholder="What should the planner review?"
+              placeholder={capabilityInfo.placeholder}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100
                          placeholder-gray-600 focus:outline-none focus:border-accent transition-colors"
             />
@@ -172,7 +190,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
             <textarea
               value={description}
               onChange={e => { setDescription(e.target.value); markEdited(); }}
-              placeholder="The brief the planner will actually see..."
+              placeholder={capabilityInfo.brief}
               rows={5}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100
                          placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"

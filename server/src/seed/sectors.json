@@ -1,5 +1,5 @@
 {
-  "description": "Sector registry — the single source of truth for what a sector is. A sector classifies a board, is set at board creation, and is locked afterward. It drives two things: (1) which capabilities the board exposes — 'capabilities' is an allow-list, and everything else in runners.json's capability registry is hidden on that board (hidden = registry complement of the allow-list); null means expose all capabilities, no restriction. (2) which context the board seeds at creation. 'team' distinguishes a shared client/team board from a single-user personal board. Add a sector by adding an entry here; seeding reads this registry rather than hardcoding any sector.",
+  "description": "Sector registry — the single source of truth for what a sector is. A sector classifies a board, is set at board creation, and is locked afterward. It drives two things: (1) which capabilities the board exposes — 'capabilities' is an allow-list, and everything else in runners.json's capability registry is hidden on that board (hidden = registry complement of the allow-list); null means expose all capabilities, no restriction. (2) which context the board seeds at creation. 'team' distinguishes a shared client/team board from a single-user personal board. 'color' is the sector's display color, used anywhere a sector badge or picker is rendered. Add a sector by adding an entry here; seeding reads this registry rather than hardcoding any sector.",
 
   "sectors": [
     {
@@ -7,35 +7,40 @@
       "label": "Personal Board",
       "description": "A single-user personal workspace with no client attached. Exposes every capability — it is the owner's own sandbox.",
       "team": false,
-      "capabilities": null
+      "capabilities": null,
+      "color": "#6b7280"
     },
     {
       "id": "software",
       "label": "Software Development",
       "description": "A software engineering board. The deliverable is code: agents work inside the client repository, open pull requests, and run automated tests. Exposes the code, ops, and analysis capabilities; the document Producer/Verifier capabilities are hidden (those belong to document sectors).",
       "team": true,
-      "capabilities": ["perm_planning", "perm_coding", "perm_coding_tester", "perm_frontend", "perm_backend", "perm_ux", "perm_architect", "perm_code_reader", "perm_migrate", "perm_network", "perm_cloud", "perm_security_control", "perm_log_reader", "perm_data_analytic"]
+      "capabilities": ["perm_planning", "perm_coding", "perm_coding_tester", "perm_frontend", "perm_backend", "perm_ux", "perm_architect", "perm_code_reader", "perm_migrate", "perm_network", "perm_cloud", "perm_security_control", "perm_log_reader", "perm_data_analytic"],
+      "color": "#6366f1"
     },
     {
       "id": "manufacturing",
       "label": "Manufacturing",
       "description": "Industrial operations — quality management, safety compliance, process documentation. The deliverable is a document, not code. Agents read client-supplied files, produce structured documents, and verify them against the client's standards. Read-only on source files.",
       "team": true,
-      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"]
+      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"],
+      "color": "#f59e0b"
     },
     {
       "id": "healthcare",
       "label": "Healthcare",
       "description": "Clinical and care operations — clinical protocols, care pathways, patient information, safety and governance documentation. The deliverable is a document, not code. Agents read client-supplied files, produce structured clinical documents, and verify them against the client's clinical document standard and safety criteria. Read-only on source files.",
       "team": true,
-      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"]
+      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"],
+      "color": "#14b8a6"
     },
     {
       "id": "finance",
       "label": "Finance",
       "description": "Financial services operations — credit and lending policies, risk frameworks, AML/KYC procedures, investment and product disclosures, regulatory compliance documentation. The deliverable is a document, not code. Agents read client-supplied files, produce structured policy and compliance documents, and verify them against the client's document standard and regulatory criteria. Read-only on source files.",
       "team": true,
-      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"]
+      "capabilities": ["perm_planning", "perm_producing", "perm_verifying", "perm_data_analytic"],
+      "color": "#22c55e"
     }
   ]
 }

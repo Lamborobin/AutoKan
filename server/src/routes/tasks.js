@@ -109,6 +109,43 @@ router.get('/:id', attachAgent, (req, res) => {
   });
 });
 
+// GET /tasks/:id/document — serve a produce_document/verify_document deliverable.
+// ?field=verified reads task.metadata.verified_document_path instead of the default
+// produced_document_path (see agentRunner.js's produce_document/verify_document
+// task_complete handling). ?download=true sets Content-Disposition to force a save
+// dialog; otherwise it's inline so the browser can just display it in a new tab.
+// The path itself is never client-supplied — only the field selector is — but it's
+// still re-validated against the task's own board client_path before serving, the
+// same trust boundary writeFileSafe enforces on the way in.
+router.get('/:id/document', attachAgent, (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const metadata = JSON.parse(task.metadata || '{}');
+  const relPath = req.query.field === 'verified' ? metadata.verified_document_path : metadata.produced_document_path;
+  if (!relPath) return res.status(404).json({ error: 'No document recorded for this task' });
+
+  const project = task.project_id ? db.prepare('SELECT client_path FROM projects WHERE id = ?').get(task.project_id) : null;
+  const clientPath = project?.client_path;
+  const normalizedRel = relPath.replace(/\\/g, '/');
+  if (!clientPath || !normalizedRel.startsWith(clientPath.replace(/\\/g, '/') + '/')) {
+    return res.status(403).json({ error: "Document path is outside this board's linked folder" });
+  }
+
+  const absPath = path.join(PROJECT_ROOT, relPath);
+  const allowedRoot = path.join(PROJECT_ROOT, clientPath) + path.sep;
+  if (!absPath.startsWith(allowedRoot)) {
+    return res.status(403).json({ error: 'Invalid document path' });
+  }
+  if (!fs.existsSync(absPath)) return res.status(404).json({ error: 'Document file no longer exists on disk' });
+
+  const filename = path.basename(absPath);
+  res.setHeader('Content-Disposition', `${req.query.download === 'true' ? 'attachment' : 'inline'}; filename="${filename}"`);
+  res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+  res.send(fs.readFileSync(absPath, 'utf8'));
+});
+
 // POST /tasks — create task (PM or human only)
 router.post('/', requirePermission('task:create'), (req, res) => {
   const db = getDb();

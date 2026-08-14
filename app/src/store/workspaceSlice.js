@@ -8,6 +8,7 @@ export const createWorkspaceSlice = (set, get) => ({
   subscriptionAdmins: [],
   clients: [],
   projects: [],
+  sectors: [],
   currentProjectId: localStorage.getItem('fa_project') || null,
 
   // ── Subscription ──────────────────────────────────────────────
@@ -63,6 +64,14 @@ export const createWorkspaceSlice = (set, get) => ({
   async deleteClient(id) {
     await clientsApi.delete(id);
     set(s => ({ clients: s.clients.filter(c => c.id !== id) }));
+  },
+
+  // ── Sectors ───────────────────────────────────────────────────
+  async loadSectors() {
+    try {
+      const sectors = await projectsApi.sectors();
+      set({ sectors });
+    } catch {}
   },
 
   // ── Projects ──────────────────────────────────────────────────

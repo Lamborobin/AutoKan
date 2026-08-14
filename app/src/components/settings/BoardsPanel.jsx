@@ -4,23 +4,23 @@ import {
 } from 'lucide-react';
 import SettingsTable from './SettingsTable';
 
-// Sector display metadata — label + colour.
-// Unlisted / null sectors fall back gracefully.
-const SECTOR_META = {
-  personal:      { label: 'Personal',      color: '#6b7280' },
-  software:      { label: 'Software',      color: '#6366f1' },
-  manufacturing: { label: 'Manufacturing', color: '#f59e0b' },
-};
-
 export default function BoardsPanel({
-  projects, clients, currentProjectId,
+  projects, clients, sectors, currentProjectId,
   createProject, updateProject, archiveProject, unarchiveProject, deleteProject,
   onSwitchBoard,
 }) {
+  // Sector display metadata, sourced from the sector registry.
+  // Unlisted / null sectors fall back gracefully.
+  const SECTOR_META = useMemo(
+    () => Object.fromEntries((sectors || []).map(s => [s.id, { label: s.label, color: s.color }])),
+    [sectors],
+  );
+
   // ── Create form ────────────────────────────────────────────────────────
   const [showCreate, setShowCreate]   = useState(false);
   const [newName, setNewName]         = useState('');
   const [newClientId, setNewClientId] = useState('');
+  const [newSector, setNewSector]     = useState('personal');
   const [creating, setCreating]       = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -58,9 +58,12 @@ export default function BoardsPanel({
       await createProject({
         name: newName.trim(),
         emoji: '📋',
-        ...(newClientId ? { client_id: newClientId } : {}),
+        // Sector is locked at creation. With a client linked, it's inherited from the
+        // client and the picker's value is ignored server-side; only send it when there's
+        // no client, so a client-less board can pick a sector other than 'personal'.
+        ...(newClientId ? { client_id: newClientId } : { sector: newSector }),
       });
-      setNewName(''); setNewClientId(''); setShowCreate(false);
+      setNewName(''); setNewClientId(''); setNewSector('personal'); setShowCreate(false);
     } catch (err) {
       setCreateError(err.response?.data?.error || 'Failed to create board');
     } finally { setCreating(false); }
@@ -276,7 +279,7 @@ export default function BoardsPanel({
   const selectedClientForCreate = activeClients.find(c => c.id === newClientId);
   const createSectorPreview = selectedClientForCreate
     ? (SECTOR_META[selectedClientForCreate.sector] ?? { label: selectedClientForCreate.sector || 'Unknown', color: '#6b7280' })
-    : SECTOR_META['personal'];
+    : null;
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -287,7 +290,7 @@ export default function BoardsPanel({
           <h2 className="text-base font-semibold text-gray-200">Boards</h2>
           {!showCreate && (
             <button
-              onClick={() => { setShowCreate(true); setNewName(''); setNewClientId(''); setCreateError(''); }}
+              onClick={() => { setShowCreate(true); setNewName(''); setNewClientId(''); setNewSector('personal'); setCreateError(''); }}
               className="flex items-center gap-1 text-sm text-accent hover:text-accent/80 transition-colors"
             >
               <Plus size={12} /> New board
@@ -313,28 +316,44 @@ export default function BoardsPanel({
                 onChange={e => setNewClientId(e.target.value)}
                 className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/50"
               >
-                <option value="">No client (personal board)</option>
+                <option value="">No client</option>
                 {activeClients.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             )}
-            {/* Read-only sector hint — comes from the client, not settable on the board */}
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-xs text-gray-600">Sector</span>
-              <span
-                className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: createSectorPreview.color + '18', color: createSectorPreview.color, border: `1px solid ${createSectorPreview.color}30` }}
-              >
-                {createSectorPreview.label}
-              </span>
-              <span className="text-xs text-gray-600">inherited from client</span>
-            </div>
+            {createSectorPreview ? (
+              // Client selected — sector is inherited from the client, not settable here.
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-xs text-gray-600">Sector</span>
+                <span
+                  className="text-xs px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: createSectorPreview.color + '18', color: createSectorPreview.color, border: `1px solid ${createSectorPreview.color}30` }}
+                >
+                  {createSectorPreview.label}
+                </span>
+                <span className="text-xs text-gray-600">inherited from client</span>
+              </div>
+            ) : (
+              // No client — sector is picked directly and locked once the board is created.
+              <div className="flex items-center gap-2 px-1">
+                <span className="text-xs text-gray-600 shrink-0">Sector</span>
+                <select
+                  value={newSector}
+                  onChange={e => setNewSector(e.target.value)}
+                  className="flex-1 bg-surface-3 border border-border rounded-lg px-2 py-1 text-sm text-gray-200 outline-none focus:border-accent/50"
+                >
+                  {(sectors || []).map(s => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             {createError && <p className="text-sm text-red-400">{createError}</p>}
             <div className="flex gap-1.5">
               <button
                 type="button"
-                onClick={() => { setShowCreate(false); setNewName(''); setNewClientId(''); setCreateError(''); }}
+                onClick={() => { setShowCreate(false); setNewName(''); setNewClientId(''); setNewSector('personal'); setCreateError(''); }}
                 className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg hover:bg-surface-3 transition-colors"
               >
                 Cancel

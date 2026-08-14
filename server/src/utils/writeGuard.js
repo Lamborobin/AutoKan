@@ -13,7 +13,13 @@ function getCapabilityDef(capabilityId) {
 function resolveTemplateVars(str, context = {}) {
   return str
     .replace(/\{subscriptionId\}/g, context.subscriptionId || '_')
-    .replace(/\{projectId\}/g, context.projectId || '_');
+    .replace(/\{projectId\}/g, context.projectId || '_')
+    // The board's own linked folder (projects.client_path, e.g. "client/Nordvik Kredit") —
+    // used by capabilities that write into the client's actual project rather than a
+    // capability-wide shared folder. Falls back to a path that can never exist on disk
+    // (rather than a plausible-looking one) so an unlinked board fails the write instead
+    // of silently landing somewhere unrelated to any board.
+    .replace(/\{clientPath\}/g, context.clientPath || '__unlinked_board__');
 }
 
 // ── Pattern parsing ────────────────────────────────────────────────────────────

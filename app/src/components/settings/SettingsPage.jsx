@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, XCircle, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
@@ -15,13 +15,6 @@ import { ProjectSwitcher } from '../Sidebar';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi, invitesApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
 
-
-// Sector display metadata — kept in sync with sectors.json + BoardsPanel
-const SECTOR_META = {
-  personal:      { label: 'Personal',      color: '#6b7280' },
-  software:      { label: 'Software',      color: '#6366f1' },
-  manufacturing: { label: 'Manufacturing', color: '#f59e0b' },
-};
 
 // Mirror of the server's filename sanitisation — lets the user type a free-text
 // label and see the resulting filesystem-safe name before creating the file.
@@ -74,6 +67,7 @@ export default function SettingsPage() {
     createClient,
     updateClient,
     archiveClient,
+    sectors,
     teams,
     loadTeams,
     createTeam,
@@ -85,6 +79,13 @@ export default function SettingsPage() {
 
   const currentProject = projects.find(p => p.id === currentProjectId);
   const isClientBoard = !!currentProject?.client_id;
+
+  // Sector display metadata, sourced from the sector registry (server/src/seed/sectors.json)
+  // rather than hardcoded — keeps client/board sector badges and pickers in sync with it.
+  const sectorMeta = useMemo(
+    () => Object.fromEntries((sectors || []).map(s => [s.id, { label: s.label, color: s.color }])),
+    [sectors],
+  );
 
   // Capability metadata, sourced from the roles store (permission-type roles).
   // Drives the "Visible to" pickers and the badges on file rows.
@@ -915,7 +916,7 @@ export default function SettingsPage() {
               <div>
                 <h2 className="text-base font-semibold text-gray-200 mb-1">Workspace</h2>
                 <p className="text-sm text-gray-500 mb-6">
-                  Applies to all boards and members.
+                  Applies to all boards in this workspace.
                 </p>
 
                 {/* Workspace name */}
@@ -1020,9 +1021,9 @@ export default function SettingsPage() {
                   className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
                 <select value={clientSector} onChange={e => setClientSector(e.target.value)}
                   className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/50">
-                  <option value="software">Software Development</option>
-                  <option value="manufacturing">Manufacturing</option>
-                  <option value="personal">Personal</option>
+                  {sectors.map(s => (
+                    <option key={s.id} value={s.id}>{s.label}</option>
+                  ))}
                 </select>
                 {clientError && <p className="text-sm text-red-400">{clientError}</p>}
                 <div className="flex gap-2">
@@ -1087,7 +1088,7 @@ export default function SettingsPage() {
                   label: 'Sector',
                   width: '140px',
                   render: (client) => {
-                    const meta = SECTOR_META[client.sector] ?? { label: client.sector || '—', color: '#6b7280' };
+                    const meta = sectorMeta[client.sector] ?? { label: client.sector || '—', color: '#6b7280' };
                     return (
                       <span
                         className="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap"
@@ -1118,11 +1119,7 @@ export default function SettingsPage() {
                 {
                   key: 'sector',
                   label: 'Sector',
-                  options: [
-                    { value: 'software',      label: 'Software' },
-                    { value: 'manufacturing', label: 'Manufacturing' },
-                    { value: 'personal',      label: 'Personal' },
-                  ],
+                  options: sectors.map(s => ({ value: s.id, label: s.label })),
                 },
               ]}
               emptyMessage="No clients yet"
@@ -1164,6 +1161,7 @@ export default function SettingsPage() {
           <BoardsPanel
             projects={projects}
             clients={clients}
+            sectors={sectors}
             currentProjectId={currentProjectId}
             createProject={createProject}
             updateProject={updateProject}

@@ -8,13 +8,14 @@ const {
   submitManualReview,
   draftCaseFromBoard,
   draftRubricForTask,
+  VALID_CAPABILITIES,
+  PLANNING_CAPABILITY,
 } = require('../services/benchmarkRunner');
 
 const router = express.Router();
 
 const VALID_SOURCES = ['manual', 'ai_generated', 'ai_edited', 'cloned_task'];
 const VALID_LAYERS = ['workspace', 'board'];
-const TESTED_CAPABILITY = 'perm_planning';
 
 // Returns true for JWT-authenticated users and legacy X-Agent-Id: human — this
 // feature is a human/board-admin tool, never something an AI agent calls itself.
@@ -57,7 +58,7 @@ router.get('/cases', attachAgent, (req, res) => {
 router.post('/cases', attachAgent, async (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create benchmark tasks' });
   const db = getDb();
-  const { subscription_id, project_id, layer, title, description, rubric, rule_reference, source } = req.body;
+  const { subscription_id, project_id, layer, title, description, rubric, rule_reference, source, capability } = req.body;
 
   if (!subscription_id || !layer || !title || !description) {
     return res.status(400).json({ error: 'subscription_id, layer, title, and description are required' });
@@ -65,21 +66,25 @@ router.post('/cases', attachAgent, async (req, res) => {
   if (!VALID_LAYERS.includes(layer)) {
     return res.status(400).json({ error: `layer must be one of: ${VALID_LAYERS.join(', ')}` });
   }
+  if (capability && !VALID_CAPABILITIES.includes(capability)) {
+    return res.status(400).json({ error: `capability must be one of: ${VALID_CAPABILITIES.join(', ')}` });
+  }
+  const resolvedCapability = capability || PLANNING_CAPABILITY;
   const resolvedSource = source && VALID_SOURCES.includes(source) ? source : 'manual';
   const needsRubric = !rubric || Object.keys(rubric).length === 0;
 
   const id = 'bmc_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, rule_reference, title, description, rubric, source, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, subscription_id, project_id || null, layer, rule_reference || null, title, description, JSON.stringify(rubric || {}), resolvedSource, req.user?.sub || null);
+    INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, capability, rule_reference, title, description, rubric, source, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, subscription_id, project_id || null, layer, resolvedCapability, rule_reference || null, title, description, JSON.stringify(rubric || {}), resolvedSource, req.user?.sub || null);
 
   res.status(201).json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(id)));
 
   // Scoring rubric isn't needed until the case is actually run, so don't block the
   // create response on an LLM round-trip — draft it in the background and patch it in.
   if (needsRubric) {
-    draftRubricForTask(title, description, project_id || null, subscription_id, TESTED_CAPABILITY)
+    draftRubricForTask(title, description, project_id || null, subscription_id, resolvedCapability)
       .then(draftedRubric => {
         db.prepare('UPDATE benchmark_cases SET rubric = ? WHERE id = ?')
           .run(JSON.stringify(draftedRubric || {}), id);
@@ -92,12 +97,15 @@ router.post('/cases', attachAgent, async (req, res) => {
 // real docs. Returns the draft only — nothing is persisted until POST /cases saves it.
 router.post('/cases/draft', attachAgent, async (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can request an AI draft' });
-  const { project_id, subscription_id } = req.body;
+  const { project_id, subscription_id, capability } = req.body;
   if (!project_id || !subscription_id) {
     return res.status(400).json({ error: 'project_id and subscription_id are required' });
   }
+  if (capability && !VALID_CAPABILITIES.includes(capability)) {
+    return res.status(400).json({ error: `capability must be one of: ${VALID_CAPABILITIES.join(', ')}` });
+  }
   try {
-    const draft = await draftCaseFromBoard(project_id, subscription_id, TESTED_CAPABILITY);
+    const draft = await draftCaseFromBoard(project_id, subscription_id, capability || PLANNING_CAPABILITY);
     res.json(draft);
   } catch (err) {
     res.status(500).json({ error: err.message });

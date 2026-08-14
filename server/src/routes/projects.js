@@ -111,6 +111,13 @@ router.get('/client-repos', requireAuth, (req, res) => {
   }
 });
 
+// GET /api/projects/sectors — the sector registry, for the board-creation picker
+router.get('/sectors', requireAuth, (req, res) => {
+  res.json(sectorsRegistry.sectors.map(s => ({
+    id: s.id, label: s.label, description: s.description, team: s.team, color: s.color,
+  })));
+});
+
 // GET /api/projects — only boards the user is a member of
 router.get('/', requireAuth, (req, res) => {
   const db = getDb();
@@ -165,17 +172,20 @@ router.get('/:id', requireAuth, (req, res) => {
 // POST /api/projects
 router.post('/', requireAuth, (req, res) => {
   const db = getDb();
-  const { name, description, client_name, client_id, color = '#6366f1', emoji = '📋' } = req.body;
+  const { name, description, client_name, client_id, color = '#6366f1', emoji = '📋', sector } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
 
   const userId = req.user?.sub || null;
   const userEmail = req.user?.email || null;
 
   // Resolve client name + sector from client_id.
-  // Sector is a client-level property — boards inherit it, never set it independently.
+  // Sector is a client-level property when a client is linked — the board inherits it,
+  // never sets it independently. Without a client, the picker's choice is used instead
+  // (validated against the registry; falls back to 'personal'). Either way, sector is
+  // locked once the row is written — no route accepts it on update.
   let resolvedClientName = client_name || null;
   let resolvedClientId = client_id || null;
-  let boardSector = 'personal';
+  let boardSector = sectorsRegistry.sectors.some(s => s.id === sector) ? sector : 'personal';
   if (client_id) {
     const clientRow = db.prepare('SELECT name, sector FROM clients WHERE id = ?').get(client_id);
     if (clientRow) {

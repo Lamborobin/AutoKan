@@ -1,14 +1,30 @@
 import { benchmarkApi } from '../api';
 
+// Module-level (not component state) so it survives remounts and is shared across
+// every call site that might try to poll the same run — StrictMode's double-effect,
+// loadBenchmarkRuns re-firing on every panel mount, and a fresh runBenchmarkCase call
+// could otherwise each start their own independent 2s loop for the same runId, with
+// nothing to cancel the old ones. At most one active loop per runId, ever.
+const activePolls = new Set();
+
 function pollRun(get, set, caseId, runId) {
+  if (activePolls.has(runId)) return;
+  activePolls.add(runId);
+
   const POLL_MS = 2000;
-  const TIMEOUT_MS = 90000;
+  // Matches benchmarkRunner.js's pollAndScore/waitForSettlement timeout (210s) — this
+  // must stay >= the backend's own timeout, or the UI stops polling and goes stale
+  // before the backend even finishes, showing "waiting" forever on a run that actually
+  // completed. A margin over the backend value covers request/poll-tick latency.
+  const TIMEOUT_MS = 240000;
   const deadline = Date.now() + TIMEOUT_MS;
+
+  const stop = () => activePolls.delete(runId);
 
   const tick = async () => {
     let run;
     try { run = await benchmarkApi.getRun(runId); }
-    catch { return; } // panel may have unmounted / run deleted — stop quietly
+    catch { stop(); return; } // panel may have unmounted / run deleted — stop quietly
 
     set(s => ({
       benchmarkRunsByCaseId: {
@@ -17,8 +33,8 @@ function pollRun(get, set, caseId, runId) {
       },
     }));
 
-    if (['completed', 'error', 'timeout'].includes(run.status)) return;
-    if (Date.now() > deadline) return;
+    if (['completed', 'error', 'timeout'].includes(run.status)) { stop(); return; }
+    if (Date.now() > deadline) { stop(); return; }
     setTimeout(tick, POLL_MS);
   };
   setTimeout(tick, POLL_MS);
@@ -47,8 +63,8 @@ export const createBenchmarkSlice = (set, get) => ({
 
   // Returns a draft { title, description, rule_reference, rubric } — nothing is
   // persisted until saveBenchmarkCase is called.
-  async draftBenchmarkCase(projectId, subscriptionId) {
-    return benchmarkApi.draftCase({ project_id: projectId, subscription_id: subscriptionId });
+  async draftBenchmarkCase(projectId, subscriptionId, capability) {
+    return benchmarkApi.draftCase({ project_id: projectId, subscription_id: subscriptionId, capability });
   },
 
   async saveBenchmarkCase(data) {
@@ -69,6 +85,13 @@ export const createBenchmarkSlice = (set, get) => ({
   async loadBenchmarkRuns(caseId) {
     const runs = await benchmarkApi.listRuns(caseId);
     set(s => ({ benchmarkRunsByCaseId: { ...s.benchmarkRunsByCaseId, [caseId]: runs } }));
+    // A run can still be mid-flight on the server from a previous page load/tab —
+    // pollRun only ever gets started by runBenchmarkCase below, so without this a run
+    // that was "dispatched" when this fetch landed would sit stuck at that status in
+    // the UI forever, even after the backend actually finishes it.
+    for (const run of runs) {
+      if (['pending', 'dispatched'].includes(run.status)) pollRun(get, set, caseId, run.id);
+    }
   },
 
   async runBenchmarkCase(caseId, projectId) {

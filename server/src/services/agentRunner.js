@@ -860,6 +860,20 @@ function readFileFromDir(relPath, baseDir) {
   }
 }
 
+// Storage seam for capabilities that search by listing rather than running shell
+// commands (produce_document, verify_document) — local filesystem today, but every
+// caller goes through this one function, so a cloud backend (e.g. blob storage)
+// only needs to change here, not in the tool schema or the handlers that use it.
+function listFilesInDir(relPath, baseDir) {
+  try {
+    return fs.readdirSync(path.join(baseDir, relPath), { withFileTypes: true })
+      .map(d => (d.isDirectory() ? `${d.name}/` : d.name))
+      .sort();
+  } catch {
+    return null;
+  }
+}
+
 async function runImplementInWorktree(task, agent, runner) {
   const db = getDb();
   const taskId = task.id;
@@ -1246,6 +1260,521 @@ async function runTestWithRetry(task, agent, runner) {
   }
 }
 
+// Shared guard for produce_document/verify_document — both need the board linked to a
+// real folder (projects.client_path, set via Board settings → Connections) before they
+// have anywhere sensible to write or look for a document. Bails out before any LLM call
+// so an unlinked board fails fast with a clear reason instead of writing into a shared
+// folder unrelated to any specific client, or sitting until a benchmark run times out.
+function requireLinkedClientPath(task, agent, runner) {
+  const db = getDb();
+  const project = task.project_id
+    ? db.prepare('SELECT subscription_id, client_path FROM projects WHERE id = ?').get(task.project_id)
+    : null;
+  const clientPath = project?.client_path;
+  const linked = clientPath && fs.existsSync(path.join(PROJECT_ROOT, clientPath));
+  if (linked) return { ok: true, subscriptionId: project.subscription_id, clientPath };
+
+  const reason = 'This board is not linked to a folder or repo yet — link one in Board settings (Connections) before documents can be produced or verified.';
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agent.id, 'note', 'Dispatched — no linked client folder for this board');
+  db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+    .run('col_humanaction', reason, task.id);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+  console.log(`[AgentRunner][${runner.id}][${task.id}] no linked client folder → Human Action`);
+  notifyHumanActionMembers(db, task.id, reason).catch(() => {});
+  broadcastTask(db, task.id);
+  return { ok: false };
+}
+
+// ---------------------------------------------------------------------------
+// Handler: produce_document
+// Single-pass document production. Writes a structured markdown deliverable
+// into the board's own linked folder and hands off to a human for sign-off.
+// Sector-agnostic — domain rules come entirely from the board's own context
+// files (client.md, project.md, a producer guide), never from branching here.
+// ---------------------------------------------------------------------------
+
+const PRODUCING_TOOLS = [
+  {
+    name: 'list_files',
+    description: 'List the files in a folder — use to check for existing output files/folders before writing.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Folder path relative to the repo root' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'read_file',
+    description: 'Read a file from the repository.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path relative to the repo root' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'write_file',
+    description: 'Write the produced document. Path must be within your assigned write scope (see your task instructions for the exact folder) — the server will reject anything outside it.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path relative to repo root, inside your assigned write scope' },
+        content: { type: 'string', description: 'Full document content, as markdown' }
+      },
+      required: ['path', 'content']
+    }
+  },
+  {
+    name: 'task_log',
+    description: 'Add a progress note to the task log.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        progress: { type: 'number', description: 'Progress percentage 0-100' },
+        message: { type: 'string', description: 'Log message describing what was done' }
+      },
+      required: ['message']
+    }
+  },
+  {
+    name: 'task_complete',
+    description: 'Call this once the document has been written. Moves the task to Human Action for sign-off.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'The exact path (relative to repo root) you wrote the document to' },
+        summary: { type: 'string', description: 'Brief summary of what was written and where' }
+      },
+      required: ['path', 'summary']
+    }
+  },
+  {
+    name: 'request_human',
+    description: 'Flag the task as blocked and move it to Human Action. Use when required information is missing or contradictory.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'What you need from the human and why' }
+      },
+      required: ['reason']
+    }
+  },
+  ACTION_HOOK_TOOL,
+];
+
+async function runProduceDocument(task, agent, runner) {
+  const db = getDb();
+  const taskId = task.id;
+
+  const linkCheck = requireLinkedClientPath(task, agent, runner);
+  if (!linkCheck.ok) return;
+  const { subscriptionId, clientPath } = linkCheck;
+
+  const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
+  const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
+
+  const initialPrompt = [
+    contextBlock ? `## Context Files\n${contextBlock}` : '',
+    `## Your Assigned Task`,
+    `ID: ${task.id}`,
+    `Title: ${task.title}`,
+    `Description: ${task.description || '(no description)'}`,
+    `Acceptance Criteria: ${task.acceptance_criteria || '(none specified)'}`,
+    `PM Brief: ${task.pm_review_comment || '(none)'}`,
+    `Priority: ${task.priority} | Complexity: ${task.complexity}`,
+    ``,
+    loadRunnerPrompt('produce-document', { taskId: task.id, taskTitle: task.title, clientPath }),
+  ].filter(Boolean).join('\n');
+
+  const messages = [{ role: 'user', content: initialPrompt }];
+
+  let completed = false;
+  const MAX_ITERATIONS = runner.max_iterations || 30;
+  // Wall-clock cap, independent of iteration count — a single stuck/slow LLM turn can
+  // burn arbitrary time (and tokens) without ever hitting MAX_ITERATIONS. Measured
+  // real successful runs at ~130s; 3 minutes gives margin above that while still
+  // cutting a genuinely stuck run down from unbounded. Keep in sync with
+  // benchmarkRunner.js's pollAndScore/waitForSettlement timeout, which must stay
+  // >= this so the benchmark layer doesn't give up watching before this fires.
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 3 * 60 * 1000;
+
+  for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    if (Date.now() - startedAt > MAX_DURATION_MS) {
+      const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      break;
+    }
+
+    let response;
+    try {
+      response = await getClient().messages.create({
+        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
+        // Higher than the other handlers' 4096 — a full multi-section document is the
+        // tool_use argument itself (write_file's content field), and 4096 was observed
+        // truncating mid-document on real runs (the model logs "writing full document
+        // now" via task_log, then the response never completes cleanly and the run
+        // silently stalls with no further logs — a cut-off tool_use block that never
+        // reaches a catchable error).
+        max_tokens: 8192,
+        system: systemPrompt,
+        tools: getToolSet(runner),
+        messages,
+      }, { timeout: MAX_DURATION_MS - (Date.now() - startedAt) });
+    } catch (err) {
+      // Escalate rather than just logging + breaking — an API error or SDK-level
+      // timeout (the actual per-request cap for a single hung call, complementing the
+      // wall-clock check above which only runs between calls) otherwise leaves the task
+      // silently stuck in col_inprogress with no signal to a human that it stopped.
+      const reason = `API error during document production: ${err.message}`;
+      console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'note', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      break;
+    }
+
+    messages.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason === 'end_turn') break;
+
+    const toolResults = [];
+
+    for (const block of response.content) {
+      if (block.type !== 'tool_use') continue;
+
+      let result;
+
+      if (block.name === 'list_files') {
+        const files = listFilesInDir(block.input.path, PROJECT_ROOT);
+        result = files ? { success: true, files } : { error: 'Folder not found' };
+
+      } else if (block.name === 'read_file') {
+        const content = readFileFromDir(block.input.path, PROJECT_ROOT);
+        result = content ? { success: true, content } : { error: 'File not found' };
+
+      } else if (block.name === 'write_file') {
+        result = writeFileSafe(block.input.path, block.input.content, runner.capability, PROJECT_ROOT, { subscriptionId, projectId: task.project_id, clientPath });
+
+      } else if (block.name === 'task_log') {
+        const { progress, message } = block.input;
+        if (progress !== undefined) {
+          db.prepare('UPDATE tasks SET progress = ? WHERE id = ?').run(progress, taskId);
+        }
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, agent.id, 'note', message);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] log: ${message}`);
+        broadcastTask(db, taskId);
+        result = { success: true };
+
+      } else if (block.name === 'task_complete') {
+        const { path: docPath, summary } = block.input;
+        const currentMeta = JSON.parse(db.prepare('SELECT metadata FROM tasks WHERE id = ?').get(taskId)?.metadata || '{}');
+        db.prepare('UPDATE tasks SET progress = 100, column_id = ?, requires_human_action = 1, human_action_reason = ?, metadata = ? WHERE id = ?')
+          .run('col_humanaction', 'Document ready for review', JSON.stringify({ ...currentMeta, produced_document_path: docPath }), taskId);
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, agent.id, 'document_produced', summary);
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, agent.id, 'moved', 'col_inprogress', 'col_humanaction', 'Document ready — awaiting human sign-off');
+        console.log(`[AgentRunner][${runner.id}][${taskId}] document produced → Human Action`);
+        notifyHumanActionMembers(db, taskId, 'Document ready for review').catch(() => {});
+        broadcastTask(db, taskId);
+        completed = true;
+        result = { success: true };
+
+      } else if (block.name === 'request_human') {
+        const { reason } = block.input;
+        db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+          .run('col_humanaction', reason, taskId);
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
+        notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+        broadcastTask(db, taskId);
+        completed = true;
+        result = { success: true };
+
+      } else if (block.name === 'invoke_action_hook') {
+        const { action, params } = block.input;
+        result = await runActionHook(action, params, task, agent);
+      }
+
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: JSON.stringify(result)
+      });
+    }
+
+    if (toolResults.length > 0) {
+      messages.push({ role: 'user', content: toolResults });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Handler: verify_document
+// Read-only verification loop, same retry/escalation shape as test_with_retry.
+// Discovers the board's document-standard file(s) by listing the board's
+// instructions folder rather than assuming a fixed filename — the guide is
+// named differently per board (doc-guide.md, sop-guide.md, ...), and its
+// front matter scopes it to perm_producing, so it isn't auto-loaded into this
+// agent's context the way client.md/project.md are.
+// ---------------------------------------------------------------------------
+
+const VERIFYING_TOOLS = [
+  {
+    name: 'list_files',
+    description: 'List the files in a folder — use to find the produced document or explore the board instructions folder before reading.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Folder path relative to the repo root' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'read_file',
+    description: 'Read a file from the repository.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Path relative to the repo root' }
+      },
+      required: ['path']
+    }
+  },
+  {
+    name: 'task_log',
+    description: 'Add a progress note to the task log.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        progress: { type: 'number', description: 'Progress percentage 0-100' },
+        message: { type: 'string', description: 'Log message describing what was done' }
+      },
+      required: ['message']
+    }
+  },
+  {
+    name: 'task_complete',
+    description: 'Call this when verification is done. If passed=true the task moves to Human Action for sign-off. If passed=false it moves back to In Progress for revision (or stays in Human Action if max retries reached).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        matched_path: { type: 'string', description: 'The exact path (relative to repo root) of the document you verified' },
+        passed: { type: 'boolean', description: 'True if the document meets the standard and acceptance criteria, false otherwise' },
+        summary: { type: 'string', description: 'What was checked, what matched, and what (if anything) is missing or wrong' }
+      },
+      required: ['matched_path', 'passed', 'summary']
+    }
+  },
+  {
+    name: 'request_human',
+    description: 'Flag the task as blocked and move it to Human Action. Use when you cannot locate the produced document or the board standard at all.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        reason: { type: 'string', description: 'What you need from the human and why' }
+      },
+      required: ['reason']
+    }
+  },
+  ACTION_HOOK_TOOL,
+];
+
+async function runVerifyDocument(task, agent, runner) {
+  const db = getDb();
+  const taskId = task.id;
+
+  const linkCheck = requireLinkedClientPath(task, agent, runner);
+  if (!linkCheck.ok) return;
+  const { subscriptionId, clientPath } = linkCheck;
+
+  const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
+  const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
+
+  const metadata = JSON.parse(task.metadata || '{}');
+  const retryCount = metadata.verify_retry_count || 0;
+
+  const boardInstructionsPath = subscriptionId
+    ? (task.project_id ? `instructions/${subscriptionId}/${task.project_id}/` : `instructions/${subscriptionId}/`)
+    : '';
+
+  const initialPrompt = [
+    contextBlock ? `## Context Files\n${contextBlock}` : '',
+    `## Your Assigned Task`,
+    `ID: ${task.id}`,
+    `Title: ${task.title}`,
+    `Description: ${task.description || '(no description)'}`,
+    `Acceptance Criteria: ${task.acceptance_criteria || '(none specified)'}`,
+    `PM Brief: ${task.pm_review_comment || '(none)'}`,
+    `Priority: ${task.priority} | Complexity: ${task.complexity}`,
+    retryCount > 0 ? `\n⚠️ This is retry #${retryCount} — the previous verification failed.` : '',
+    ``,
+    loadRunnerPrompt('verify-document', { taskId: task.id, taskTitle: task.title, boardInstructionsPath, clientPath }),
+  ].filter(Boolean).join('\n');
+
+  const messages = [{ role: 'user', content: initialPrompt }];
+
+  let completed = false;
+  const MAX_ITERATIONS = runner.max_iterations || 30;
+  const MAX_RETRIES = runner.max_retries ?? 1;
+  // Same wall-clock cap as produce_document — see its comment for why this needs to
+  // stay in sync with benchmarkRunner.js's polling timeout.
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 3 * 60 * 1000;
+
+  for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    if (Date.now() - startedAt > MAX_DURATION_MS) {
+      const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      break;
+    }
+
+    let response;
+    try {
+      response = await getClient().messages.create({
+        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: getToolSet(runner),
+        messages,
+      }, { timeout: MAX_DURATION_MS - (Date.now() - startedAt) });
+    } catch (err) {
+      const reason = `API error during verification: ${err.message}`;
+      console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'note', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      break;
+    }
+
+    messages.push({ role: 'assistant', content: response.content });
+
+    if (response.stop_reason === 'end_turn') break;
+
+    const toolResults = [];
+
+    for (const block of response.content) {
+      if (block.type !== 'tool_use') continue;
+
+      let result;
+
+      if (block.name === 'list_files') {
+        const files = listFilesInDir(block.input.path, PROJECT_ROOT);
+        result = files ? { success: true, files } : { error: 'Folder not found' };
+
+      } else if (block.name === 'read_file') {
+        const content = readFileFromDir(block.input.path, PROJECT_ROOT);
+        result = content ? { success: true, content } : { error: 'File not found' };
+
+      } else if (block.name === 'task_log') {
+        const { progress, message } = block.input;
+        if (progress !== undefined) {
+          db.prepare('UPDATE tasks SET progress = ? WHERE id = ?').run(progress, taskId);
+        }
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, agent.id, 'note', message);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] log: ${message}`);
+        broadcastTask(db, taskId);
+        result = { success: true };
+
+      } else if (block.name === 'task_complete') {
+        const { matched_path, passed, summary } = block.input;
+        if (passed) {
+          const newMeta = JSON.stringify({ ...metadata, verified_document_path: matched_path });
+          db.prepare('UPDATE tasks SET progress = 100, column_id = ?, metadata = ? WHERE id = ?').run('col_humanaction', newMeta, taskId);
+          db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), taskId, agent.id, 'verification_passed', summary);
+          db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+            .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', 'Document verified — ready for human sign-off');
+          console.log(`[AgentRunner][${runner.id}][${taskId}] verification passed → Human Action (awaiting sign-off)`);
+          notifyHumanActionMembers(db, taskId, 'Document verified — ready for sign-off').catch(() => {});
+        } else {
+          const newRetryCount = retryCount + 1;
+          if (newRetryCount > MAX_RETRIES) {
+            const maxRetryReason = `Verification failed after ${newRetryCount} attempts: ${summary}`;
+            const newMeta = JSON.stringify({ ...metadata, verified_document_path: matched_path });
+            db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ?, metadata = ? WHERE id = ?')
+              .run('col_humanaction', maxRetryReason, newMeta, taskId);
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
+            console.log(`[AgentRunner][${runner.id}][${taskId}] max retries → Human Action`);
+            notifyHumanActionMembers(db, taskId, maxRetryReason).catch(() => {});
+          } else {
+            const newMeta = JSON.stringify({ ...metadata, verify_retry_count: newRetryCount, verified_document_path: matched_path });
+            db.prepare('UPDATE tasks SET column_id = ?, metadata = ? WHERE id = ?').run('col_inprogress', newMeta, taskId);
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, agent.id, 'verification_failed', `Verification failed (retry ${newRetryCount}/${MAX_RETRIES}): ${summary}`);
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_inprogress', 'Verification failed — sent back to In Progress');
+            console.log(`[AgentRunner][${runner.id}][${taskId}] verification failed → In Progress (retry ${newRetryCount})`);
+          }
+        }
+        broadcastTask(db, taskId);
+        completed = true;
+        result = { success: true };
+
+      } else if (block.name === 'request_human') {
+        const { reason } = block.input;
+        db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+          .run('col_humanaction', reason, taskId);
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+        console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
+        notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+        broadcastTask(db, taskId);
+        completed = true;
+        result = { success: true };
+
+      } else if (block.name === 'invoke_action_hook') {
+        const { action, params } = block.input;
+        result = await runActionHook(action, params, task, agent);
+      }
+
+      toolResults.push({
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: JSON.stringify(result)
+      });
+    }
+
+    if (toolResults.length > 0) {
+      messages.push({ role: 'user', content: toolResults });
+    }
+  }
+}
+
 // ── Dispatch ─────────────────────────────────────────────────────────────────
 // Single entry point — looks up the matching runner by (capability, column)
 // and invokes the named handler. Adding a new runner is purely a registry edit
@@ -1259,6 +1788,8 @@ const TOOL_SETS = {
   clarification_tools: CLARIFICATION_TOOLS,
   implementation_tools: IMPLEMENTATION_TOOLS,
   testing_tools: TESTING_TOOLS,
+  producing_tools: PRODUCING_TOOLS,
+  verifying_tools: VERIFYING_TOOLS,
 };
 
 function getToolSet(runner) {
@@ -1296,6 +1827,8 @@ const HANDLERS = {
   clarify_and_approve: runClarifyAndApprove,
   implement_in_worktree: runImplementInWorktree,
   test_with_retry: runTestWithRetry,
+  produce_document: runProduceDocument,
+  verify_document: runVerifyDocument,
   placeholder: runPlaceholder,
 };
 

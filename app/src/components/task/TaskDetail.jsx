@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check, RotateCcw } from 'lucide-react';
+import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check, RotateCcw, FileText, Download } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useStore } from '../../store';
 import { tasksApi } from '../../api';
 import MarkdownText from '../shared/MarkdownText';
+import DocumentViewerModal from '../shared/DocumentViewerModal';
 import TaskComments from './TaskComments';
 import { PRIORITIES, COMPLEXITIES, PRIORITY_COLORS, PM_STATUS, HUMAN_STATUS, LOG_ACTION } from '../../constants/tasks';
 import { COLUMN } from '../../constants/columns';
@@ -13,6 +14,9 @@ export default function TaskDetail() {
   const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, toggleChecklistItem, setEditingAgent, currentProjectId, projects } = useStore();
   const [task, setTask] = useState(null);
   const [logs, setLogs] = useState([]);
+  // { field, filename } for DocumentViewerModal, or null when closed — set from the
+  // produce_document/verify_document deliverable block below.
+  const [viewingDocument, setViewingDocument] = useState(null);
 
   // Auto-complete (PR-based) only means something when the board both does coder
   // work and has an actual git repo connected to open a PR against.
@@ -412,6 +416,7 @@ export default function TaskDetail() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
+    <>
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
       <div className="bg-surface-1 border border-border rounded-xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-slide-in overflow-hidden">
 
@@ -553,6 +558,32 @@ export default function TaskDetail() {
                 </a>
               </div>
             )}
+
+            {/* Produced/verified document — the file produce_document/verify_document wrote,
+                see agentRunner.js's task.metadata.produced_document_path/verified_document_path. */}
+            {(task.metadata?.produced_document_path || task.metadata?.verified_document_path) && (() => {
+              const field = task.metadata.produced_document_path ? 'produced' : 'verified';
+              const docPath = task.metadata.produced_document_path || task.metadata.verified_document_path;
+              const filename = docPath.split('/').pop();
+              return (
+                <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-gray-500/5 border border-gray-500/15">
+                  <FileText size={14} className="text-gray-500 shrink-0" />
+                  <span className="text-sm text-gray-500 truncate flex-1 font-mono">{filename}</span>
+                  <button
+                    onClick={() => setViewingDocument({ field, filename })}
+                    className="text-xs px-2 py-1 rounded-md bg-surface-3 text-gray-300 border border-border hover:text-gray-100 transition-colors shrink-0"
+                  >
+                    Open
+                  </button>
+                  <button
+                    onClick={() => tasksApi.downloadDocument(task.id, field, filename)}
+                    className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-surface-3 text-gray-300 border border-border hover:text-gray-100 transition-colors shrink-0"
+                  >
+                    <Download size={11} /> Download
+                  </button>
+                </div>
+              );
+            })()}
 
             {/* Human action notice (non-PR blocks) */}
             {task.requires_human_action === 1 && !task.pr_url && (
@@ -1266,5 +1297,14 @@ export default function TaskDetail() {
         </div>
       </div>
     </div>
+    {viewingDocument && (
+      <DocumentViewerModal
+        taskId={task.id}
+        field={viewingDocument.field}
+        filename={viewingDocument.filename}
+        onClose={() => setViewingDocument(null)}
+      />
+    )}
+    </>
   );
 }

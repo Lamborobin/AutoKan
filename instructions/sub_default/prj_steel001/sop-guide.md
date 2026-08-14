@@ -1,5 +1,5 @@
 ---
-capabilities: perm_producing,perm_architect
+capabilities: perm_producing
 ---
 
 # SOP Writer Guide

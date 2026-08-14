@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format } from 'date-fns';
-import { Check, XCircle, Circle, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles, Trash2, User } from 'lucide-react';
+import { Check, XCircle, Circle, Loader2, Play, ChevronDown, ChevronRight, Plus, Sparkles, Trash2, User, Download } from 'lucide-react';
 import { useStore } from '../../store';
 import { tasksApi } from '../../api';
 import MarkdownText from '../shared/MarkdownText';
+import DocumentViewerModal from '../shared/DocumentViewerModal';
 import NewBenchmarkTaskModal from './NewBenchmarkTaskModal';
 
 const REVIEW_LEVELS = [
@@ -70,6 +71,16 @@ const TOOL_LABELS = {
   approve_task: 'approved the task',
   suggest_split: 'suggested splitting the task',
   suggest_abandon: 'suggested abandoning the task',
+  task_complete: 'produced the document',
+  task_complete_pass: 'verified the document as passing',
+  task_complete_fail: 'verified the document as failing',
+  request_human: 'escalated to a human',
+};
+
+const CAPABILITY_LABELS = {
+  perm_planning: 'Planning',
+  perm_producing: 'Producing',
+  perm_verifying: 'Verifying',
 };
 
 function toolLabel(tool) {
@@ -200,13 +211,17 @@ function RuleCompliance({ result }) {
   );
 }
 
-// On-demand — fetches the probing task's actual planner output (the question it
-// asked, the checklist it built, any review comment) so a manual reviewer has
-// something to read, not just the derived pass/fail checks.
-function PlannerOutput({ taskId }) {
+// On-demand — fetches the probing task's actual output so a manual reviewer has
+// something to read, not just the derived pass/fail checks. Shape depends on
+// which capability was probed: Planning writes its output onto task fields
+// (pm_pending_question/pm_review_comment/pm_checklist); Producing/Verifying
+// write theirs as a task_log entry (the task_complete summary) plus a document
+// path in task.metadata — see agentRunner.js's produce_document/verify_document.
+function AgentOutput({ taskId, capability }) {
   const [open, setOpen] = useState(false);
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [viewingDocument, setViewingDocument] = useState(false);
 
   async function handleToggle() {
     if (!open && !task) {
@@ -218,27 +233,48 @@ function PlannerOutput({ taskId }) {
     setOpen(v => !v);
   }
 
+  const isPlanning = capability === 'perm_planning';
   // tasksApi.get() already returns pm_checklist parsed (server/src/routes/tasks.js) — don't re-parse it.
   const checklist = task?.pm_checklist || [];
-  const hasContent = task?.pm_pending_question || task?.pm_review_comment || checklist.length > 0;
+
+  const summaryLog = capability === 'perm_producing'
+    ? task?.logs?.find(l => l.action === 'document_produced')
+    : capability === 'perm_verifying'
+    ? task?.logs?.find(l => ['verification_passed', 'verification_failed'].includes(l.action))
+    : null;
+  const docField = capability === 'perm_producing' ? 'produced' : capability === 'perm_verifying' ? 'verified' : null;
+  const docPath = capability === 'perm_producing'
+    ? task?.metadata?.produced_document_path
+    : capability === 'perm_verifying'
+    ? task?.metadata?.verified_document_path
+    : null;
+  const docFilename = docPath?.split('/').pop();
+
+  const hasContent = isPlanning
+    ? (task?.pm_pending_question || task?.pm_review_comment || checklist.length > 0)
+    : !!(summaryLog || docPath);
+
+  const label = capability === 'perm_producing' ? 'What the producer wrote'
+    : capability === 'perm_verifying' ? 'What the verifier found'
+    : 'What the planner said';
 
   return (
     <div>
       <button onClick={handleToggle} className="flex items-center gap-1.5 text-xs font-medium text-gray-400 hover:text-gray-200 transition-colors">
-        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} What the planner said
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />} {label}
       </button>
 
       {open && (
         <div className="mt-2 space-y-3">
           {loading && <p className="text-sm text-gray-600 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Loading…</p>}
 
-          {!loading && (task?.pm_pending_question || task?.pm_review_comment) && (
+          {!loading && isPlanning && (task?.pm_pending_question || task?.pm_review_comment) && (
             <div className="border-l-2 border-border pl-2.5">
               <MarkdownText text={task.pm_pending_question || task.pm_review_comment} className="text-sm text-gray-100 leading-relaxed" />
             </div>
           )}
 
-          {!loading && checklist.length > 0 && (
+          {!loading && isPlanning && checklist.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Checklist</p>
               <ul className="space-y-1">
@@ -256,14 +292,37 @@ function PlannerOutput({ taskId }) {
             </div>
           )}
 
+          {!loading && !isPlanning && summaryLog && (
+            <div className="border-l-2 border-border pl-2.5">
+              <MarkdownText text={summaryLog.message} className="text-sm text-gray-100 leading-relaxed" />
+            </div>
+          )}
+
+          {!loading && !isPlanning && docPath && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-mono truncate flex-1">{docFilename}</span>
+              <button onClick={() => setViewingDocument(true)}
+                className="text-xs px-2 py-1 rounded-md bg-surface-3 text-gray-300 border border-border hover:text-gray-100 transition-colors shrink-0">
+                Open
+              </button>
+              <button onClick={() => tasksApi.downloadDocument(taskId, docField, docFilename)}
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded-md bg-surface-3 text-gray-300 border border-border hover:text-gray-100 transition-colors shrink-0">
+                <Download size={11} /> Download
+              </button>
+            </div>
+          )}
+
           {!loading && !hasContent && <p className="text-sm text-gray-600">Nothing recorded for this run.</p>}
         </div>
+      )}
+      {viewingDocument && (
+        <DocumentViewerModal taskId={taskId} field={docField} filename={docFilename} onClose={() => setViewingDocument(false)} />
       )}
     </div>
   );
 }
 
-function RunCard({ run, caseId }) {
+function RunCard({ run, caseId, capability }) {
   const { reviewRunWithAI, submitManualReviewForRun } = useStore();
   const [reviewing, setReviewing] = useState(false);
   const [level, setLevel] = useState('accepted');
@@ -313,14 +372,14 @@ function RunCard({ run, caseId }) {
 
       <div className="p-3 space-y-2.5">
         {['pending', 'dispatched'].includes(run.status) && (
-          <p className="text-sm text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the planner…</p>
+          <p className="text-sm text-gray-500 flex items-center gap-1.5"><Loader2 size={11} className="animate-spin" /> Waiting for the agent…</p>
         )}
 
         {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
 
         {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
 
-        {run.status === 'completed' && <PlannerOutput taskId={run.probing_task_id} />}
+        {run.status === 'completed' && <AgentOutput taskId={run.probing_task_id} capability={capability} />}
 
         {run.status === 'completed' && (
           <div className="border-t border-border/50 mt-1 pt-2.5 space-y-2">
@@ -439,13 +498,19 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
           </button>
           {showDescription && <MarkdownText text={c.description} className="text-sm text-gray-500 mt-1.5" />}
         </div>
-        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide shrink-0">
-          {SOURCE_LABEL[c.source] || c.source}
-        </span>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/25 uppercase tracking-wide">
+            Capability: {CAPABILITY_LABELS[c.capability] || CAPABILITY_LABELS.perm_planning}
+          </span>
+          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-400 border border-border uppercase tracking-wide">
+            {SOURCE_LABEL[c.source] || c.source}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
         <button onClick={handleRun} disabled={running || !targetProjectId}
+          title={c.capability === 'perm_verifying' ? 'Runs Producing first to generate a real document, then Verifying checks it' : undefined}
           className="flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
           {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
         </button>
@@ -471,7 +536,7 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
               <p className="text-xs font-semibold text-gray-600 uppercase tracking-widest mb-2.5">
                 {selectedRun.id === runs[0].id ? 'Latest run' : 'Selected run'}
               </p>
-              <RunCard run={selectedRun} caseId={c.id} />
+              <RunCard run={selectedRun} caseId={c.id} capability={c.capability} />
             </div>
             {otherRuns.length > 0 && (
               <div>

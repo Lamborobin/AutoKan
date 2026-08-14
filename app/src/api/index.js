@@ -32,11 +32,30 @@ export const projectsApi = {
   delete: (id) => api.delete(`/projects/${id}`).then(r => r.data),
   clone: (id, data) => api.post(`/projects/${id}/clone`, data).then(r => r.data),
   clientRepos: () => api.get('/projects/client-repos').then(r => r.data),
+  sectors: () => api.get('/projects/sectors').then(r => r.data),
 };
 
 export const tasksApi = {
   list: (params) => api.get('/tasks', { params }).then(r => r.data),
   get: (id) => api.get(`/tasks/${id}`).then(r => r.data),
+  // field: 'produced' (default) or 'verified' — see agentRunner.js's task.metadata
+  // produced_document_path / verified_document_path.
+  getDocument: (id, field) =>
+    api.get(`/tasks/${id}/document`, { params: field ? { field } : {}, responseType: 'text' }).then(r => r.data),
+  downloadDocument: async (id, field, filename) => {
+    const res = await api.get(`/tasks/${id}/document`, {
+      params: { ...(field ? { field } : {}), download: 'true' },
+      responseType: 'blob',
+    });
+    const url = URL.createObjectURL(res.data);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'document.md';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   create: (data) => api.post('/tasks', data).then(r => r.data),
   update: (id, data) => api.patch(`/tasks/${id}`, data).then(r => r.data),
   move: (id, column_id, message) => api.post(`/tasks/${id}/move`, { column_id, message }).then(r => r.data),

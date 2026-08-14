@@ -1,5 +1,5 @@
 ---
-capabilities: perm_producing
+capabilities: perm_planning,perm_producing,perm_verifying
 ---
 
 # Guide för policy- och dokumentförfattare

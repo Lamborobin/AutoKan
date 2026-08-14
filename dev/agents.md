@@ -30,6 +30,8 @@ The gradient is **actions → constraints → methodology → cosmetics**, thoug
 
 Capability Behavior, Workspace, and Board files (layers 4–6) are meant to be edited by anyone, including non-technical users adding domain context, tone, or methodology hints. They must never describe runner mechanics — tool names, git workflows, write-scope paths, retry behaviour, column transitions, PR creation, exit conditions, etc. That information already lives where the system enforces it: handler code, tool descriptions, `runners.json`. This separation is a guardrail — nothing written in an instruction file can break the runner's contract. The seeded prompts (`planning.md`, `dev-implement.md`, `run-code-tests.md`) are the reference shape: voice, methodology, ethics, communication style — never which tool to call when.
 
+Concretely, an instruction file should never tell the agent to call a named tool (`write_file`, `list_files`, ...), read another specific context file by name ("read client.md first"), or run a shell/PowerShell command. Tools are the bridge between internal code and what an agent can do — that bridge is wired in `agentRunner.js` and the runner-mechanics prompts (layer 2), not authored by whoever edits a board file. Nothing stops a person from typing mechanics-flavoured text into a board file and having it happen to work (the model just reads it as prose), but that's not the intended shape — if it needs enforcing, it belongs in code, not in something anyone with edit access can quietly rely on.
+
 ### Worked example — a single Coder agent
 
 | Layer | Example content |
@@ -58,8 +60,8 @@ Assembled once into the agent's starting context bundle (see the layering note a
 - **Capability Behavior** — the runner's `personality_file` (e.g. `dev-implement.md`), resolved to the most specific version that exists.
 - **Runner mechanics prompt** — the `server/src/services/runner-prompts/*.md` file matching the current turn (e.g. first-contact vs follow-up for the Planner). Not user-editable — this is Layer 2 above.
 - **Capability docs** — the `docs/` files mapped to the agent's capability, picked up from `context_docs` in `runners.json` (every capability currently maps to `docs/rules.md` — Layer 3, System Behavior, above; the registry is the source of truth for the mapping, not duplicated here).
-- **Workspace files** — every top-level `.md` in `instructions/{sub}/` (excluding capability behavior files, already in the system prompt).
-- **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring.
+- **Workspace files** — every top-level `.md` in `instructions/{sub}/` (excluding capability behavior files, already in the system prompt). Unconditional — no capability filtering, unlike board files below. A workspace file applies across every board in the subscription, so it's meant to stay generic enough for any capability to read; scoping it to one role belongs at board level instead.
+- **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring. This is where role-scoping actually happens: a file's own `capabilities:` front matter is optional, not required — absent means visible to every agent on the board (`client.md`'s case); present means visible only to agents whose capability is in that list (e.g. `doc-guide.md` carries `capabilities: perm_producing`, so a Producer's context picks it up automatically and a Coder's does not — no separate registration anywhere, the board folder is scanned fresh per agent).
 - **Always** — the app agent's base instruction file, for every agent; the project's human-facing setup file, additionally, for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
 
 ### Path resolution

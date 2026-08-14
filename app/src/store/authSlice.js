@@ -31,6 +31,7 @@ export const createAuthSlice = (set, get) => ({
       await Promise.all([get().loadProjects(), get().fetchUsers(), get().loadNotifications()]);
       await get().loadSubscription();
       await get().loadClients();
+      await get().loadSectors();
     } catch {
       localStorage.removeItem('fa_token');
       set({ user: null, authLoading: false });
@@ -47,6 +48,7 @@ export const createAuthSlice = (set, get) => ({
       await Promise.all([get().loadProjects(), get().fetchUsers(), get().loadNotifications()]);
       await get().loadSubscription();
       await get().loadClients();
+      await get().loadSectors();
     } catch (e) {
       set({ authError: e.response?.data?.error || 'Sign-in failed. Please try again.' });
     }
