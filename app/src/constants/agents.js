@@ -1,11 +1,14 @@
 // ── Claude model options ──────────────────────────────────────
-export const MODELS = [
-  { value: 'claude-opus-4-8',           label: 'Opus 4.8 — most capable', shortLabel: 'Opus 4.8' },
-  { value: 'claude-sonnet-4-6',         label: 'Sonnet 4.6 — balanced', shortLabel: 'Sonnet 4.6' },
+// Static fallback only — the live list comes from GET /api/constants via the
+// store's `models`/`modelsDefault` (see store/modelsSlice.js). Used before the
+// first successful fetch and if the app is offline.
+export const FALLBACK_MODELS = [
+  { value: 'claude-opus-5',    label: 'Opus 5 — most capable', shortLabel: 'Opus 5' },
+  { value: 'claude-sonnet-5',  label: 'Sonnet 5 — balanced', shortLabel: 'Sonnet 5' },
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5 — fastest', shortLabel: 'Haiku 4.5' },
 ];
 
-export const DEFAULT_AGENT_MODEL = MODELS[1].shortLabel;
+export const FALLBACK_DEFAULT_MODEL = FALLBACK_MODELS[1].value;
 
 // ── Agent avatar color swatches ───────────────────────────────
 export const COLORS = [

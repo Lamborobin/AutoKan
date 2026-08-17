@@ -32,6 +32,7 @@ export const createBoardSlice = (set, get) => ({
       set({ columns, tasks, archivedTasks, agents, agentTemplates, roles, loading: false });
       get().loadBoardMembers().catch(() => {});
       get().loadTeams().catch(() => {});
+      get().loadModels().catch(() => {});
       const { _pendingTaskId } = get();
       if (_pendingTaskId) {
         const target = tasks.find(t => t.id === _pendingTaskId);

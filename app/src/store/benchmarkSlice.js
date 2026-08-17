@@ -12,11 +12,11 @@ function pollRun(get, set, caseId, runId) {
   activePolls.add(runId);
 
   const POLL_MS = 2000;
-  // Matches benchmarkRunner.js's pollAndScore/waitForSettlement timeout (210s) — this
+  // Matches benchmarkRunner.js's pollAndScore/waitForSettlement timeout (270s) — this
   // must stay >= the backend's own timeout, or the UI stops polling and goes stale
   // before the backend even finishes, showing "waiting" forever on a run that actually
   // completed. A margin over the backend value covers request/poll-tick latency.
-  const TIMEOUT_MS = 240000;
+  const TIMEOUT_MS = 300000;
   const deadline = Date.now() + TIMEOUT_MS;
 
   const stop = () => activePolls.delete(runId);
@@ -71,6 +71,14 @@ export const createBenchmarkSlice = (set, get) => ({
     const created = await benchmarkApi.createCase(data);
     set(s => ({ benchmarkCases: [created, ...s.benchmarkCases] }));
     return created;
+  },
+
+  // For a case whose background rubric draft never landed (rubric stays {} forever
+  // with no automatic AI review) — regenerates it on demand.
+  async draftRubricForCase(caseId) {
+    const updated = await benchmarkApi.draftRubric(caseId);
+    set(s => ({ benchmarkCases: s.benchmarkCases.map(c => c.id === caseId ? updated : c) }));
+    return updated;
   },
 
   async deleteBenchmarkCase(id) {

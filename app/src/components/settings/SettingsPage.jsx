@@ -27,6 +27,36 @@ function safeFileName(name) {
     .slice(0, 100);
 }
 
+// Picker for which capabilities a board file is visible to.
+// Empty selection = visible to every agent ("All agents").
+// Defined at module scope (not inside SettingsPage) so its component identity
+// stays stable across re-renders — otherwise React remounts it on every
+// keystroke/click, which reset its internal scroll position to the top.
+function CapabilityPicker({ selected, onChange, capabilityRoles }) {
+  const allAgents = selected.length === 0;
+  return (
+    <div className="bg-surface-3 border border-border rounded-lg p-2 space-y-1 max-h-56 overflow-y-auto">
+      <label className="flex items-center gap-1.5 px-0.5 cursor-pointer">
+        <input type="checkbox" className="accent-accent w-2.5 h-2.5" checked={allAgents} onChange={() => onChange([])} />
+        <span className="text-xs text-gray-300 font-medium">All agents</span>
+        <span className="text-xs text-gray-600">· no restriction</span>
+      </label>
+      <div className="border-t border-border my-0.5 opacity-50" />
+      {capabilityRoles.length === 0 && <p className="text-xs text-gray-600 px-0.5">No capabilities available.</p>}
+      {capabilityRoles.map(role => (
+        <label key={role.id} className={`flex items-center gap-1.5 px-0.5 cursor-pointer ${allAgents ? 'opacity-50' : ''}`}>
+          <input type="checkbox" className="accent-accent w-2.5 h-2.5"
+            checked={selected.includes(role.id)}
+            onChange={e => onChange(e.target.checked ? [...selected, role.id] : selected.filter(c => c !== role.id))}
+          />
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: role.color }} />
+          <span className="text-xs text-gray-400">{role.name}</span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
 // ─── Main component ─────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const {
@@ -84,6 +114,12 @@ export default function SettingsPage() {
   // rather than hardcoded — keeps client/board sector badges and pickers in sync with it.
   const sectorMeta = useMemo(
     () => Object.fromEntries((sectors || []).map(s => [s.id, { label: s.label, color: s.color }])),
+    [sectors],
+  );
+
+  // Clients are companies/organisations — 'personal' is a board-only sector with no client attached.
+  const clientSectors = useMemo(
+    () => (sectors || []).filter(s => s.id !== 'personal'),
     [sectors],
   );
 
@@ -425,33 +461,6 @@ export default function SettingsPage() {
         style={{ background: meta.color + '20', color: meta.color }}>
         {meta.label}
       </span>
-    );
-  }
-
-  // Picker for which capabilities a board file is visible to.
-  // Empty selection = visible to every agent ("All agents").
-  function CapabilityPicker({ selected, onChange }) {
-    const allAgents = selected.length === 0;
-    return (
-      <div className="bg-surface-3 border border-border rounded-lg p-2 space-y-1 max-h-56 overflow-y-auto">
-        <label className="flex items-center gap-1.5 px-0.5 cursor-pointer">
-          <input type="checkbox" className="accent-accent w-2.5 h-2.5" checked={allAgents} onChange={() => onChange([])} />
-          <span className="text-xs text-gray-300 font-medium">All agents</span>
-          <span className="text-xs text-gray-600">· no restriction</span>
-        </label>
-        <div className="border-t border-border my-0.5 opacity-50" />
-        {capabilityRoles.length === 0 && <p className="text-xs text-gray-600 px-0.5">No capabilities available.</p>}
-        {capabilityRoles.map(role => (
-          <label key={role.id} className={`flex items-center gap-1.5 px-0.5 cursor-pointer ${allAgents ? 'opacity-50' : ''}`}>
-            <input type="checkbox" className="accent-accent w-2.5 h-2.5"
-              checked={selected.includes(role.id)}
-              onChange={e => onChange(e.target.checked ? [...selected, role.id] : selected.filter(c => c !== role.id))}
-            />
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: role.color }} />
-            <span className="text-xs text-gray-400">{role.name}</span>
-          </label>
-        ))}
-      </div>
     );
   }
 
@@ -1000,41 +1009,55 @@ export default function SettingsPage() {
             </div>
             <p className="text-sm text-gray-500 mb-6">Companies and organisations this workspace serves.</p>
 
-            {/* Add client form */}
+            {/* Add client modal */}
             {addingClient && (
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                if (!clientName.trim()) return;
-                setCreatingClient(true);
-                try {
-                  await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null, sector: clientSector });
-                  setClientName(''); setClientWebsite(''); setClientSector('software'); setAddingClient(false); setClientError('');
-                } catch(err) {
-                  setClientError(err.response?.data?.error || 'Failed to create client');
-                } finally { setCreatingClient(false); }
-              }} className="border border-border rounded-xl p-3 space-y-2 bg-surface-2 mb-4 max-w-md">
-                <input value={clientName} onChange={e => setClientName(e.target.value)}
-                  placeholder="Client name" autoFocus
-                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
-                <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
-                  placeholder="Website (optional)"
-                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
-                <select value={clientSector} onChange={e => setClientSector(e.target.value)}
-                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/50">
-                  {sectors.map(s => (
-                    <option key={s.id} value={s.id}>{s.label}</option>
-                  ))}
-                </select>
-                {clientError && <p className="text-sm text-red-400">{clientError}</p>}
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientSector('software'); setClientError(''); }}
-                    className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
-                  <button type="submit" disabled={creatingClient || !clientName.trim()}
-                    className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
-                    {creatingClient ? 'Creating…' : 'Create'}
-                  </button>
+              <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" data-modal-backdrop="static">
+                <div className="bg-surface-2 border border-border rounded-xl w-full max-w-md animate-slide-in">
+                  <div className="flex items-center justify-between p-5 border-b border-border">
+                    <h2 className="text-base font-semibold text-gray-100">Add client</h2>
+                    <button
+                      type="button"
+                      onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientSector('software'); setClientError(''); }}
+                      className="btn-ghost p-1.5 rounded-lg"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                  <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!clientName.trim()) return;
+                    setCreatingClient(true);
+                    try {
+                      await createClient({ name: clientName.trim(), website: clientWebsite.trim() || null, sector: clientSector });
+                      setClientName(''); setClientWebsite(''); setClientSector('software'); setAddingClient(false); setClientError('');
+                    } catch(err) {
+                      setClientError(err.response?.data?.error || 'Failed to create client');
+                    } finally { setCreatingClient(false); }
+                  }} className="p-5 space-y-3">
+                    <input value={clientName} onChange={e => setClientName(e.target.value)}
+                      placeholder="Client name" autoFocus
+                      className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                    <input value={clientWebsite} onChange={e => setClientWebsite(e.target.value)}
+                      placeholder="Website (optional)"
+                      className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-accent/50" />
+                    <select value={clientSector} onChange={e => setClientSector(e.target.value)}
+                      className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-200 outline-none focus:border-accent/50">
+                      {clientSectors.map(s => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                    {clientError && <p className="text-sm text-red-400">{clientError}</p>}
+                    <div className="flex gap-2 pt-1">
+                      <button type="button" onClick={() => { setAddingClient(false); setClientName(''); setClientWebsite(''); setClientSector('software'); setClientError(''); }}
+                        className="flex-1 py-1.5 text-sm text-gray-500 hover:text-gray-100 border border-border rounded-lg hover:bg-surface-3">Cancel</button>
+                      <button type="submit" disabled={creatingClient || !clientName.trim()}
+                        className="flex-1 py-1.5 text-sm font-medium text-white bg-accent hover:bg-accent/80 rounded-lg disabled:opacity-40">
+                        {creatingClient ? 'Creating…' : 'Create'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              </form>
+              </div>
             )}
 
             {/* Clients table — full width */}
@@ -1087,6 +1110,7 @@ export default function SettingsPage() {
                   key: 'sector',
                   label: 'Sector',
                   width: '140px',
+                  sortable: true,
                   render: (client) => {
                     const meta = sectorMeta[client.sector] ?? { label: client.sector || '—', color: '#6b7280' };
                     return (
@@ -1119,7 +1143,7 @@ export default function SettingsPage() {
                 {
                   key: 'sector',
                   label: 'Sector',
-                  options: sectors.map(s => ({ value: s.id, label: s.label })),
+                  options: clientSectors.map(s => ({ value: s.id, label: s.label })),
                 },
               ]}
               emptyMessage="No clients yet"
@@ -1321,6 +1345,7 @@ export default function SettingsPage() {
                       <CapabilityPicker
                         selected={selectedFile.capabilities || []}
                         onChange={handleCapabilitiesChange}
+                        capabilityRoles={capabilityRoles}
                       />
                       <p className="text-xs text-gray-600 mt-1">Controls which agents load this file as context.</p>
                     </div>

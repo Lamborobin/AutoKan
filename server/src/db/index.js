@@ -128,7 +128,7 @@ function applySchema(db) {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       role TEXT NOT NULL,
-      model TEXT DEFAULT 'claude-sonnet-4-5',
+      model TEXT DEFAULT 'claude-sonnet-5',
       description TEXT,
       permissions TEXT NOT NULL DEFAULT '[]',
       role_ids TEXT DEFAULT '[]',
@@ -149,7 +149,7 @@ function applySchema(db) {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT,
-      model TEXT DEFAULT 'claude-sonnet-4-5',
+      model TEXT DEFAULT 'claude-sonnet-5',
       color TEXT DEFAULT '#6366f1',
       suggested_role TEXT,
       template_system_prompt TEXT,
@@ -323,6 +323,22 @@ function applySchema(db) {
       triggered_by TEXT REFERENCES users(id),
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       completed_at DATETIME
+    );
+
+    -- ── Instruction file visibility (which capabilities a board/workspace file is
+    -- visible to) — stored here instead of as front matter inside the .md file, so
+    -- toggling "Visible to" in Settings never touches the file's text content. The
+    -- file itself stays plain prose; project_id is '' (not NULL) for subscription-level
+    -- files so the UNIQUE constraint below actually dedupes them (SQLite treats every
+    -- NULL as distinct, which would let duplicate rows through).
+    CREATE TABLE IF NOT EXISTS instruction_file_visibility (
+      id TEXT PRIMARY KEY,
+      subscription_id TEXT NOT NULL,
+      project_id TEXT NOT NULL DEFAULT '',
+      filename TEXT NOT NULL,
+      capabilities TEXT NOT NULL DEFAULT '[]',
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(subscription_id, project_id, filename)
     );
 
     -- ── Triggers (updated_at) ────────────────────────────────

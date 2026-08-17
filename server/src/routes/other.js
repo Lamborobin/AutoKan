@@ -5,6 +5,7 @@ const path = require('path');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent } = require('../middleware/auth');
 const { broadcast } = require('../sse');
+const { loadModels } = require('../services/modelRegistry');
 
 const PROJECT_ROOT = path.join(__dirname, '../../..');
 
@@ -84,11 +85,12 @@ agentsRouter.post('/', (req, res) => {
 
   const db = getDb();
   const {
-    name, role, model = 'claude-sonnet-4-5', description,
+    name, role, model, description,
     permissions = [], personality_file, color = '#6366f1',
     created_from_template_id, system_prompt: bodySystemPrompt,
     project_id,
   } = req.body;
+  const resolvedModel = model || loadModels().defaultModel;
   if (!name || !role) return res.status(400).json({ error: 'name and role are required' });
 
   const permErr = validateAgentRoles(req.body.role_ids || []);
@@ -116,7 +118,7 @@ agentsRouter.post('/', (req, res) => {
   db.prepare(`
     INSERT INTO agents (id, name, role, model, description, permissions, personality_file, color, created_from_template_id, is_template, system_prompt, role_ids, project_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, role, model, description, JSON.stringify(permissions), personality_file, color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
+  `).run(id, name, role, resolvedModel, description, JSON.stringify(permissions), personality_file, color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
 
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   res.status(201).json(parseAgent(agent));
@@ -419,9 +421,15 @@ const RUNNER_PERSONALITY_FILES = new Set(
     .map(p => path.basename(p))
 );
 
-// Split YAML-style front matter from markdown content.
-// Returns { capabilities: string[], body: string (without front matter) }.
+// Legacy reader only — old files may still carry a `capabilities:` front-matter block
+// from before visibility moved to the DB (instruction_file_visibility below). Used
+// exclusively as a one-time fallback when no DB row exists yet for a file, so nothing
+// that was already scoped silently becomes visible to everyone. Never used for writes.
 function splitFrontMatter(content) {
+  // Normalize CRLF first — see agentRunner.js's parseFrontMatter for the full story:
+  // a CRLF-saved file silently fails the '---\n' check and the raw block leaks into
+  // the returned body instead of being stripped.
+  content = content.replace(/\r\n/g, '\n');
   if (!content.startsWith('---\n')) return { capabilities: [], body: content };
   const end = content.indexOf('\n---', 4);
   if (end === -1) return { capabilities: [], body: content };
@@ -435,18 +443,34 @@ function splitFrontMatter(content) {
   return { capabilities: caps, body: content.slice(end + 5).replace(/^\n+/, '') };
 }
 
-// Parse capabilities from a file's front matter. Returns [] if none/missing.
-function readCapabilities(filePath) {
+// Visibility ("which capabilities can see this file") lives in instruction_file_visibility,
+// never in the file's own text — so toggling it in Settings can never touch, duplicate,
+// or corrupt the file's content, and editing content can never touch visibility. project_id
+// is stored as '' (not NULL) for subscription-level files — see the table's own comment.
+function getFileCapabilities(db, subscriptionId, projectId, filename, filePath) {
+  const row = db.prepare(
+    'SELECT capabilities FROM instruction_file_visibility WHERE subscription_id = ? AND project_id = ? AND filename = ?'
+  ).get(subscriptionId || '', projectId || '', filename);
+  if (row) {
+    try { return JSON.parse(row.capabilities); } catch { return []; }
+  }
+  // No DB row yet — this file predates the move to DB-backed visibility. Fall back to
+  // whatever its front matter says (legacy read only) so existing scoping isn't lost;
+  // the next explicit visibility save persists it to the DB and the front matter is
+  // dropped from the file for good.
+  if (!filePath) return [];
   try { return splitFrontMatter(fs.readFileSync(filePath, 'utf8')).capabilities; }
   catch { return []; }
 }
 
-// Write front matter + body to a file. Empty capabilities = no front matter.
-function writeMdWithFrontMatter(filePath, body, capabilities) {
-  const fm = capabilities?.length
-    ? `---\ncapabilities: ${capabilities.join(',')}\n---\n\n`
-    : '';
-  fs.writeFileSync(filePath, fm + body, 'utf8');
+function setFileCapabilities(db, subscriptionId, projectId, filename, capabilities) {
+  const id = 'ifv_' + uuidv4().replace(/-/g, '').slice(0, 12);
+  db.prepare(`
+    INSERT INTO instruction_file_visibility (id, subscription_id, project_id, filename, capabilities, updated_at)
+    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(subscription_id, project_id, filename)
+    DO UPDATE SET capabilities = excluded.capabilities, updated_at = CURRENT_TIMESTAMP
+  `).run(id, subscriptionId || '', projectId || '', filename, JSON.stringify(capabilities || []));
 }
 
 /**
@@ -483,6 +507,7 @@ function fileKind(filename, projectId) {
 }
 
 function listInstructionFiles(includeArchived, subscriptionId, projectId) {
+  const db = getDb();
   const { dir, archivedDir } = getInstructionsDirs(subscriptionId, projectId);
   const prefix = folderPrefix(subscriptionId, projectId);
 
@@ -490,7 +515,7 @@ function listInstructionFiles(includeArchived, subscriptionId, projectId) {
     ? fs.readdirSync(dir)
         .filter(f => f.endsWith('.md'))
         .map(f => {
-          const caps = readCapabilities(path.join(dir, f));
+          const caps = getFileCapabilities(db, subscriptionId, projectId, f, path.join(dir, f));
           return {
             path: `${prefix}/${f}`,
             name: f.replace('.md', ''),
@@ -513,7 +538,7 @@ function listInstructionFiles(includeArchived, subscriptionId, projectId) {
           name: f.replace('.md', ''),
           label: f.replace('.md', '').replace(/_/g, ' '),
           archived: true,
-          capabilities: readCapabilities(path.join(archivedDir, f)),
+          capabilities: getFileCapabilities(db, subscriptionId, projectId, f, path.join(archivedDir, f)),
           protected: RUNNER_PERSONALITY_FILES.has(f),
           kind: fileKind(f, projectId),
         }))
@@ -549,11 +574,17 @@ instructionsRouter.get('/:filename', attachAgent, (req, res) => {
   }
   const subscriptionId = req.query.subscription_id || null;
   const projectId = req.query.project_id || null;
+  const db = getDb();
   const { dir, archivedDir } = getInstructionsDirs(subscriptionId, projectId);
 
-  // Returns { content (body, no front matter), capabilities, protected, archived }
+  // Returns { content (body, no front matter), capabilities, protected, archived }.
+  // Visibility comes from the DB (getFileCapabilities), never from the file — but a
+  // legacy file may still physically carry a front-matter block from before that move,
+  // so it's still stripped here for display. Since PATCH below no longer re-adds front
+  // matter, the first save of a legacy file naturally rewrites it as plain content.
   const respond = (filePath, archived) => {
-    const { capabilities, body } = splitFrontMatter(fs.readFileSync(filePath, 'utf8'));
+    const { body } = splitFrontMatter(fs.readFileSync(filePath, 'utf8'));
+    const capabilities = getFileCapabilities(db, subscriptionId, projectId, filename, filePath);
     return res.json({ content: body, capabilities, protected: RUNNER_PERSONALITY_FILES.has(filename), kind: fileKind(filename, projectId), archived });
   };
 
@@ -580,6 +611,7 @@ instructionsRouter.patch('/:filename', (req, res) => {
 
   const subscriptionId = req.query.subscription_id || null;
   const projectId = req.query.project_id || null;
+  const db = getDb();
   const { dir, archivedDir } = getInstructionsDirs(subscriptionId, projectId);
 
   const target = fs.existsSync(path.join(dir, filename))
@@ -589,11 +621,19 @@ instructionsRouter.patch('/:filename', (req, res) => {
       : null;
   if (!target) return res.status(404).json({ error: 'File not found' });
 
-  // capabilities provided → use it; absent → preserve existing front matter
-  const caps = Array.isArray(capabilities)
-    ? capabilities.filter(c => typeof c === 'string' && c.startsWith('perm_'))
-    : readCapabilities(target);
-  writeMdWithFrontMatter(target, content, caps);
+  // Content and visibility are two independent writes now — editing the text never
+  // touches capabilities, and changing "Visible to" never touches the file. The file
+  // itself is always written as plain content, no front matter, regardless of which
+  // one changed (a legacy file that still has an embedded block gets it dropped the
+  // first time either one is saved, since `content` here is already the stripped body
+  // the editor showed).
+  fs.writeFileSync(target, content, 'utf8');
+
+  let caps = getFileCapabilities(db, subscriptionId, projectId, filename, target);
+  if (Array.isArray(capabilities)) {
+    caps = capabilities.filter(c => typeof c === 'string' && c.startsWith('perm_'));
+    setFileCapabilities(db, subscriptionId, projectId, filename, caps);
+  }
   res.json({ ok: true, capabilities: caps });
 });
 
@@ -630,7 +670,8 @@ instructionsRouter.post('/', (req, res) => {
   }
 
   const caps = Array.isArray(capabilities) ? capabilities.filter(c => typeof c === 'string' && c.startsWith('perm_')) : [];
-  writeMdWithFrontMatter(filePath, content, caps);
+  fs.writeFileSync(filePath, content, 'utf8');
+  if (caps.length) setFileCapabilities(getDb(), subscriptionId, projectId, filename, caps);
   res.status(201).json({ path: `${prefix}/${filename}`, name: safeName, archived: false, capabilities: caps, protected: false, kind: fileKind(filename, projectId) });
 });
 
@@ -732,16 +773,17 @@ agentTemplatesRouter.post('/', (req, res) => {
 
   const db = getDb();
   const {
-    name, description, model = 'claude-sonnet-4-5', color = '#6366f1',
+    name, description, model, color = '#6366f1',
     suggested_role, template_system_prompt, permissions = [],
   } = req.body;
+  const resolvedModel = model || loadModels().defaultModel;
   if (!name) return res.status(400).json({ error: 'name is required' });
 
   const id = 'tpl_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
     INSERT INTO agent_templates (id, name, description, model, color, suggested_role, template_system_prompt, permissions)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, description, model, color, suggested_role,
+  `).run(id, name, description, resolvedModel, color, suggested_role,
     template_system_prompt || null,
     JSON.stringify(permissions));
 

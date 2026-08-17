@@ -101,7 +101,7 @@ function friendlySummary(check) {
     const expectedLabel = expectedTools.map(toolLabel).join(' or ');
     return check.passed
       ? `Correctly ${toolLabel(got)}`
-      : `Expected the planner to have ${expectedLabel} — instead it ${toolLabel(got)}`;
+      : `Expected it to have ${expectedLabel} — instead it ${toolLabel(got)}`;
   }
   if (check.name.startsWith('required:')) {
     const field = check.name.slice('required:'.length);
@@ -151,16 +151,21 @@ function DeterministicChecks({ result }) {
   if (!result) return <p className="text-sm text-gray-600">Pending…</p>;
   const checks = mergeChecklistCountChecks(result.checks || []);
   const passedCount = checks.filter(c => c.passed).length;
+  // null (not false) means the case has no checks configured — not a failure, just
+  // nothing to check. See benchmarkRunner.js's scoreDeterministic.
+  const notConfigured = result.passed === null;
 
   return (
     <div>
       <button onClick={() => setOpen(v => !v)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-200 transition-colors">
         {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-        Technical check — {result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
+        Basic checks — {notConfigured
+          ? <span className="text-gray-500">none set up for this case</span>
+          : result.passed ? <span className="text-green-500">passed</span> : <span className="text-red-400">failed</span>}
         {checks.length > 0 && <span className="text-gray-600">({passedCount}/{checks.length})</span>}
       </button>
-      {!open && (
-        <p className="text-xs text-gray-600 mt-0.5 pl-[15px]">Tool used &amp; output shape only — not whether the rule itself was followed.</p>
+      {!open && !notConfigured && (
+        <p className="text-xs text-gray-600 mt-0.5 pl-[15px]">Confirms the response has the right shape — not whether it's actually good. See Rule compliance above for that.</p>
       )}
       {open && (
         <div className="mt-1.5 space-y-1 pl-[15px]">
@@ -172,13 +177,12 @@ function DeterministicChecks({ result }) {
           ))}
         </div>
       )}
-      {/* Anything the agent did beyond the outcome tool above — e.g. a notification fired
-          from a markdown-configured instruction. Not pass/fail: just visibility into
-          whether admin-added behaviour actually ran, shown regardless of collapse state
-          since it's easy to miss otherwise. */}
+      {/* What the agent actually did, in its own words — its task_log progress notes.
+          Not pass/fail, just a plain record, shown regardless of collapse state since
+          it's easy to miss otherwise. */}
       {result.side_effects?.length > 0 && (
         <div className="mt-1.5 space-y-1 pl-[15px]">
-          <p className="text-xs text-gray-600 uppercase tracking-wide">Also fired</p>
+          <p className="text-xs text-gray-600 uppercase tracking-wide">Progress notes</p>
           {result.side_effects.map((msg, i) => (
             <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
               <Sparkles size={11} className="text-accent mt-0.5 shrink-0" />
@@ -470,10 +474,13 @@ function CompactRunRow({ run, onClick }) {
 }
 
 function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
+  const { draftRubricForCase } = useStore();
   const [expanded, setExpanded] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [running, setRunning] = useState(false);
+  const [draftingRubric, setDraftingRubric] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState(null);
+  const hasNoRubric = !c.rubric || Object.keys(c.rubric).length === 0;
 
   async function handleRun() {
     setRunning(true);
@@ -484,6 +491,16 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
     }
     catch (err) { alert(err.response?.data?.error || 'Run failed to start'); }
     finally { setRunning(false); }
+  }
+
+  // For a case whose background rubric draft never landed on creation — without a
+  // rubric it never gets scored beyond "no checks configured" and never gets an
+  // automatic AI review, regardless of capability.
+  async function handleDraftRubric() {
+    setDraftingRubric(true);
+    try { await draftRubricForCase(c.id); }
+    catch (err) { alert(err.response?.data?.error || 'Could not draft a rubric'); }
+    finally { setDraftingRubric(false); }
   }
 
   return (
@@ -507,6 +524,17 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
           </span>
         </div>
       </div>
+
+      {hasNoRubric && (
+        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+          <span className="flex-1">No scoring rubric — runs won't get an automatic AI review until one exists.</span>
+          <button onClick={handleDraftRubric} disabled={draftingRubric}
+            className="flex items-center gap-1 shrink-0 underline underline-offset-2 hover:text-amber-300 transition-colors disabled:opacity-40">
+            {draftingRubric ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
+            {draftingRubric ? 'Drafting…' : 'Draft one now'}
+          </button>
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <button onClick={handleRun} disabled={running || !targetProjectId}

@@ -129,6 +129,7 @@ export const benchmarkApi = {
   createCase: (data) => api.post('/benchmark/cases', data).then(r => r.data),
   draftCase: (data) => api.post('/benchmark/cases/draft', data).then(r => r.data),
   updateCase: (id, data) => api.patch(`/benchmark/cases/${id}`, data).then(r => r.data),
+  draftRubric: (id) => api.post(`/benchmark/cases/${id}/draft-rubric`).then(r => r.data),
   deleteCase: (id) => api.delete(`/benchmark/cases/${id}`).then(r => r.data),
   runCase: (id, projectId) => api.post(`/benchmark/cases/${id}/run`, { project_id: projectId }).then(r => r.data),
   listRuns: (caseId) => api.get('/benchmark/runs', { params: { case_id: caseId } }).then(r => r.data),
@@ -205,6 +206,10 @@ export const commentsApi = {
   create: (taskId, content) => api.post(`/tasks/${taskId}/comments`, { content }).then(r => r.data),
   update: (taskId, commentId, content) => api.patch(`/tasks/${taskId}/comments/${commentId}`, { content }).then(r => r.data),
   remove: (taskId, commentId) => api.delete(`/tasks/${taskId}/comments/${commentId}`).then(r => r.data),
+};
+
+export const constantsApi = {
+  models: () => api.get('/constants').then(r => r.data),
 };
 
 export const notificationsApi = {

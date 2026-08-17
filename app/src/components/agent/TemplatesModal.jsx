@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight } from 'lucide-react';
+import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useStore } from '../../store';
-import { MODELS, COLORS } from '../../constants/agents';
+import { COLORS } from '../../constants/agents';
+import { checkModelStaleness } from '../../utils/modelStaleness';
 
-const EMPTY_FORM = {
-  name: '', description: '', model: 'claude-sonnet-4-5', color: '#6366f1',
-  template_system_prompt: '',
-};
-
-function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
+function TemplateForm({ initial, onSave, onCancel }) {
+  const modelsDefault = useStore(s => s.modelsDefault);
+  const models = useStore(s => s.models);
+  const emptyForm = { name: '', description: '', model: modelsDefault, color: '#6366f1', template_system_prompt: '' };
   const [form, setForm] = useState({
-    ...EMPTY_FORM,
+    ...emptyForm,
     ...initial,
-    template_system_prompt: initial.template_system_prompt || '',
+    template_system_prompt: initial?.template_system_prompt || '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -69,7 +68,10 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
           <label className="block text-sm font-medium text-gray-400 mb-1.5">Model</label>
           <select value={form.model} onChange={e => set('model', e.target.value)}
             className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
-            {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            {checkModelStaleness(form.model, models).stale && (
+              <option value={form.model}>{form.model} (no longer available)</option>
+            )}
+            {models.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
         <div>
@@ -123,8 +125,10 @@ function TemplateForm({ initial = EMPTY_FORM, onSave, onCancel }) {
 }
 
 function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
+  const models = useStore(s => s.models);
   const isArchived = !!tpl.archived_at;
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { stale, reason } = checkModelStaleness(tpl.model, models);
 
   // Dismiss confirmation chip on any keypress
   useEffect(() => {
@@ -214,8 +218,11 @@ function TemplateCard({ tpl, onEdit, onArchive, onUnarchive, onDelete }) {
 
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs text-gray-600 bg-surface-1 border border-border px-2 py-0.5 rounded-md">
-          {MODELS.find(m => m.value === tpl.model)?.shortLabel || tpl.model}
+          {models.find(m => m.value === tpl.model)?.shortLabel || tpl.model}
         </span>
+        {stale && (
+          <AlertTriangle size={14} className="text-amber-400 shrink-0" title={reason} />
+        )}
         {isArchived && (
           <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">archived</span>
         )}

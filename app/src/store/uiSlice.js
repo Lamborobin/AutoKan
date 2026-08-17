@@ -1,11 +1,13 @@
-import { DEFAULT_AGENT_MODEL, MODELS } from '../constants/agents';
+import { FALLBACK_MODELS, FALLBACK_DEFAULT_MODEL } from '../constants/agents';
 import { notificationsApi } from '../api';
 
 const DEFAULT_AGENT_MODEL_STORAGE_KEY = 'fa_default_agent_model';
 const AUTOSAVE_CONTEXT_STORAGE_KEY = 'fa_autosave_context_files';
 
+// Only gates localStorage hydration at boot, before the live model list has
+// loaded — checked again lazily against the live list wherever it matters.
 function normalizeAgentModel(value) {
-  return MODELS.some(model => model.value === value) ? value : DEFAULT_AGENT_MODEL;
+  return FALLBACK_MODELS.some(model => model.value === value) ? value : FALLBACK_DEFAULT_MODEL;
 }
 
 export const createUiSlice = (set) => ({

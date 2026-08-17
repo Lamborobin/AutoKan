@@ -131,6 +131,28 @@ router.patch('/cases/:id', attachAgent, (req, res) => {
   res.json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id)));
 });
 
+// POST /api/benchmark/cases/:id/draft-rubric — (re)generate a rubric for an existing
+// case. Exists because the background draft on creation (see POST /cases) can fail
+// silently — nothing surfaces that today, so a case can end up with rubric={} forever,
+// which also means it never gets an automatic AI review (pollAndScore only calls the
+// judge when the rubric actually has judge criteria in it).
+router.post('/cases/:id/draft-rubric', attachAgent, async (req, res) => {
+  if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can draft a rubric' });
+  const db = getDb();
+  const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id);
+  if (!caseRow) return res.status(404).json({ error: 'Case not found' });
+
+  try {
+    const rubric = await draftRubricForTask(
+      caseRow.title, caseRow.description, caseRow.project_id, caseRow.subscription_id, caseRow.capability || PLANNING_CAPABILITY
+    );
+    db.prepare('UPDATE benchmark_cases SET rubric = ? WHERE id = ?').run(JSON.stringify(rubric || {}), req.params.id);
+    res.json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id)));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/benchmark/cases/:id — archive if it has runs, hard-delete otherwise
 router.delete('/cases/:id', attachAgent, (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can delete benchmark cases' });

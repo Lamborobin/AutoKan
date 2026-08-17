@@ -1,0 +1,8 @@
+{
+  "models": [
+    { "value": "claude-opus-5", "label": "Opus 5 — most capable", "shortLabel": "Opus 5" },
+    { "value": "claude-sonnet-5", "label": "Sonnet 5 — balanced", "shortLabel": "Sonnet 5" },
+    { "value": "claude-haiku-4-5", "label": "Haiku 4.5 — fastest", "shortLabel": "Haiku 4.5" }
+  ],
+  "defaultModel": "claude-sonnet-5"
+}

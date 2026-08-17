@@ -12,6 +12,7 @@ const { notifyHumanActionMembers } = require('./notificationsService');
 const { writeFileSafe } = require('../utils/writeGuard');
 const { ACTION_HOOKS } = require('./actionHooks');
 const runnersRegistry = require('../seed/runners.json');
+const { loadModels } = require('./modelRegistry');
 
 // Generic tool for invoking a registered action hook — added to every
 // capability's tool set below. What it may actually DO is entirely code-curated
@@ -436,6 +437,11 @@ function readAbs(absPath) {
 // Returns { meta: { key: value }, body: string (content without front matter) }
 // Files without front matter return meta={}, body=full content.
 function parseFrontMatter(content) {
+  // Normalize CRLF first — startsWith('---\n')/indexOf('\n---') both silently miss a
+  // real front-matter block saved with \r\n (Windows line endings), returning meta={}
+  // and body=the whole raw file, front matter included. Observed breaking capability
+  // scoping entirely for a CRLF-saved board file with no error, just wrong behavior.
+  content = content.replace(/\r\n/g, '\n');
   if (!content.startsWith('---\n')) return { meta: {}, body: content };
   const end = content.indexOf('\n---', 4);
   if (end === -1) return { meta: {}, body: content };
@@ -505,21 +511,32 @@ function buildContextBlock(agent, subscriptionId, projectId) {
     }
   }
 
-  // 4. Board context (per-project) — filtered by capabilities front matter
+  // 4. Board context (per-project) — filtered by capability visibility. Visibility is
+  // stored in instruction_file_visibility (see server/src/routes/other.js), not in the
+  // file's own front matter, so a Settings "Visible to" change can never touch a file's
+  // text. A file with no DB row yet falls back to its front matter (pre-migration files).
   if (subscriptionId && projectId) {
     const boardFolder = path.join(PROJECT_ROOT, 'instructions', subscriptionId, projectId);
     const agentCap = getAgentCapability(agent);
+    const db = getDb();
     for (const fileName of safeListMd(boardFolder)) {
       const absPath = path.join(boardFolder, fileName);
       if (includedAbsPaths.has(absPath)) continue;
       const raw = readAbs(absPath);
       if (!raw) continue;
       const { meta, body } = parseFrontMatter(raw);
-      // If the file declares capabilities, only load it for matching agents
-      if (meta.capabilities) {
-        const allowed = meta.capabilities.split(',').map(c => c.trim()).filter(Boolean);
-        if (!agentCap || !allowed.includes(agentCap)) continue;
+      const visRow = db.prepare(
+        'SELECT capabilities FROM instruction_file_visibility WHERE subscription_id = ? AND project_id = ? AND filename = ?'
+      ).get(subscriptionId, projectId, fileName);
+      let allowed = null;
+      if (visRow) {
+        try { allowed = JSON.parse(visRow.capabilities); } catch { allowed = []; }
+      } else if (meta.capabilities) {
+        allowed = meta.capabilities.split(',').map(c => c.trim()).filter(Boolean);
       }
+      // Only restrict when something actually declares a scope — no row and no legacy
+      // front matter both mean "visible to everyone", same as client.md/project.md.
+      if (allowed && allowed.length && (!agentCap || !allowed.includes(agentCap))) continue;
       includedAbsPaths.add(absPath);
       if (body) sections.push(`## [BOARD/${fileName.replace('.md', '').toUpperCase()}]\n${body}`);
     }
@@ -642,7 +659,7 @@ async function runClarifyAndApprove(task, agent, runner) {
   let response;
   try {
     response = await getClient().messages.create({
-      model: agent.model || runner.model_default || 'claude-opus-4-5',
+      model: agent.model || runner.model_default || loadModels().defaultModel,
       max_tokens: 1024,
       system: systemPrompt,
       tools: getToolSet(runner),
@@ -918,7 +935,7 @@ async function runImplementInWorktree(task, agent, runner) {
     let response;
     try {
       response = await getClient().messages.create({
-        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
+        model: agent.model || runner.model_default || loadModels().defaultModel,
         max_tokens: 4096,
         system: systemPrompt,
         tools: getToolSet(runner),
@@ -1150,7 +1167,7 @@ async function runTestWithRetry(task, agent, runner) {
     let response;
     try {
       response = await getClient().messages.create({
-        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
+        model: agent.model || runner.model_default || loadModels().defaultModel,
         max_tokens: 4096,
         system: systemPrompt,
         tools: getToolSet(runner),
@@ -1279,12 +1296,30 @@ function requireLinkedClientPath(task, agent, runner) {
     .run(uuidv4(), task.id, agent.id, 'note', 'Dispatched — no linked client folder for this board');
   db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
     .run('col_humanaction', reason, task.id);
+  // 'human_action_requested' (not just 'moved') — this is the action name benchmarkRunner.js's
+  // CAPABILITY_PROBES.settledActions watches for; without it a benchmark run never notices
+  // this task resolved and just sits until its own separate timeout fires.
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agent.id, 'human_action_requested', reason);
   db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .run(uuidv4(), task.id, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
   console.log(`[AgentRunner][${runner.id}][${task.id}] no linked client folder → Human Action`);
   notifyHumanActionMembers(db, task.id, reason).catch(() => {});
   broadcastTask(db, task.id);
   return { ok: false };
+}
+
+// Guaranteed-independent timeout for a single LLM call — does NOT rely on the SDK's
+// own `{ timeout }` request option, which was observed not actually cutting off a
+// stuck call (a produce_document run sat well past its computed timeout with no
+// escalation). Races the real request against a plain setTimeout instead, so control
+// returns to the caller within `ms` no matter what's happening inside the SDK/network.
+function withHardTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // ---------------------------------------------------------------------------
@@ -1368,6 +1403,15 @@ const PRODUCING_TOOLS = [
   ACTION_HOOK_TOOL,
 ];
 
+// The model has no clock — a default filename convention that embeds "the current
+// time" needs the real value handed to it, or it just invents a plausible-looking
+// but wrong date (observed: 2025-07-14 while the actual date was 2026-08-14).
+function currentTimestampForFilename() {
+  const p = n => String(n).padStart(2, '0');
+  const d = new Date();
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+
 async function runProduceDocument(task, agent, runner) {
   const db = getDb();
   const taskId = task.id;
@@ -1389,7 +1433,7 @@ async function runProduceDocument(task, agent, runner) {
     `PM Brief: ${task.pm_review_comment || '(none)'}`,
     `Priority: ${task.priority} | Complexity: ${task.complexity}`,
     ``,
-    loadRunnerPrompt('produce-document', { taskId: task.id, taskTitle: task.title, clientPath }),
+    loadRunnerPrompt('produce-document', { taskId: task.id, taskTitle: task.title, clientPath, currentTimestamp: currentTimestampForFilename() }),
   ].filter(Boolean).join('\n');
 
   const messages = [{ role: 'user', content: initialPrompt }];
@@ -1397,19 +1441,25 @@ async function runProduceDocument(task, agent, runner) {
   let completed = false;
   const MAX_ITERATIONS = runner.max_iterations || 30;
   // Wall-clock cap, independent of iteration count — a single stuck/slow LLM turn can
-  // burn arbitrary time (and tokens) without ever hitting MAX_ITERATIONS. Measured
-  // real successful runs at ~130s; 3 minutes gives margin above that while still
-  // cutting a genuinely stuck run down from unbounded. Keep in sync with
+  // burn arbitrary time (and tokens) without ever hitting MAX_ITERATIONS. 4 minutes —
+  // a 60s per-call cap was measured killing the single turn that composes and writes
+  // the whole document (it's the tool_use argument itself, not a small response) on
+  // every run, not just stuck ones; the per-call cap below needs real room for that
+  // specific turn, not just for detecting a genuine hang. Keep in sync with
   // benchmarkRunner.js's pollAndScore/waitForSettlement timeout, which must stay
   // >= this so the benchmark layer doesn't give up watching before this fires.
   const startedAt = Date.now();
-  const MAX_DURATION_MS = 3 * 60 * 1000;
+  const MAX_DURATION_MS = 4 * 60 * 1000;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
     if (Date.now() - startedAt > MAX_DURATION_MS) {
       const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
+      // See requireLinkedClientPath's comment — this action name is what benchmarkRunner.js
+      // watches for to know the task actually settled.
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
@@ -1420,8 +1470,8 @@ async function runProduceDocument(task, agent, runner) {
 
     let response;
     try {
-      response = await getClient().messages.create({
-        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
+      response = await withHardTimeout(getClient().messages.create({
+        model: agent.model || runner.model_default || loadModels().defaultModel,
         // Higher than the other handlers' 4096 — a full multi-section document is the
         // tool_use argument itself (write_file's content field), and 4096 was observed
         // truncating mid-document on real runs (the model logs "writing full document
@@ -1432,7 +1482,7 @@ async function runProduceDocument(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      }, { timeout: MAX_DURATION_MS - (Date.now() - startedAt) });
+      }), 150000, 'API call');
     } catch (err) {
       // Escalate rather than just logging + breaking — an API error or SDK-level
       // timeout (the actual per-request cap for a single hung call, complementing the
@@ -1444,6 +1494,8 @@ async function runProduceDocument(task, agent, runner) {
         .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'note', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
@@ -1648,6 +1700,10 @@ async function runVerifyDocument(task, agent, runner) {
       const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
+      // See requireLinkedClientPath's comment — this action name is what benchmarkRunner.js
+      // watches for to know the task actually settled.
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
@@ -1658,13 +1714,13 @@ async function runVerifyDocument(task, agent, runner) {
 
     let response;
     try {
-      response = await getClient().messages.create({
-        model: agent.model || runner.model_default || 'claude-sonnet-4-5',
+      response = await withHardTimeout(getClient().messages.create({
+        model: agent.model || runner.model_default || loadModels().defaultModel,
         max_tokens: 4096,
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      }, { timeout: MAX_DURATION_MS - (Date.now() - startedAt) });
+      }), 60000, 'API call');
     } catch (err) {
       const reason = `API error during verification: ${err.message}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
@@ -1672,6 +1728,8 @@ async function runVerifyDocument(task, agent, runner) {
         .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'note', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});

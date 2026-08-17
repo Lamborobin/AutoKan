@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, FileText, X, Cpu, Pencil, LayoutTemplate, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
+import { Bot, Plus, Settings, ChevronDown, ChevronRight, AlertCircle, AlertTriangle, FileText, X, Cpu, Pencil, LayoutTemplate, Home, Archive, LogOut, Check, FolderOpen, Briefcase, Layers, Bell, Globe, User, Sun, Moon, Monitor, UserPlus, Users, LayoutGrid } from 'lucide-react';
 import brandImg from '../assets/images/brand.png';
 import ArchivedTasksModal from './shared/ArchivedTasksModal';
 import InviteModal from './shared/InviteModal';
@@ -9,16 +9,17 @@ import NotificationPopover from './shared/NotificationPopover';
 import { useDraggable } from '@dnd-kit/core';
 import { useStore } from '../store';
 import { COLUMN } from '../constants/columns';
-import { MODELS } from '../constants/agents';
+import { checkModelStaleness } from '../utils/modelStaleness';
 
 function AgentPanel({ agent, onClose, onEdit }) {
-  const { roles } = useStore();
+  const { roles, models } = useStore();
   const agentRoles = (agent.role_ids || [])
     .map(id => roles.find(r => r.id === id))
     .filter(Boolean);
   const columnRoles = agentRoles.filter(r => r.type === 'column_access');
   const capabilityRoles = agentRoles.filter(r => r.type === 'permission');
-  const modelLabel = MODELS.find(m => m.value === agent.model)?.shortLabel || agent.model;
+  const modelLabel = models.find(m => m.value === agent.model)?.shortLabel || agent.model;
+  const { stale: modelStale, reason: modelStaleReason } = checkModelStaleness(agent.model, models);
 
   return (
     <div className="mt-1 mb-2 mx-1 bg-surface-3 border border-border rounded-xl p-3 space-y-3">
@@ -53,6 +54,9 @@ function AgentPanel({ agent, onClose, onEdit }) {
       <div className="flex items-center gap-1.5">
         <Cpu size={10} className="text-gray-600 shrink-0" />
         <span className="text-xs text-gray-600">{modelLabel}</span>
+        {modelStale && (
+          <AlertTriangle size={12} className="text-amber-400 shrink-0" title={modelStaleReason} />
+        )}
       </div>
 
       {capabilityRoles.length > 0 && (

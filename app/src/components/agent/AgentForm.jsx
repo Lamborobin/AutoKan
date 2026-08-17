@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Info } from 'lucide-react';
+import { AlertTriangle, Info } from 'lucide-react';
 import { useStore } from '../../store';
-import { DEFAULT_AGENT_MODEL, MODELS, COLORS } from '../../constants/agents';
+import { COLORS } from '../../constants/agents';
+import { checkModelStaleness } from '../../utils/modelStaleness';
 import InfoModal from '../settings/InfoModal';
 
-export { MODELS, COLORS };
+export { COLORS };
 
 export function slugify(str) {
   return str.trim().toLowerCase()
@@ -22,9 +23,10 @@ export function agentRolesValid(roleIds = []) {
 
 export function useAgentForm(initial = {}) {
   const defaultAgentModel = useStore(s => s.defaultAgentModel);
+  const modelsDefault = useStore(s => s.modelsDefault);
   const [form, setForm] = useState({
     name: '',
-    model: initial.model || defaultAgentModel || DEFAULT_AGENT_MODEL,
+    model: initial.model || defaultAgentModel || modelsDefault,
     description: '',
     color: '#6366f1',
     is_template: false,
@@ -77,6 +79,9 @@ export function NameField({ value, onChange, roleConflict }) {
 }
 
 export function ModelField({ value, onChange }) {
+  const models = useStore(s => s.models);
+  const { stale, reason } = checkModelStaleness(value, models);
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-400 mb-1.5">Model</label>
@@ -85,8 +90,20 @@ export function ModelField({ value, onChange }) {
         onChange={e => onChange(e.target.value)}
         className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent"
       >
-        {MODELS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+        {/* Keep the stale value selectable so saving without touching this field
+            doesn't silently switch the agent onto whatever option the browser
+            defaults to. */}
+        {stale && <option value={value}>{value} (no longer available)</option>}
+        {models.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
       </select>
+      {stale && (
+        <div className="mt-1.5 flex items-start gap-1.5 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-md">
+          <AlertTriangle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-400/90 leading-relaxed">
+            {value} — {reason.toLowerCase()}. The agent keeps running on the stored model; switch it above if you'd like to update.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
