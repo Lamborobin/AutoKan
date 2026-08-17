@@ -54,7 +54,8 @@ The three default agents (PM, Developer, Tester) are seeded from a single source
 
 ```
 AutoKan/
-├── client/          # Live client repos — one subfolder per connected board
+├── client/            # Live client repos — one subfolder per connected board (gitignored, local only)
+├── client-templates/  # Tracked example client folders — copy into client/ to try the demo (see below)
 ├── docs/            # System Behavior — the one file the AI Context panel exposes to admins
 ├── dev/             # Technical reference for contributors — architecture, API, decisions
 ├── instructions/    # Instruction files scoped by subscription and board
@@ -71,6 +72,17 @@ AutoKan/
 ```
 
 See `dev/architecture.md` for the full tree.
+
+### Trying the demo client folders
+
+`client/` is gitignored — agents write directly into it (via Board settings → Connections), and none of that ever becomes a pending change in this repo. `client-templates/` holds the tracked starting point for the two example clients, **Velour** and **Nordvik Kredit**. To try them locally:
+
+```bash
+cp -r "client-templates/Velour" client/
+cp -r "client-templates/Nordvik Kredit" client/
+```
+
+Then link the copied folder to a board via Board settings → Connections. Any edits agents make land in `client/`, stay untracked, and won't touch `client-templates/` or this repo's history — re-copy from `client-templates/` any time you want a clean slate.
 
 ---
 
