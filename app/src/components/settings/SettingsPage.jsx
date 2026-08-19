@@ -145,12 +145,6 @@ export default function SettingsPage() {
     return () => document.removeEventListener('mousedown', handleOutside);
   }, [workspaceSwitcherOpen]);
 
-  // Redirect away from Connections if we're on a personal board
-  useEffect(() => {
-    if (section === 'connections' && !isClientBoard) {
-      setSection('files');
-    }
-  }, [isClientBoard, section]);
 
   // ── Subscription overview state ─────────────────────────────────────────
   const [subName, setSubName]           = useState('');
@@ -673,8 +667,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Connections nav item — only visible for client boards */}
-        {isClientBoard && (
+        {/* Connections nav item — visible for all boards */}
+        {currentProject && (
           <div className="px-2 pb-1 shrink-0">
             <div className="space-y-0.5">
               {navBtn('connections', 'Connections', GitBranch, connectionDot)}
