@@ -28,6 +28,30 @@ function getDb() {
   return db;
 }
 
+// A benchmark run's actual progress lives entirely in one process's in-memory
+// setTimeout/setImmediate chain (benchmarkRunner.js's pollAndScore/dispatch) —
+// nothing persists a "still working on it" heartbeat. So any run still
+// 'pending' or 'dispatched' when the SERVER (not just any script touching this
+// DB — see index.js, the only caller) starts up did not survive whatever ended
+// the previous server process (nodemon restart on file save, a crash, a deploy) —
+// there is no other process that could ever resume it. Deliberately NOT called
+// from getDb() itself: getDb() is invoked by one-off scripts/diagnostics too
+// (e.g. a quick `node -e` DB check), and each of those is its own fresh process —
+// running this sweep there would wrongly declare a run "orphaned" while the real
+// server is still legitimately working on it. Call this once, only from the
+// actual server entrypoint, after it has its own getDb() reference.
+function orphanStuckBenchmarkRuns(db) {
+  const result = db.prepare(`
+    UPDATE benchmark_runs SET status = 'error',
+      error_message = 'Interrupted by a server restart before this run finished — re-run this case.',
+      completed_at = CURRENT_TIMESTAMP
+    WHERE status IN ('pending', 'dispatched')
+  `).run();
+  if (result.changes > 0) {
+    console.log(`⚠️  Marked ${result.changes} orphaned benchmark run(s) as errored (interrupted by a prior server exit).`);
+  }
+}
+
 function applySchema(db) {
 
   db.exec(`
@@ -295,6 +319,14 @@ function applySchema(db) {
       rule_reference TEXT,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
+      -- Mirrors tasks.acceptance_criteria — a real task normally only has this
+      -- populated by Planning's approve_task before Producing/Verifying ever see
+      -- it, so a probing task created directly (bypassing Planning) previously
+      -- always sent an empty one, testing those capabilities on weaker input than
+      -- they'd ever actually receive. Optional: also where a case author can name
+      -- a specific target document/file for Verifying to check, same as a human
+      -- would via acceptance criteria on a real task.
+      acceptance_criteria TEXT,
       rubric TEXT NOT NULL DEFAULT '{}',
       source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ai_generated','ai_edited','cloned_task')),
       created_by TEXT REFERENCES users(id),
@@ -319,6 +351,10 @@ function applySchema(db) {
       manual_review TEXT,
       review_provenance TEXT NOT NULL DEFAULT 'unreviewed' CHECK(review_provenance IN ('unreviewed','ai','human')),
       context_version TEXT,
+      -- Model that actually ran the probed capability's task, when a run overrides
+      -- the board agent's own configured model (see dev/upcoming-changes.md's
+      -- "per-case model override"). NULL means the agent's own model was used.
+      model_override TEXT,
       error_message TEXT,
       triggered_by TEXT REFERENCES users(id),
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -359,6 +395,20 @@ function applySchema(db) {
       BEGIN UPDATE benchmark_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
   `);
 
+  // One-off, non-destructive backfill for a column added after this table already
+  // shipped on dev machines — CREATE TABLE IF NOT EXISTS above never touches an
+  // existing table, so without this, dev DBs created before this column existed
+  // would otherwise need a full db:reset (wiping all local boards/agents/tasks)
+  // just to pick it up. Deliberately narrow: a real migration system is still out
+  // of scope (see the note at the top of this file).
+  const benchmarkRunsColumns = db.prepare(`PRAGMA table_info(benchmark_runs)`).all().map(c => c.name);
+  if (!benchmarkRunsColumns.includes('model_override')) {
+    db.exec(`ALTER TABLE benchmark_runs ADD COLUMN model_override TEXT`);
+  }
+  const benchmarkCasesColumns = db.prepare(`PRAGMA table_info(benchmark_cases)`).all().map(c => c.name);
+  if (!benchmarkCasesColumns.includes('acceptance_criteria')) {
+    db.exec(`ALTER TABLE benchmark_cases ADD COLUMN acceptance_criteria TEXT`);
+  }
 }
 
-module.exports = { getDb };
+module.exports = { getDb, orphanStuckBenchmarkRuns };

@@ -2,7 +2,7 @@ require('dotenv').config({ override: true });
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const { getDb } = require('./db');
+const { getDb, orphanStuckBenchmarkRuns } = require('./db');
 const { attachUser } = require('./middleware/auth');
 const tasksRouter = require('./routes/tasks');
 const authRouter = require('./routes/auth');
@@ -69,7 +69,10 @@ app.use((err, req, res, next) => {
 });
 
 // Warm up DB connection on startup (triggers schema + seed on first call)
-getDb();
+const db = getDb();
+// Only here, not inside getDb() itself — see orphanStuckBenchmarkRuns's own
+// comment in db/index.js for why this must stay out of the shared getDb() path.
+orphanStuckBenchmarkRuns(db);
 app.listen(PORT, () => {
   console.log(`\n🚀 AutoKan server running at http://localhost:${PORT}`);
   console.log(`   API health: http://localhost:${PORT}/api/health\n`);

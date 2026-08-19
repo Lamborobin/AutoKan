@@ -12,11 +12,12 @@ function pollRun(get, set, caseId, runId) {
   activePolls.add(runId);
 
   const POLL_MS = 2000;
-  // Matches benchmarkRunner.js's pollAndScore/waitForSettlement timeout (270s) — this
-  // must stay >= the backend's own timeout, or the UI stops polling and goes stale
-  // before the backend even finishes, showing "waiting" forever on a run that actually
-  // completed. A margin over the backend value covers request/poll-tick latency.
-  const TIMEOUT_MS = 300000;
+  // Must stay >= the longest capability-specific timeout in benchmarkRunner.js's
+  // CAPABILITY_POLL_TIMEOUT_MS (currently 420s for Producing, the longest — Verifying
+  // is 300s, Planning gives up soonest at 60s), or the UI stops polling and goes
+  // stale before the backend even finishes, showing "waiting" forever on a run that
+  // actually completed. A margin over that value covers request/poll-tick latency.
+  const TIMEOUT_MS = 450000;
   const deadline = Date.now() + TIMEOUT_MS;
 
   const stop = () => activePolls.delete(runId);
@@ -102,8 +103,8 @@ export const createBenchmarkSlice = (set, get) => ({
     }
   },
 
-  async runBenchmarkCase(caseId, projectId) {
-    const run = await benchmarkApi.runCase(caseId, projectId);
+  async runBenchmarkCase(caseId, projectId, model) {
+    const run = await benchmarkApi.runCase(caseId, projectId, model);
     set(s => ({
       benchmarkRunsByCaseId: { ...s.benchmarkRunsByCaseId, [caseId]: [run, ...(s.benchmarkRunsByCaseId[caseId] || [])] },
     }));

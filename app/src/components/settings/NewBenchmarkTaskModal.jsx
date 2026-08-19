@@ -19,6 +19,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
   const [capability, setCapability] = useState('perm_planning');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [acceptanceCriteria, setAcceptanceCriteria] = useState('');
   const [source, setSource] = useState('manual');
   const [rubric, setRubric] = useState(null); // carried silently from an AI draft, never shown
   const [ruleReference, setRuleReference] = useState(null);
@@ -57,6 +58,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
   function pickTask(task) {
     setTitle(task.title);
     setDescription(task.description || '');
+    setAcceptanceCriteria(task.acceptance_criteria || '');
     setSource('cloned_task');
     setRubric(null);
     setRuleReference(null);
@@ -100,6 +102,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
         capability,
         title: title.trim(),
         description: description.trim(),
+        acceptance_criteria: acceptanceCriteria.trim() || undefined,
         rule_reference: ruleReference,
         rubric: rubric || undefined,
         source,
@@ -192,6 +195,20 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
               onChange={e => { setDescription(e.target.value); markEdited(); }}
               placeholder={capabilityInfo.brief}
               rows={5}
+              className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100
+                         placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-400 mb-1.5">
+              Acceptance Criteria <span className="text-gray-600">(optional)</span>
+            </label>
+            <textarea
+              value={acceptanceCriteria}
+              onChange={e => { setAcceptanceCriteria(e.target.value); markEdited(); }}
+              placeholder="Same field a real task gets once Planning approves it — e.g. which document to check, or concrete pass/fail conditions."
+              rows={3}
               className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100
                          placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"
             />

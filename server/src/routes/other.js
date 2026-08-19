@@ -497,6 +497,43 @@ function folderPrefix(subscriptionId, projectId) {
   return 'instructions';
 }
 
+// ── Version history ─────────────────────────────────────────────────────────
+// Same archive-on-write scheme as /api/docs (server/src/routes/docs.js): each PATCH
+// snapshots the pre-write content into a per-scope, per-file .versions/ folder before
+// overwriting, keeping the most recent MAX_INSTRUCTION_VERSIONS. Nesting under the
+// scope's own resolved dir (rather than a single global versions dir) keeps board,
+// subscription, and legacy-global files from colliding on the same filename.
+const MAX_INSTRUCTION_VERSIONS = 10;
+
+function instructionVersionDir(subscriptionId, projectId, filename) {
+  const { dir } = getInstructionsDirs(subscriptionId, projectId);
+  return path.join(dir, '.versions', filename);
+}
+
+function archiveInstructionVersion(subscriptionId, projectId, filename, currentContent) {
+  const dir = instructionVersionDir(subscriptionId, projectId, filename);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const ts = new Date().toISOString().replace(/:/g, '-').replace(/\./g, '-');
+  fs.writeFileSync(path.join(dir, `${ts}.md`), currentContent, 'utf8');
+
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.md')).sort();
+  if (files.length > MAX_INSTRUCTION_VERSIONS) {
+    files.slice(0, files.length - MAX_INSTRUCTION_VERSIONS).forEach(f =>
+      fs.unlinkSync(path.join(dir, f))
+    );
+  }
+}
+
+function listInstructionVersionFiles(subscriptionId, projectId, filename) {
+  try {
+    return fs.readdirSync(instructionVersionDir(subscriptionId, projectId, filename))
+      .filter(f => f.endsWith('.md'))
+      .sort()
+      .reverse();
+  } catch { return []; }
+}
+
 // Which of the three UI-facing buckets a file belongs to — distinct from `protected`,
 // which is just "can this be deleted." Board-scope files are always board_rules; at
 // subscription scope, capability behavior files are the fixed set matched against the
@@ -598,6 +635,44 @@ instructionsRouter.get('/:filename', attachAgent, (req, res) => {
   res.status(404).json({ error: 'File not found' });
 });
 
+// GET /api/instructions/:filename/versions?subscription_id=xxx&project_id=yyy — list saved versions
+instructionsRouter.get('/:filename/versions', (req, res) => {
+  const { filename } = req.params;
+  if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const subscriptionId = req.query.subscription_id || null;
+  const projectId = req.query.project_id || null;
+
+  const dir = instructionVersionDir(subscriptionId, projectId, filename);
+  const versions = listInstructionVersionFiles(subscriptionId, projectId, filename).map(f => ({
+    filename: f,
+    saved_at: fs.statSync(path.join(dir, f)).mtime.toISOString(),
+  }));
+  res.json(versions);
+});
+
+// GET /api/instructions/:filename/versions/:versionFile?subscription_id=xxx&project_id=yyy — content of a specific version
+instructionsRouter.get('/:filename/versions/:versionFile', (req, res) => {
+  const { filename } = req.params;
+  if (!filename.endsWith('.md') || filename.includes('/') || filename.includes('..')) {
+    return res.status(400).json({ error: 'Invalid filename' });
+  }
+  const versionFile = path.basename(req.params.versionFile);
+  if (!versionFile.endsWith('.md')) return res.status(400).json({ error: 'Invalid filename' });
+
+  const subscriptionId = req.query.subscription_id || null;
+  const projectId = req.query.project_id || null;
+  const filePath = path.join(instructionVersionDir(subscriptionId, projectId, filename), versionFile);
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const saved_at = fs.statSync(filePath).mtime.toISOString();
+    res.json({ filename: versionFile, content, saved_at });
+  } catch {
+    res.status(404).json({ error: 'Version not found' });
+  }
+});
+
 // PATCH /api/instructions/:filename?subscription_id=xxx&project_id=yyy — update file content
 instructionsRouter.patch('/:filename', (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can edit instruction files' });
@@ -627,7 +702,17 @@ instructionsRouter.patch('/:filename', (req, res) => {
   // one changed (a legacy file that still has an embedded block gets it dropped the
   // first time either one is saved, since `content` here is already the stripped body
   // the editor showed).
-  fs.writeFileSync(target, content, 'utf8');
+  //
+  // Only archive+write when content actually changed — a capabilities-only save
+  // (handleCapabilitiesChange) calls this same PATCH with unchanged content, and
+  // archiving on every one of those would flood the version history with identical
+  // snapshots.
+  let currentContent = '';
+  try { currentContent = fs.readFileSync(target, 'utf8'); } catch { /* new/empty file */ }
+  if (currentContent !== content) {
+    archiveInstructionVersion(subscriptionId, projectId, filename, currentContent);
+    fs.writeFileSync(target, content, 'utf8');
+  }
 
   let caps = getFileCapabilities(db, subscriptionId, projectId, filename, target);
   if (Array.isArray(capabilities)) {

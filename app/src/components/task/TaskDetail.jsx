@@ -93,7 +93,10 @@ export default function TaskDetail() {
         try {
           const result = await tasksApi.checkPr(t.id);
           if (cancelled) return;
-          if (result.merged && result.task) setTask(result.task);
+          if (result.merged && result.task) {
+            setTask(result.task);
+            useStore.getState().upsertTasks([result.task]);
+          }
         } catch { /* GitHub unreachable — let user click manually */ }
         finally { if (!cancelled) setCheckingPr(false); }
       }
@@ -110,7 +113,10 @@ export default function TaskDetail() {
           if (cancelled) return;
           if (result.added > 0) setLogs(result.logs);
           if (result.synced_at) setGithubSyncedAt(result.synced_at);
-          if (result.merged && result.task) setTask(result.task);
+          if (result.merged && result.task) {
+            setTask(result.task);
+            useStore.getState().upsertTasks([result.task]);
+          }
         }).catch(() => {});
       }
     })();
@@ -143,6 +149,7 @@ export default function TaskDetail() {
         const pmFinished = !!fresh.pm_pending_question || fresh.pm_approval_status === PM_STATUS.APPROVED;
         if (pmFinished) {
           setTask(fresh);
+          useStore.getState().upsertTasks([fresh]);
           setLogs(fresh.logs || []);
           setAgentThinking(false);
         } else {
@@ -275,6 +282,7 @@ export default function TaskDetail() {
     try {
       const updated = await tasksApi.saveClientContext(task.id, text);
       setTask(updated);
+      useStore.getState().upsertTasks([updated]);
       setClientContextEdit(null);
     } finally {
       setSavingClientContext(false);
@@ -289,6 +297,7 @@ export default function TaskDetail() {
     if (!confirmBypass) { setConfirmBypass(true); return; }
     const updated = await bypassPm(task.id);
     setTask(updated);
+    useStore.getState().upsertTasks([updated]);
     setConfirmBypass(false);
   }
 
@@ -328,12 +337,20 @@ export default function TaskDetail() {
     setTask(t => ({ ...t, pm_pending_question: null, metadata: { ...(t.metadata || {}), abandon_proposal: undefined } }));
     setAgentThinking(true);
     const res = await tasksApi.abandon(task.id, { accept: false });
-    if (res?.task) setTask(t => ({ ...t, ...res.task }));
+    if (res?.task) {
+      setTask(t => ({ ...t, ...res.task }));
+      useStore.getState().upsertTasks([res.task]);
+    }
   }
 
   async function handleApprove() {
     const updated = await tasksApi.approve(task.id, { comment: approvalComment || null });
-    setTask({ ...updated, is_locked: false });
+    const withLockCleared = { ...updated, is_locked: false };
+    setTask(withLockCleared);
+    // Board's own tasks array is separate local state from this modal's — without
+    // this, the underlying board card kept showing locked until a full page reload
+    // (or a lucky SSE echo) refreshed it, even though the modal itself was correct.
+    useStore.getState().upsertTasks([withLockCleared]);
     setApprovalComment('');
     setApprovingHuman(false);
   }
@@ -342,6 +359,7 @@ export default function TaskDetail() {
     if (!approvalComment.trim()) { alert('Please provide a reason for rejection'); return; }
     const updated = await tasksApi.reject(task.id, { comment: approvalComment });
     setTask(updated);
+    useStore.getState().upsertTasks([updated]);
     setApprovalComment('');
     setApprovingHuman(false);
   }
@@ -351,6 +369,7 @@ export default function TaskDetail() {
     try {
       const updated = await tasksApi.approvePr(task.id);
       setTask(updated);
+      useStore.getState().upsertTasks([updated]);
     } finally {
       setApprovingPr(false);
     }
@@ -363,7 +382,10 @@ export default function TaskDetail() {
       const result = await tasksApi.syncGithub(task.id, true);
       setLogs(result.logs);
       if (result.synced_at) setGithubSyncedAt(result.synced_at);
-      if (result.merged && result.task) setTask(result.task);
+      if (result.merged && result.task) {
+        setTask(result.task);
+        useStore.getState().upsertTasks([result.task]);
+      }
     } catch {} finally {
       setSyncingGithub(false);
     }

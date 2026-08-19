@@ -287,9 +287,22 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'developer_assigned', 'Developer assigned — starting implementation');
       shouldTrigger = true;
+    } else if (task.column_id === 'col_inprogress' && capabilities.includes('perm_producing')) {
+      // perm_producing shares col_inprogress with perm_coding (see CAPABILITY_START_COLUMN
+      // in benchmarkRunner.js) — this branch was missing entirely, so reassigning a
+      // document-producing agent here silently did nothing. Only the benchmark harness's
+      // direct triggerRunner() call ever actually exercised produce_document.
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), task.id, agentId, 'producer_assigned', 'Document producer assigned — starting document production');
+      shouldTrigger = true;
     } else if (task.column_id === 'col_testing' && capabilities.includes('perm_coding_tester')) {
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'tester_assigned', 'Tester assigned — starting test run');
+      shouldTrigger = true;
+    } else if (task.column_id === 'col_testing' && capabilities.includes('perm_verifying')) {
+      // Same gap as perm_producing above, for perm_verifying's shared col_testing.
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), task.id, agentId, 'verifier_assigned', 'Document verifier assigned — starting verification');
       shouldTrigger = true;
     }
   }

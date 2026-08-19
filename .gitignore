@@ -15,4 +15,5 @@ data/
 .cache/
 .parcel-cache/
 docs/.versions/
+instructions/**/.versions/
 client/

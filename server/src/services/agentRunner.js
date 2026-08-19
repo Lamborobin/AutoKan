@@ -83,6 +83,14 @@ function getAgentCapability(agent) {
   } catch { return null; }
 }
 
+// Used when a retriable failure sends a task back a stage (Verify → Producing,
+// Test → Implement) — the task needs to land back on the agent who does that
+// work, not stay pointed at whoever just failed it.
+function findAgentWithCapability(db, projectId, capability) {
+  const candidates = db.prepare('SELECT * FROM agents WHERE project_id = ? AND active = 1').all(projectId);
+  return candidates.find(a => getAgentCapability(a) === capability) || null;
+}
+
 // ── Runner runtime prompts ──────────────────────────────────────────────────
 // System-owned markdown templates live in server/src/services/runner-prompts/.
 // They hold the "## Instructions" block each handler sends alongside the task
@@ -256,6 +264,14 @@ function getClient() {
     _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
   return _client;
+}
+
+// The Anthropic SDK's own err.message is `${status} ${rawJsonBody}` — technically
+// accurate but reads as noise (or worse, looks like real task output) anywhere it
+// gets surfaced to a human, e.g. a task's human_action_reason or a log entry. The
+// SDK separately exposes the parsed body at err.error.error.message; prefer that.
+function describeApiError(err) {
+  return err?.error?.error?.message || err?.message || 'Unknown error';
 }
 
 const CHECKLIST_ITEM_SCHEMA = {
@@ -656,18 +672,57 @@ async function runClarifyAndApprove(task, agent, runner) {
     yourTurnBlock,
   ].filter(Boolean).join('\n');
 
+  // Outcome tools each have one field that carries their actual substance — the
+  // model occasionally calls one of these with that field present-but-empty (schema
+  // technically satisfied, content missing). Nothing downstream distinguishes that
+  // from a genuine answer, so an empty ask_question was silently accepted as if the
+  // planner had really asked something. Give the model one chance to correct itself
+  // before falling back to an honest placeholder instead of a blank message.
+  const OUTCOME_TOOLS = ['ask_question', 'approve_task', 'suggest_split', 'suggest_abandon'];
+  const REQUIRED_FIELD_BY_TOOL = { ask_question: 'question', approve_task: 'comment', suggest_split: 'message', suggest_abandon: 'message' };
+  const outcomeBlockOf = (resp) => resp.content.find(b => b.type === 'tool_use' && OUTCOME_TOOLS.includes(b.name));
+  const isSubstantive = (resp) => {
+    const block = outcomeBlockOf(resp);
+    if (!block) return true; // no outcome tool call at all — handled by the text-fallback path below
+    const field = REQUIRED_FIELD_BY_TOOL[block.name];
+    return !!(block.input?.[field] && String(block.input[field]).trim());
+  };
+
   let response;
-  try {
-    response = await getClient().messages.create({
-      model: agent.model || runner.model_default || loadModels().defaultModel,
-      max_tokens: 1024,
-      system: systemPrompt,
-      tools: getToolSet(runner),
-      messages: [{ role: 'user', content: userMessage }]
-    });
-  } catch (err) {
-    console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
-    return;
+  const baseMessages = [{ role: 'user', content: userMessage }];
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      response = await getClient().messages.create({
+        model: agent.model || runner.model_default || loadModels().defaultModel,
+        // Was 1024 — too small now that the model spends part of its budget on
+        // internal reasoning before it ever reaches the actual tool call, which was
+        // silently truncating (or fully consuming) the budget and produced an empty
+        // ask_question/approve_task payload instead of a real one. Matches the
+        // budget every other capability already uses (4096-8192).
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: getToolSet(runner),
+        messages: attempt === 1 ? baseMessages : [
+          ...baseMessages,
+          { role: 'assistant', content: response.content },
+          { role: 'user', content: `Your last response called ${outcomeBlockOf(response)?.name} but left its "${REQUIRED_FIELD_BY_TOOL[outcomeBlockOf(response)?.name]}" field empty. Respond again with real, substantive content — do not call the tool with an empty or missing value.` },
+        ],
+      });
+    } catch (err) {
+      console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      return;
+    }
+    if (isSubstantive(response)) break;
+    console.warn(`[AgentRunner][${runner.id}][${taskId}] attempt ${attempt} returned an empty ${outcomeBlockOf(response)?.name} payload${attempt < 2 ? ' — retrying' : ' — giving up, falling back to a placeholder'}`);
+  }
+
+  // Both attempts came back empty — don't silently pass a blank string through as
+  // if it were a real answer. This still "settles" the task (see CAPABILITY_PROBES'
+  // settledActions) so it surfaces as a visible, reviewable oddity instead of hanging.
+  if (!isSubstantive(response)) {
+    const block = outcomeBlockOf(response);
+    const field = REQUIRED_FIELD_BY_TOOL[block.name];
+    block.input[field] = '(The AI planner returned an empty response after two attempts — this task needs manual review.)';
   }
 
   // Execute whichever tool the agent chose
@@ -836,7 +891,7 @@ const IMPLEMENTATION_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        reason: { type: 'string', description: 'What you need from the human and why' }
+        reason: { type: 'string', description: 'One to two short sentences MAX — plainly state what is missing/wrong and what decision you need. No background explanation, no restating the whole investigation, no walking through what you checked and ruled out.' }
       },
       required: ['reason']
     }
@@ -936,7 +991,12 @@ async function runImplementInWorktree(task, agent, runner) {
     try {
       response = await getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
-        max_tokens: 4096,
+        // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
+        // comments): a model that spends part of its budget on internal reasoning
+        // before ever reaching a tool call can get cut off mid-"thinking", leaving a
+        // turn the API then rejects on the next call. Raised pre-emptively even
+        // though this handler hasn't hit it yet — same multi-turn tool-loop shape.
+        max_tokens: 8192,
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
@@ -944,7 +1004,7 @@ async function runImplementInWorktree(task, agent, runner) {
     } catch (err) {
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${err.message}`);
+        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
       if (worktreePath) removeWorktree(worktreePath);
       break;
     }
@@ -1122,7 +1182,7 @@ const TESTING_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        reason: { type: 'string', description: 'What you need from the human and why' }
+        reason: { type: 'string', description: 'One to two short sentences MAX — plainly state what is missing/wrong and what decision you need. No background explanation, no restating the whole investigation, no walking through what you checked and ruled out.' }
       },
       required: ['reason']
     }
@@ -1168,7 +1228,12 @@ async function runTestWithRetry(task, agent, runner) {
     try {
       response = await getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
-        max_tokens: 4096,
+        // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
+        // comments): a model that spends part of its budget on internal reasoning
+        // before ever reaching a tool call can get cut off mid-"thinking", leaving a
+        // turn the API then rejects on the next call. Raised pre-emptively even
+        // though this handler hasn't hit it yet — same multi-turn tool-loop shape.
+        max_tokens: 8192,
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
@@ -1176,7 +1241,7 @@ async function runTestWithRetry(task, agent, runner) {
     } catch (err) {
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${err.message}`);
+        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
       break;
     }
 
@@ -1235,12 +1300,19 @@ async function runTestWithRetry(task, agent, runner) {
             notifyHumanActionMembers(db, taskId, maxRetryReason).catch(() => {});
           } else {
             const newMeta = JSON.stringify({ ...metadata, test_retry_count: newRetryCount });
-            db.prepare('UPDATE tasks SET column_id = ?, metadata = ? WHERE id = ?').run('col_inprogress', newMeta, taskId);
+            // Hand the task back to whoever does the implementing — leaving it
+            // assigned to the tester (who just failed it) meant nothing could ever
+            // pick this back up automatically; it showed as "Unassigned" in the UI
+            // since the tester has no access to col_inprogress.
+            const developer = findAgentWithCapability(db, task.project_id, 'perm_coding');
+            db.prepare('UPDATE tasks SET column_id = ?, metadata = ?, assigned_agent_id = COALESCE(?, assigned_agent_id) WHERE id = ?')
+              .run('col_inprogress', newMeta, developer?.id || null, taskId);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
               .run(uuidv4(), taskId, agent.id, 'tests_failed', `Tests failed (retry ${newRetryCount}/${MAX_RETRIES}): ${summary}`);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
               .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_inprogress', 'Tests failed — sent back to In Progress');
             console.log(`[AgentRunner][${runner.id}][${taskId}] tests failed → In Progress (retry ${newRetryCount})`);
+            if (developer) triggerRunner(taskId);
           }
         }
         broadcastTask(db, taskId);
@@ -1395,7 +1467,7 @@ const PRODUCING_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        reason: { type: 'string', description: 'What you need from the human and why' }
+        reason: { type: 'string', description: 'One to two short sentences MAX — plainly state what is missing/wrong and what decision you need. No background explanation, no restating the whole investigation, no walking through what you checked and ruled out.' }
       },
       required: ['reason']
     }
@@ -1488,7 +1560,7 @@ async function runProduceDocument(task, agent, runner) {
       // timeout (the actual per-request cap for a single hung call, complementing the
       // wall-clock check above which only runs between calls) otherwise leaves the task
       // silently stuck in col_inprogress with no signal to a human that it stopped.
-      const reason = `API error during document production: ${err.message}`;
+      const reason = `API error during document production: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
@@ -1634,9 +1706,21 @@ const VERIFYING_TOOLS = [
       properties: {
         matched_path: { type: 'string', description: 'The exact path (relative to repo root) of the document you verified' },
         passed: { type: 'boolean', description: 'True if the document meets the standard and acceptance criteria, false otherwise' },
-        summary: { type: 'string', description: 'What was checked, what matched, and what (if anything) is missing or wrong' }
+        summary: { type: 'string', description: 'One short overall verdict statement, not a list — e.g. "Meets the document standard" or "Fails on 2 of 6 required sections."' },
+        checks: {
+          type: 'array',
+          description: 'Every criterion you actually checked against the standard and acceptance criteria, one per item — a plain pass/fail statement, not a question (e.g. "All 7 required sections are present and in order"), never one of the open clarifying questions a planner would ask.',
+          items: {
+            type: 'object',
+            properties: {
+              item: { type: 'string', description: 'The specific criterion checked, phrased as a plain statement.' },
+              passed: { type: 'boolean' },
+            },
+            required: ['item', 'passed'],
+          },
+        },
       },
-      required: ['matched_path', 'passed', 'summary']
+      required: ['matched_path', 'passed', 'summary', 'checks']
     }
   },
   {
@@ -1645,7 +1729,7 @@ const VERIFYING_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        reason: { type: 'string', description: 'What you need from the human and why' }
+        reason: { type: 'string', description: 'One to two short sentences MAX — plainly state what is missing/wrong and what decision you need. No background explanation, no restating the whole investigation, no walking through what you checked and ruled out.' }
       },
       required: ['reason']
     }
@@ -1660,6 +1744,29 @@ async function runVerifyDocument(task, agent, runner) {
   const linkCheck = requireLinkedClientPath(task, agent, runner);
   if (!linkCheck.ok) return;
   const { subscriptionId, clientPath } = linkCheck;
+
+  // Nothing-to-verify is a deterministic, mechanical fact (is the folder empty?) —
+  // detect it in code instead of asking the model to discover and then explain it,
+  // which produced long, meandering escalation text (and leaked the real filesystem
+  // path into a message meant for a human, not a debugging log). Only short-circuits
+  // the single common case (default docs/ folder genuinely has nothing in it); a
+  // folder with files but no obviously matching one still goes through the model,
+  // since that requires real judgment.
+  const docsDir = path.join(PROJECT_ROOT, clientPath, 'docs');
+  const docsDirHasFiles = fs.existsSync(docsDir) && fs.readdirSync(docsDir).some(f => !f.startsWith('.'));
+  if (!docsDirHasFiles) {
+    const reason = 'No document found to verify — nothing has been produced for this task yet.';
+    db.prepare('UPDATE tasks SET progress = 100, column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+      .run('col_humanaction', reason, taskId);
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+    console.log(`[AgentRunner][${runner.id}][${taskId}] docs folder empty → Human Action (no model call needed)`);
+    notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+    broadcastTask(db, taskId);
+    return;
+  }
 
   const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
   const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
@@ -1716,13 +1823,19 @@ async function runVerifyDocument(task, agent, runner) {
     try {
       response = await withHardTimeout(getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
-        max_tokens: 4096,
+        // Was 4096 — same class of bug as Planning's (see its max_tokens comment):
+        // a model that spends part of its budget on internal reasoning before ever
+        // reaching a tool call can get cut off mid-"thinking", leaving a turn whose
+        // last block is a bare thinking block — which the API then rejects outright
+        // on the NEXT turn ("The final block in an assistant message cannot be
+        // 'thinking'"), since a truncated thinking block was never properly closed.
+        max_tokens: 8192,
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
       }), 60000, 'API call');
     } catch (err) {
-      const reason = `API error during verification: ${err.message}`;
+      const reason = `API error during verification: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
@@ -1768,35 +1881,53 @@ async function runVerifyDocument(task, agent, runner) {
         result = { success: true };
 
       } else if (block.name === 'task_complete') {
-        const { matched_path, passed, summary } = block.input;
+        const { matched_path, passed, summary, checks = [] } = block.input;
+        // task_complete firing at all means this verification PASS is fully analyzed —
+        // true regardless of the verdict, so progress reaches 100 whether it passed,
+        // is going back for a retry, or hit max retries. It's the task's column/status
+        // that says what happens next, not this run's own completeness.
+        const cleanChecks = (Array.isArray(checks) ? checks : [])
+          .filter(c => c && typeof c.item === 'string' && c.item.trim())
+          .map(c => ({ item: c.item.trim(), passed: !!c.passed }));
         if (passed) {
-          const newMeta = JSON.stringify({ ...metadata, verified_document_path: matched_path });
-          db.prepare('UPDATE tasks SET progress = 100, column_id = ?, metadata = ? WHERE id = ?').run('col_humanaction', newMeta, taskId);
+          // A pass means the automated pipeline is confident — complete the task
+          // outright rather than routing to a human. Human involvement is reserved
+          // for when the pipeline genuinely can't resolve something on its own
+          // (max retries exhausted below, or request_human's "couldn't find
+          // anything to check" case) — not for rubber-stamping a clean pass.
+          const newMeta = JSON.stringify({ ...metadata, verified_document_path: matched_path, verify_checks: cleanChecks });
+          db.prepare('UPDATE tasks SET progress = 100, column_id = ?, metadata = ? WHERE id = ?').run('col_done', newMeta, taskId);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
             .run(uuidv4(), taskId, agent.id, 'verification_passed', summary);
           db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-            .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', 'Document verified — ready for human sign-off');
-          console.log(`[AgentRunner][${runner.id}][${taskId}] verification passed → Human Action (awaiting sign-off)`);
-          notifyHumanActionMembers(db, taskId, 'Document verified — ready for sign-off').catch(() => {});
+            .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_done', 'Document verified — task complete');
+          console.log(`[AgentRunner][${runner.id}][${taskId}] verification passed → Done`);
         } else {
           const newRetryCount = retryCount + 1;
           if (newRetryCount > MAX_RETRIES) {
             const maxRetryReason = `Verification failed after ${newRetryCount} attempts: ${summary}`;
-            const newMeta = JSON.stringify({ ...metadata, verified_document_path: matched_path });
-            db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ?, metadata = ? WHERE id = ?')
+            const newMeta = JSON.stringify({ ...metadata, verified_document_path: matched_path, verify_checks: cleanChecks });
+            db.prepare('UPDATE tasks SET progress = 100, column_id = ?, requires_human_action = 1, human_action_reason = ?, metadata = ? WHERE id = ?')
               .run('col_humanaction', maxRetryReason, newMeta, taskId);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
               .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
             console.log(`[AgentRunner][${runner.id}][${taskId}] max retries → Human Action`);
             notifyHumanActionMembers(db, taskId, maxRetryReason).catch(() => {});
           } else {
-            const newMeta = JSON.stringify({ ...metadata, verify_retry_count: newRetryCount, verified_document_path: matched_path });
-            db.prepare('UPDATE tasks SET column_id = ?, metadata = ? WHERE id = ?').run('col_inprogress', newMeta, taskId);
+            const newMeta = JSON.stringify({ ...metadata, verify_retry_count: newRetryCount, verified_document_path: matched_path, verify_checks: cleanChecks });
+            // Hand back to whoever produces the document — leaving it assigned to
+            // the verifier (who just failed it) meant nothing could ever pick this
+            // back up automatically; it showed as "Unassigned" in the UI since the
+            // verifier has no access to col_inprogress.
+            const producer = findAgentWithCapability(db, task.project_id, 'perm_producing');
+            db.prepare('UPDATE tasks SET progress = 100, column_id = ?, metadata = ?, assigned_agent_id = COALESCE(?, assigned_agent_id) WHERE id = ?')
+              .run('col_inprogress', newMeta, producer?.id || null, taskId);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
               .run(uuidv4(), taskId, agent.id, 'verification_failed', `Verification failed (retry ${newRetryCount}/${MAX_RETRIES}): ${summary}`);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
               .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_inprogress', 'Verification failed — sent back to In Progress');
             console.log(`[AgentRunner][${runner.id}][${taskId}] verification failed → In Progress (retry ${newRetryCount})`);
+            if (producer) triggerRunner(taskId);
           }
         }
         broadcastTask(db, taskId);
@@ -1895,8 +2026,16 @@ async function dispatch(taskId) {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
   if (!task || !task.assigned_agent_id) return;
 
-  const agent = db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id);
+  let agent = db.prepare('SELECT * FROM agents WHERE id = ? AND active = 1').get(task.assigned_agent_id);
   if (!agent) return;
+
+  // Benchmark probing tasks may carry a per-run model override so a case can be
+  // compared across models without reassigning the board's real agent — never
+  // read for a genuine task, since only dispatchProbingTask ever sets this metadata.
+  const taskMetadata = JSON.parse(task.metadata || '{}');
+  if (taskMetadata.is_benchmark_probe && taskMetadata.model_override) {
+    agent = { ...agent, model: taskMetadata.model_override };
+  }
 
   const capability = getAgentCapability(agent);
   if (!capability) return;

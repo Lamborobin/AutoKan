@@ -3,7 +3,7 @@ import {
   FileText, Plus, Archive, RotateCcw, Trash2, Save, ChevronDown, ChevronRight,
   X, XCircle, Check, ArrowLeft, Crown, Shield, UserMinus, Building2, Pencil, GitBranch,
   Github, FolderOpen, Loader2, AlertTriangle, Users, LayoutGrid, UserCheck, Settings2,
-  BookOpen, Info, Mail, UserPlus, FlaskConical, Link2 as LinkIcon, Wrench, Undo2, Redo2,
+  BookOpen, Info, Mail, UserPlus, FlaskConical, Link2 as LinkIcon, Wrench, Undo2, Redo2, Clock,
 } from 'lucide-react';
 import AiContextPanel from './AiContextPanel';
 import BenchmarkPanel from './BenchmarkPanel';
@@ -11,6 +11,7 @@ import InfoModal from './InfoModal';
 import TeamsPanel from './TeamsPanel';
 import BoardsPanel from './BoardsPanel';
 import SettingsTable from './SettingsTable';
+import VersionHistoryModal from './VersionHistoryModal';
 import { ProjectSwitcher } from '../Sidebar';
 import { useStore } from '../../store';
 import { instructionsApi, projectsApi, invitesApi } from '../../api'; // instructionsApi used for direct file reads in selectFile/autoSave
@@ -218,6 +219,7 @@ export default function SettingsPage() {
   const [actionError, setActionError]     = useState(null);
   const [editingCaps, setEditingCaps]     = useState(false);
   const [savingCaps, setSavingCaps]       = useState(false);
+  const [showHistory, setShowHistory]     = useState(false);
   const saveTimerRef = useRef(null);
   const savedContentRef = useRef(''); // last-persisted content, for Cancel to revert to
 
@@ -1347,7 +1349,7 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              {/* Editor toolbar — undo/redo today; room for format, AI validation, etc. later */}
+              {/* Editor toolbar — undo/redo + version history; room for format, AI validation, etc. later */}
               {!selectedFile.archived && (
                 <div className="shrink-0 flex items-center gap-1 px-6 py-2 border-b border-border bg-surface-2">
                   <button
@@ -1361,6 +1363,12 @@ export default function SettingsPage() {
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-300 hover:text-gray-100 hover:bg-surface-3 disabled:text-gray-600 disabled:hover:bg-transparent transition-colors"
                   >
                     <Redo2 size={15} /> Redo
+                  </button>
+                  <button
+                    onClick={() => setShowHistory(true)} title="Version history"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-gray-300 hover:text-gray-100 hover:bg-surface-3 transition-colors ml-auto"
+                  >
+                    <Clock size={13} /> History
                   </button>
                 </div>
               )}
@@ -1442,6 +1450,20 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Version history modal — board/subscription file editor (System Behavior has its own, inside AiContextPanel) */}
+      {showHistory && selectedFile && (() => {
+        const { projectId, subscriptionId } = getApiScope(selectedFile.scope);
+        return (
+          <VersionHistoryModal
+            label={`${selectedFile.name}.md`}
+            fetchVersions={() => instructionsApi.versions(selectedFile.name + '.md', projectId, subscriptionId)}
+            fetchVersion={(versionFile) => instructionsApi.getVersion(selectedFile.name + '.md', versionFile, projectId, subscriptionId)}
+            onRestore={handleContentChange}
+            onClose={() => setShowHistory(false)}
+          />
+        );
+      })()}
     </div>
   );
 }

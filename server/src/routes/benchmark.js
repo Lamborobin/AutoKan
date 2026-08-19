@@ -11,6 +11,7 @@ const {
   VALID_CAPABILITIES,
   PLANNING_CAPABILITY,
 } = require('../services/benchmarkRunner');
+const { getValidModelIds } = require('../services/modelRegistry');
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ router.get('/cases', attachAgent, (req, res) => {
 router.post('/cases', attachAgent, async (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create benchmark tasks' });
   const db = getDb();
-  const { subscription_id, project_id, layer, title, description, rubric, rule_reference, source, capability } = req.body;
+  const { subscription_id, project_id, layer, title, description, rubric, rule_reference, source, capability, acceptance_criteria } = req.body;
 
   if (!subscription_id || !layer || !title || !description) {
     return res.status(400).json({ error: 'subscription_id, layer, title, and description are required' });
@@ -75,9 +76,9 @@ router.post('/cases', attachAgent, async (req, res) => {
 
   const id = 'bmc_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, capability, rule_reference, title, description, rubric, source, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, subscription_id, project_id || null, layer, resolvedCapability, rule_reference || null, title, description, JSON.stringify(rubric || {}), resolvedSource, req.user?.sub || null);
+    INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, capability, rule_reference, title, description, acceptance_criteria, rubric, source, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, subscription_id, project_id || null, layer, resolvedCapability, rule_reference || null, title, description, acceptance_criteria || null, JSON.stringify(rubric || {}), resolvedSource, req.user?.sub || null);
 
   res.status(201).json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(id)));
 
@@ -119,14 +120,17 @@ router.patch('/cases/:id', attachAgent, (req, res) => {
   const existing = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Case not found' });
 
-  const { title, description, rubric } = req.body;
+  const { title, description, rubric, acceptance_criteria } = req.body;
   db.prepare(`
     UPDATE benchmark_cases SET
       title = COALESCE(?, title),
       description = COALESCE(?, description),
+      acceptance_criteria = CASE WHEN ? THEN ? ELSE acceptance_criteria END,
       rubric = COALESCE(?, rubric)
     WHERE id = ?
-  `).run(title || null, description || null, rubric ? JSON.stringify(rubric) : null, req.params.id);
+  `).run(title || null, description || null,
+    acceptance_criteria !== undefined ? 1 : 0, acceptance_criteria || null,
+    rubric ? JSON.stringify(rubric) : null, req.params.id);
 
   res.json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id)));
 });
@@ -179,8 +183,16 @@ router.post('/cases/:id/run', attachAgent, async (req, res) => {
   const projectId = req.body.project_id || caseRow.project_id;
   if (!projectId) return res.status(400).json({ error: 'project_id is required — pick a board to run this case against' });
 
+  // Optional per-run model override — lets the same case be compared across models
+  // without reassigning the board's real agent (see dev/upcoming-changes.md). Omit
+  // or leave blank to run on whatever model the board's agent is actually configured with.
+  const { model } = req.body;
+  if (model && !getValidModelIds().has(model)) {
+    return res.status(400).json({ error: `Unknown model "${model}"` });
+  }
+
   try {
-    const run = await createRunAndDispatch(caseRow, { projectId, userId: req.user?.sub || null });
+    const run = await createRunAndDispatch(caseRow, { projectId, userId: req.user?.sub || null, model: model || null });
     res.status(201).json(fmtRun(run));
   } catch (err) {
     res.status(500).json({ error: err.message });

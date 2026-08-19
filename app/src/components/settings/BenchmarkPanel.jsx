@@ -238,18 +238,24 @@ function AgentOutput({ taskId, capability }) {
   }
 
   const isPlanning = capability === 'perm_planning';
+  const isVerifying = capability === 'perm_verifying';
   // tasksApi.get() already returns pm_checklist parsed (server/src/routes/tasks.js) — don't re-parse it.
   const checklist = task?.pm_checklist || [];
+  const verifyChecks = task?.metadata?.verify_checks || [];
 
   const summaryLog = capability === 'perm_producing'
-    ? task?.logs?.find(l => l.action === 'document_produced')
-    : capability === 'perm_verifying'
-    ? task?.logs?.find(l => ['verification_passed', 'verification_failed'].includes(l.action))
+    ? task?.logs?.find(l => ['document_produced', 'human_action_requested'].includes(l.action))
+    : isVerifying
+    // A run that never found anything to check (empty docs folder, no linked client
+    // path, ...) settles via human_action_requested rather than a pass/fail verdict —
+    // still worth surfacing here rather than showing "Nothing recorded for this run"
+    // on a run that in fact explained exactly what happened.
+    ? task?.logs?.find(l => ['verification_passed', 'verification_failed', 'human_action_requested'].includes(l.action))
     : null;
-  const docField = capability === 'perm_producing' ? 'produced' : capability === 'perm_verifying' ? 'verified' : null;
+  const docField = capability === 'perm_producing' ? 'produced' : isVerifying ? 'verified' : null;
   const docPath = capability === 'perm_producing'
     ? task?.metadata?.produced_document_path
-    : capability === 'perm_verifying'
+    : isVerifying
     ? task?.metadata?.verified_document_path
     : null;
   const docFilename = docPath?.split('/').pop();
@@ -299,6 +305,22 @@ function AgentOutput({ taskId, capability }) {
           {!loading && !isPlanning && summaryLog && (
             <div className="border-l-2 border-border pl-2.5">
               <MarkdownText text={summaryLog.message} className="text-sm text-gray-100 leading-relaxed" />
+            </div>
+          )}
+
+          {!loading && isVerifying && verifyChecks.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Checks</p>
+              <ul className="space-y-1">
+                {verifyChecks.map((c, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs">
+                    {c.passed
+                      ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" />
+                      : <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />}
+                    <MarkdownText text={c.item} className={`text-xs ${c.passed ? 'text-gray-500' : 'text-red-300'}`} />
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -371,7 +393,15 @@ function RunCard({ run, caseId, capability }) {
     <div className="rounded-xl border border-border bg-surface-1 overflow-hidden">
       <div className="flex items-center justify-between px-3 py-2 bg-surface-2/40 border-b border-border/60">
         <span className="text-xs text-gray-500 font-mono">{formatRunTimestamp(run.started_at)}</span>
-        <StatusBadge status={run.status} />
+        <div className="flex items-center gap-1.5">
+          {run.model_override && (
+            <span title="This run overrode the board agent's own model"
+              className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/25">
+              {run.model_override}
+            </span>
+          )}
+          <StatusBadge status={run.status} />
+        </div>
       </div>
 
       <div className="p-3 space-y-2.5">
@@ -452,6 +482,12 @@ function CompactRunRow({ run, onClick }) {
     <button onClick={onClick}
       className="w-full flex items-center gap-3 px-3 py-2 rounded-lg border border-border bg-surface-1 hover:border-accent/40 hover:bg-surface-2/40 transition-colors text-left">
       <span className="text-xs text-gray-500 font-mono shrink-0">{formatRunTimestamp(run.started_at)}</span>
+      {run.model_override && (
+        <span title="This run overrode the board agent's own model"
+          className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/25 shrink-0">
+          {run.model_override}
+        </span>
+      )}
       <StatusBadge status={run.status} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <VerdictChip
@@ -475,17 +511,22 @@ function CompactRunRow({ run, onClick }) {
 
 function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
   const { draftRubricForCase } = useStore();
+  const models = useStore(s => s.models);
   const [expanded, setExpanded] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [running, setRunning] = useState(false);
   const [draftingRubric, setDraftingRubric] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState(null);
+  // '' = run on whatever model the board's real agent for this capability is
+  // configured with (the normal path); picking a specific model here overrides
+  // that for just this one run, so comparing models never touches the real agent.
+  const [modelOverride, setModelOverride] = useState('');
   const hasNoRubric = !c.rubric || Object.keys(c.rubric).length === 0;
 
   async function handleRun() {
     setRunning(true);
     try {
-      const run = await onRun(c.id);
+      const run = await onRun(c.id, modelOverride || undefined);
       setExpanded(true);
       setSelectedRunId(run?.id || null);
     }
@@ -514,6 +555,12 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
             {showDescription ? 'Hide description' : 'Show description'}
           </button>
           {showDescription && <MarkdownText text={c.description} className="text-sm text-gray-500 mt-1.5" />}
+          {showDescription && c.acceptance_criteria && (
+            <div className="mt-2 pt-2 border-t border-border/50">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Acceptance Criteria</p>
+              <MarkdownText text={c.acceptance_criteria} className="text-sm text-gray-500" />
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1 shrink-0">
           <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/25 uppercase tracking-wide">
@@ -537,8 +584,14 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
       )}
 
       <div className="flex items-center gap-2">
+        <select value={modelOverride} onChange={e => setModelOverride(e.target.value)} disabled={running}
+          title="Which model runs this probe — leave as board default to use the board agent's own configured model"
+          className="bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-300 outline-none focus:border-accent/50 disabled:opacity-40">
+          <option value="">Board's agent (default)</option>
+          {models.map(m => <option key={m.value} value={m.value}>{m.shortLabel || m.label}</option>)}
+        </select>
         <button onClick={handleRun} disabled={running || !targetProjectId}
-          title={c.capability === 'perm_verifying' ? 'Runs Producing first to generate a real document, then Verifying checks it' : undefined}
+          title={c.capability === 'perm_verifying' ? "Checks whatever's already in the board's docs folder — name a specific file in the description if you want a particular one checked" : undefined}
           className="flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
           {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Run
         </button>
@@ -605,8 +658,8 @@ export default function BenchmarkPanel({ scope }) {
     }
   }, [scope, currentProjectId, subscription?.id]);
 
-  async function handleRun(caseId) {
-    return runBenchmarkCase(caseId, targetProjectId);
+  async function handleRun(caseId, model) {
+    return runBenchmarkCase(caseId, targetProjectId, model);
   }
 
   async function handleDelete(caseId) {

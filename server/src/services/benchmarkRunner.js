@@ -39,6 +39,25 @@ const CAPABILITY_START_COLUMN = {
   [VERIFYING_CAPABILITY]: 'col_testing',
 };
 
+// How long pollAndScore waits before giving up on a run and marking it 'timeout'.
+// Planning normally answers in single-digit seconds, so it gets its own short fuse
+// (see below). Producing/Verifying's handlers (runProduceDocument/runVerifyDocument
+// in agentRunner.js) each escalate to Human Action on their own wall-clock cap —
+// but that cap is only re-checked BETWEEN loop iterations, so a single in-flight
+// API call (up to its own per-call hard timeout) can push the real worst-case time
+// to escalate well past the nominal cap:
+//   Producing: 240s wall-clock cap + up to 150s in-flight call = 390s worst case
+//   Verifying: 180s wall-clock cap + up to  60s in-flight call = 240s worst case
+// This MUST stay comfortably above that worst case (not just the cap alone) — a
+// prior version used 270s for both, which is short enough than Producing's real
+// worst case that this poll gave up seconds before the handler's own escalation
+// write landed, showing 'timeout' on a run that was actually still working normally.
+const CAPABILITY_POLL_TIMEOUT_MS = {
+  [PLANNING_CAPABILITY]: 60000,
+  [PRODUCING_CAPABILITY]: 420000,
+  [VERIFYING_CAPABILITY]: 300000,
+};
+
 let _client;
 function getClient() {
   if (!_client) {
@@ -199,6 +218,16 @@ function scoreDeterministic(task, logs, rubric = {}, capability = PLANNING_CAPAB
   const probe = probeFor(capability);
   const tool = firedTool(task, logs, capability);
 
+  // Same reasoning as callJudge's infrastructure-escalation guard above: request_human
+  // on Producing/Verifying means nothing was ever actually checked (no document found,
+  // no linked path, ...), so expected_tool/required_fields/forbidden_substrings would
+  // all mechanically "fail" against content that was never read — a misleading red
+  // badge for a run that behaved correctly given what it found. No checks ran, so none
+  // get scored, same as the empty-rubric case below.
+  if (tool === 'request_human' && [PRODUCING_CAPABILITY, VERIFYING_CAPABILITY].includes(capability)) {
+    return { passed: null, tool_fired: tool, checks: [], side_effects: sideEffectsFired(logs) };
+  }
+
   // expected_tool may be a single tool name or an array of equally-acceptable tools
   // (e.g. a task that's ambiguous enough to justify either a clarifying question or a
   // split proposal) — either shape is scored the same way, against a set of options.
@@ -273,20 +302,27 @@ function findCapableAgent(projectId, capability) {
   }) || null;
 }
 
-async function dispatchProbingTask({ title, description, columnId, agentId, projectId, capability }) {
+async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride }) {
   const res = await fetch(`http://localhost:${PORT}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-agent-id': 'human' },
     body: JSON.stringify({
       title,
       description,
+      // Mirrors what a real Planning-approved task would have — see benchmark_cases'
+      // acceptance_criteria column comment in db/index.js for why this matters.
+      acceptance_criteria: acceptanceCriteria || undefined,
       column_id: columnId,
       assigned_agent_id: agentId,
       project_id: projectId,
       // Probing tasks go through the real creation/dispatch pipeline (that's what
       // makes the blind test trustworthy) but must never show up as real board work —
       // tasks.js's list route and other.js's column-count query both exclude this flag.
-      metadata: { is_benchmark_probe: true },
+      // model_override lets a case be run against a specific model instead of
+      // whatever the board's real agent is configured with (agentRunner.js's
+      // dispatch() reads this back off the task); omitted entirely when unset so it
+      // never shows up as a literal `null` in stored task metadata.
+      metadata: { is_benchmark_probe: true, ...(modelOverride ? { model_override: modelOverride } : {}) },
     }),
   });
   if (!res.ok) throw new Error(`Probing task creation failed (${res.status})`);
@@ -323,7 +359,7 @@ async function waitForSettlement(taskId, settledActions, { timeoutMs = 270000, i
   return { task, logs, settled };
 }
 
-async function createRunAndDispatch(caseRow, { projectId, userId } = {}) {
+async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) {
   const db = getDb();
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
   if (!project) throw new Error('Unknown project');
@@ -332,45 +368,32 @@ async function createRunAndDispatch(caseRow, { projectId, userId } = {}) {
   const agent = findCapableAgent(projectId, capability);
   if (!agent) throw new Error(`This board has no active ${CAPABILITY_LABELS[capability] || capability} to run the case against.`);
 
-  // Verify has nothing to check until a real document exists — dispatch a Producing
-  // run on the same brief first and wait for it to settle, so Verify is checking a
-  // genuine document rather than a fixture. Recorded as source_task_id so it's
-  // traceable; probing_task_id (below) stays the task that's actually scored.
-  let sourceTaskId = null;
-  if (capability === VERIFYING_CAPABILITY) {
-    const producingAgent = findCapableAgent(projectId, PRODUCING_CAPABILITY);
-    if (!producingAgent) throw new Error('This board has no active producing-capable agent — a Verify case needs one to generate the document to check.');
-
-    const produceTask = await dispatchProbingTask({
-      title: caseRow.title,
-      description: caseRow.description,
-      columnId: CAPABILITY_START_COLUMN[PRODUCING_CAPABILITY],
-      agentId: producingAgent.id,
-      projectId,
-      capability: PRODUCING_CAPABILITY,
-    });
-
-    const { settled } = await waitForSettlement(produceTask.id, probeFor(PRODUCING_CAPABILITY).settledActions);
-    if (!settled) throw new Error('The producing stage for this Verify case timed out before a document was written — nothing for Verify to check.');
-
-    sourceTaskId = produceTask.id;
-  }
+  // A Verify case checks whatever already exists in the board's docs/ folder —
+  // it does NOT generate a fresh document first. verify_document's own file
+  // discovery (list_files/read_file against the board's real docs, matching by
+  // title/date/content, or a filename named directly in the case description)
+  // handles finding the right document, exactly like a real Verify-stage task
+  // would; if truly nothing matches, it already escalates via request_human on
+  // its own (a tracked settled action), so there's nothing extra to handle here.
+  const sourceTaskId = null;
 
   const task = await dispatchProbingTask({
     title: caseRow.title,
     description: caseRow.description,
+    acceptanceCriteria: caseRow.acceptance_criteria || null,
     columnId: CAPABILITY_START_COLUMN[capability],
     agentId: agent.id,
     projectId,
     capability,
+    modelOverride: model || null,
   });
 
   const runId = 'bmr_' + uuidv4().replace(/-/g, '').slice(0, 12);
   const contextVersion = snapshotContextVersion(project.subscription_id, projectId);
   db.prepare(`
-    INSERT INTO benchmark_runs (id, case_id, project_id, probing_task_id, source_task_id, status, context_version, triggered_by)
-    VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?)
-  `).run(runId, caseRow.id, projectId, task.id, sourceTaskId, JSON.stringify(contextVersion), userId || null);
+    INSERT INTO benchmark_runs (id, case_id, project_id, probing_task_id, source_task_id, status, context_version, model_override, triggered_by)
+    VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?, ?)
+  `).run(runId, caseRow.id, projectId, task.id, sourceTaskId, JSON.stringify(contextVersion), model || null, userId || null);
 
   pollAndScore(runId).catch(err => console.error('[benchmarkRunner] poll error:', err.message));
 
@@ -394,7 +417,10 @@ async function callJudge(task, logs, judgeRubric, capability = PLANNING_CAPABILI
 
   const response = await getClient().messages.create({
     model: 'claude-opus-5',
-    max_tokens: 512,
+    // Was 512 — same bug as agentRunner.js's max_tokens fixes: a model that spends
+    // budget on internal reasoning before reaching its tool call can get cut off
+    // before ever producing one, silently returning an empty/default verdict.
+    max_tokens: 4096,
     system: `You are grading whether a real ${CAPABILITY_LABELS[capability] || 'AI agent'}'s output respected a specific rule under test. Respond only by calling the verdict tool.`,
     tools: [{
       name: 'verdict',
@@ -419,7 +445,7 @@ async function callJudge(task, logs, judgeRubric, capability = PLANNING_CAPABILI
   return block ? block.input : { passed: false, rationale: 'Judge model did not return a verdict.' };
 }
 
-async function pollAndScore(runId, { timeoutMs = 270000, intervalMs = 2000 } = {}) {
+async function pollAndScore(runId, { timeoutMs, intervalMs = 2000 } = {}) {
   const db = getDb();
   const run = db.prepare('SELECT * FROM benchmark_runs WHERE id = ?').get(runId);
   if (!run) return;
@@ -427,7 +453,11 @@ async function pollAndScore(runId, { timeoutMs = 270000, intervalMs = 2000 } = {
   const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
   const capability = caseRow?.capability || PLANNING_CAPABILITY;
 
-  const { task, logs, settled } = await waitForSettlement(run.probing_task_id, probeFor(capability).settledActions, { timeoutMs, intervalMs });
+  // Caller may force a specific timeout; otherwise use the capability-appropriate
+  // default (see CAPABILITY_POLL_TIMEOUT_MS above).
+  const effectiveTimeoutMs = timeoutMs ?? CAPABILITY_POLL_TIMEOUT_MS[capability] ?? 270000;
+
+  const { task, logs, settled } = await waitForSettlement(run.probing_task_id, probeFor(capability).settledActions, { timeoutMs: effectiveTimeoutMs, intervalMs });
 
   if (!settled) {
     db.prepare(`UPDATE benchmark_runs SET status = 'timeout', completed_at = CURRENT_TIMESTAMP WHERE id = ?`).run(runId);
@@ -441,9 +471,19 @@ async function pollAndScore(runId, { timeoutMs = 270000, intervalMs = 2000 } = {
   // a run isn't meaningfully "done" until the substance has been checked, not just
   // the shape. If the model call itself fails, leave judge_result null rather than
   // failing the whole run — the deterministic result and raw output are still there.
+  //
+  // Exception: request_human on a Producing/Verifying case is never a substantive
+  // content judgment — both tools' own descriptions reserve it for "couldn't locate
+  // the document/standard at all" (an infrastructure-style non-outcome), not a
+  // nuanced compliance call. Asking the judge to grade rule-compliance against
+  // content that was never actually checked produced long, technically-correct-but-
+  // unhelpful paragraphs explaining that an empty folder can't pass a content
+  // checklist. No verdict is the honest answer here, not a graded one.
   let judgeResult = null;
   const judgeRubric = rubric.judge || {};
-  if (judgeRubric.instructions || judgeRubric.pass_criteria) {
+  const isInfrastructureEscalation = deterministic.tool_fired === 'request_human'
+    && [PRODUCING_CAPABILITY, VERIFYING_CAPABILITY].includes(capability);
+  if (!isInfrastructureEscalation && (judgeRubric.instructions || judgeRubric.pass_criteria)) {
     try { judgeResult = await callJudge(task, logs, judgeRubric, capability); }
     catch (err) { console.error('[benchmarkRunner] auto-judge failed:', err.message); }
   }
@@ -469,7 +509,19 @@ async function reviewWithAI(runId) {
   const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
   const judgeRubric = (JSON.parse(caseRow.rubric || '{}')).judge || {};
 
-  const verdict = await callJudge(task, logs, judgeRubric, caseRow.capability || PLANNING_CAPABILITY);
+  // Same guards pollAndScore uses before auto-judging on completion — see its
+  // comments for why each one matters (no rubric → misleading default pass;
+  // request_human on Producing/Verifying → nothing substantive was ever checked).
+  if (!judgeRubric.instructions && !judgeRubric.pass_criteria) {
+    throw new Error('This case has no scoring rubric — draft one first, then request an AI review.');
+  }
+  const capability = caseRow.capability || PLANNING_CAPABILITY;
+  const tool = firedTool(task, logs, capability);
+  if (tool === 'request_human' && [PRODUCING_CAPABILITY, VERIFYING_CAPABILITY].includes(capability)) {
+    throw new Error('This run escalated without checking any content (nothing was found to verify) — there is nothing for the AI judge to grade.');
+  }
+
+  const verdict = await callJudge(task, logs, judgeRubric, capability);
 
   db.prepare(`UPDATE benchmark_runs SET judge_result = ?, review_provenance = 'ai' WHERE id = ?`)
     .run(JSON.stringify(verdict), runId);
@@ -621,7 +673,8 @@ async function draftCaseFromBoard(projectId, subscriptionId, capability = PLANNI
 
   const response = await getClient().messages.create({
     model: 'claude-opus-5',
-    max_tokens: 1200,
+    // Was 1200 — same bug as the other calls in this file; see callJudge's comment above.
+    max_tokens: 4096,
     temperature: 1,
     system: `You design rule-compliance benchmark cases for a ${CAPABILITY_LABELS[capability] || 'AI agent'}. Given a board's real rule documents, propose ONE synthetic probing task whose correct handling would reveal whether the agent violates one of these rules. The probing task itself must be original/synthetic (not copied from anywhere), but it must probe a rule that genuinely exists in the documents given. Respond only via the propose_case tool.`,
     tools: [{
@@ -661,7 +714,10 @@ async function draftRubricForTask(title, description, projectId, subscriptionId,
 
   const response = await getClient().messages.create({
     model: 'claude-opus-5',
-    max_tokens: 800,
+    // Was 800 — same bug as the other calls in this file; see callJudge's comment above.
+    // This is the exact call that was silently returning an empty {} rubric — cut off
+    // before ever reaching the tool call — which is why "Draft one now" looked stuck.
+    max_tokens: 4096,
     system: `You design rule-compliance benchmark scoring for a ${CAPABILITY_LABELS[capability] || 'AI agent'}. The probing task's title and description are already fixed — propose a rubric to evaluate whether the agent handles THIS EXACT task correctly, grounded in the board's real rule documents when given. Respond only via the propose_rubric tool.`,
     tools: [{
       name: 'propose_rubric',

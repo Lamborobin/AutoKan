@@ -122,6 +122,10 @@ export const instructionsApi = {
     api.post(`/instructions/${filename}/unarchive`, {}, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
   delete: (filename, projectId = null, subscriptionId = null) =>
     api.delete(`/instructions/${filename}`, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  versions: (filename, projectId = null, subscriptionId = null) =>
+    api.get(`/instructions/${filename}/versions`, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
+  getVersion: (filename, versionFile, projectId = null, subscriptionId = null) =>
+    api.get(`/instructions/${filename}/versions/${encodeURIComponent(versionFile)}`, { params: instrParams({ projectId, subscriptionId }) }).then(r => r.data),
 };
 
 export const benchmarkApi = {
@@ -131,7 +135,7 @@ export const benchmarkApi = {
   updateCase: (id, data) => api.patch(`/benchmark/cases/${id}`, data).then(r => r.data),
   draftRubric: (id) => api.post(`/benchmark/cases/${id}/draft-rubric`).then(r => r.data),
   deleteCase: (id) => api.delete(`/benchmark/cases/${id}`).then(r => r.data),
-  runCase: (id, projectId) => api.post(`/benchmark/cases/${id}/run`, { project_id: projectId }).then(r => r.data),
+  runCase: (id, projectId, model) => api.post(`/benchmark/cases/${id}/run`, { project_id: projectId, model: model || undefined }).then(r => r.data),
   listRuns: (caseId) => api.get('/benchmark/runs', { params: { case_id: caseId } }).then(r => r.data),
   getRun: (id) => api.get(`/benchmark/runs/${id}`).then(r => r.data),
   reviewWithAI: (runId) => api.post(`/benchmark/runs/${runId}/review-ai`).then(r => r.data),
