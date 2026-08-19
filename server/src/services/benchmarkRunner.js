@@ -302,7 +302,7 @@ function findCapableAgent(projectId, capability) {
   }) || null;
 }
 
-async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride }) {
+async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride, allowedEffects }) {
   const res = await fetch(`http://localhost:${PORT}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-agent-id': 'human' },
@@ -322,7 +322,15 @@ async function dispatchProbingTask({ title, description, acceptanceCriteria, col
       // whatever the board's real agent is configured with (agentRunner.js's
       // dispatch() reads this back off the task); omitted entirely when unset so it
       // never shows up as a literal `null` in stored task metadata.
-      metadata: { is_benchmark_probe: true, ...(modelOverride ? { model_override: modelOverride } : {}) },
+      // allowed_effects lets a smoke-test case opt specific outward effects back
+      // in — without it every effect is recorded instead of performed (see
+      // services/effects.js). Omitted entirely when empty so an ordinary case's
+      // metadata stays exactly as it was.
+      metadata: {
+        is_benchmark_probe: true,
+        ...(modelOverride ? { model_override: modelOverride } : {}),
+        ...(allowedEffects && allowedEffects.length ? { allowed_effects: allowedEffects } : {}),
+      },
     }),
   });
   if (!res.ok) throw new Error(`Probing task creation failed (${res.status})`);
@@ -377,6 +385,10 @@ async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) 
   // its own (a tracked settled action), so there's nothing extra to handle here.
   const sourceTaskId = null;
 
+  let allowedEffects = [];
+  try { allowedEffects = JSON.parse(caseRow.allowed_effects || '[]'); }
+  catch { allowedEffects = []; }
+
   const task = await dispatchProbingTask({
     title: caseRow.title,
     description: caseRow.description,
@@ -386,6 +398,7 @@ async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) 
     projectId,
     capability,
     modelOverride: model || null,
+    allowedEffects: Array.isArray(allowedEffects) ? allowedEffects : [],
   });
 
   const runId = 'bmr_' + uuidv4().replace(/-/g, '').slice(0, 12);

@@ -8,7 +8,7 @@ const util = require('util');
 const { getDb } = require('../db');
 const { broadcast } = require('../sse');
 const { resolveInstructionPath } = require('../utils/instructions');
-const { notifyHumanActionMembers } = require('./notificationsService');
+const { notifyHumanActionMembers, shouldPerform, recordEffect, EXTERNAL, PR_CREATE, PR_MERGE } = require('./effects');
 const { writeFileSafe } = require('../utils/writeGuard');
 const { ACTION_HOOKS } = require('./actionHooks');
 const runnersRegistry = require('../seed/runners.json');
@@ -54,6 +54,17 @@ async function runActionHook(action, params, task, agent) {
       .run(uuidv4(), task.id, agent.id, 'note', message);
     return { error: message };
   }
+  // Effect gate. The hook declares its kind (see actionHooks.js); an undeclared
+  // one is treated as EXTERNAL and fails closed. When the effect isn't performed,
+  // the agent still gets an ordinary-looking success — the same string the code
+  // below falls back to when a hook returns nothing — because the blind test only
+  // holds if the agent cannot tell a benchmark run from a real one. What actually
+  // happened is recorded to task_logs, which the agent never reads back.
+  if (!shouldPerform(db, task, action, hook.effect || EXTERNAL)) {
+    recordEffect(db, task.id, agent.id, action, `invoke action hook "${action}"`);
+    return { success: true, message: `Invoked "${action}"` };
+  }
+
   try {
     const message = await hook.run(params, { taskId: task.id });
     db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
@@ -1045,16 +1056,37 @@ async function runImplementInWorktree(task, agent, runner) {
       } else if (block.name === 'task_complete') {
         const { summary } = block.input;
         const prBody = `## Summary\n${summary}\n\n## Task\n${task.title}\n\n${task.acceptance_criteria ? `## Acceptance Criteria\n${task.acceptance_criteria}` : ''}`.trim();
-        const pr = await createGithubPr({
-          title: `[${taskId}] ${task.title}`,
-          body: prBody,
-          head: `feature/${taskId}`,
-        });
+        // Opening a PR reaches outside AutoKan, so it runs only when the effect
+        // gate allows it. A suppressed run still gets a PR-shaped result: the two
+        // branches below (auto-merge → Testing vs. park in Human Action) are part
+        // of what a coding benchmark exists to exercise, so they must still run —
+        // only the GitHub calls are skipped.
+        const prAllowed = shouldPerform(db, task, PR_CREATE, EXTERNAL);
+        let pr;
+        if (prAllowed) {
+          pr = await createGithubPr({
+            title: `[${taskId}] ${task.title}`,
+            body: prBody,
+            head: `feature/${taskId}`,
+          });
+        } else {
+          recordEffect(db, taskId, agent.id, PR_CREATE, `open PR "[${taskId}] ${task.title}" from feature/${taskId}`);
+          pr = { url: `benchmark://pr/${taskId}`, number: null };
+        }
         const pr_url = pr ? pr.url : '';
 
         if (task.auto_complete && pr) {
-          // Auto-complete: merge PR immediately, move straight to Testing
-          const merged = await mergeGithubPr(pr.number);
+          // Auto-complete: merge PR immediately, move straight to Testing.
+          // Merging is the one irreversible step in this flow — a benchmark must
+          // never land probe code on master — so when suppressed it is recorded
+          // and reported as merged, keeping the Testing transition exercised.
+          let merged;
+          if (prAllowed && shouldPerform(db, task, PR_MERGE, EXTERNAL)) {
+            merged = await mergeGithubPr(pr.number);
+          } else {
+            recordEffect(db, taskId, agent.id, PR_MERGE, `merge PR for ${taskId} into master`);
+            merged = true;
+          }
           const targetCol = merged ? 'col_testing' : 'col_humanaction';
           const reason = merged ? null : 'Auto-merge failed — please review and merge manually';
           db.prepare('UPDATE tasks SET progress = 100, column_id = ?, pr_url = ?, requires_human_action = ?, human_action_reason = ? WHERE id = ?')

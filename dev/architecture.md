@@ -111,6 +111,34 @@ Each capability in the registry also declares its write-access scope (e.g. `perm
 
 ---
 
+## Effects & Run Modes
+
+Anything that leaves the system — a notification to a human, a GitHub PR, a merge, an action hook — is an **effect**, and every effect routes through `server/src/services/effects.js`. That module is the only place deciding whether an effect is really performed or merely recorded, so a new handler inherits the decision instead of having to remember it.
+
+Two axes decide:
+
+- **Run mode**, resolved per task. `live` is real work for a real board; `benchmark` is a synthetic probing task. A `test` mode is reserved for the planned test capabilities — their orchestration notices are legitimately real (a human *is* waiting to hear that tests passed) while effects of the code under test are not, which is why kind exists rather than this being one boolean.
+- **Effect kind**, declared where the effect is defined. `orchestration` is AutoKan telling a human about pipeline state; `external` is anything reaching outside AutoKan, or produced by the behavior under test.
+
+| | orchestration | external |
+|---|---|---|
+| **live** | perform | perform |
+| **benchmark** | record | record |
+
+Both axes fail closed: an unrecognised run mode falls back to the most restrictive row, and an undeclared effect kind is recorded rather than performed.
+
+**The agent's path is never forked.** A benchmark probe runs the same handler, the same tools, and receives the same tool results as a real task — a suppressed action hook still returns an ordinary success. Only the outermost boundary changes, and it changes invisibly to the agent, because a blind test measures real behavior only while the agent cannot tell the difference.
+
+Recorded effects are written as plain `note` task logs — already the convention benchmark scoring reads — so a suppressed effect is scoreable with no extra wiring, and that same list is the assertion surface a test capability needs.
+
+A benchmark case may opt specific effects back in, by id, via its `allowed_effects` list — that is how a smoke-test case proves an action hook really works end-to-end rather than only proving the agent tried to call it. Matching is per effect id, never per kind, so allowing one effect can't quietly unlock another. Action hooks use their registry key as their effect id, so a newly registered hook is allow-listable with no second list to maintain.
+
+**Transport is not an effect, and is not renamed either.** A branch push carries work between pipeline stages (Coder → Tester) and is the only shared state once handlers no longer share a filesystem, so suppressing it would break the pipeline a benchmark exists to exercise. Renaming it per run mode fails for a different reason: the runner prompt hands the agent its branch and its push command, so a benchmark-only branch name would make the prompt untrue and the push fail. Probe branches are identified for cleanup from `benchmark_runs.probing_task_id`, which already records exactly which tasks were probes.
+
+This is the general boundary. Effects the agent *triggers but never acts on* can be suppressed invisibly. Anything the agent *operates on* — a branch name, a path, a tool result it reasons from — must stay true, because lying there breaks the run rather than protecting the test.
+
+---
+
 ## Authentication
 
 - **Humans** — Google OAuth → JWT stored in `localStorage`. All requests carry `Authorization: Bearer <token>`.

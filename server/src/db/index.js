@@ -328,6 +328,11 @@ function applySchema(db) {
       -- would via acceptance criteria on a real task.
       acceptance_criteria TEXT,
       rubric TEXT NOT NULL DEFAULT '{}',
+      -- JSON array of effect ids this case may really perform despite being a
+      -- benchmark run (see services/effects.js). Empty/null means the default:
+      -- every outward effect is recorded instead of performed. Populated only
+      -- for smoke-test cases that exist to prove an effect works end-to-end.
+      allowed_effects TEXT,
       source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ai_generated','ai_edited','cloned_task')),
       created_by TEXT REFERENCES users(id),
       archived_at DATETIME,
@@ -408,6 +413,9 @@ function applySchema(db) {
   const benchmarkCasesColumns = db.prepare(`PRAGMA table_info(benchmark_cases)`).all().map(c => c.name);
   if (!benchmarkCasesColumns.includes('acceptance_criteria')) {
     db.exec(`ALTER TABLE benchmark_cases ADD COLUMN acceptance_criteria TEXT`);
+  }
+  if (!benchmarkCasesColumns.includes('allowed_effects')) {
+    db.exec(`ALTER TABLE benchmark_cases ADD COLUMN allowed_effects TEXT`);
   }
 }
 

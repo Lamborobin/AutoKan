@@ -12,10 +12,23 @@ const {
   PLANNING_CAPABILITY,
 } = require('../services/benchmarkRunner');
 const { getValidModelIds } = require('../services/modelRegistry');
+const { BUILTIN_EFFECT_IDS } = require('../services/effects');
+const { ACTION_HOOKS } = require('../services/actionHooks');
 
 const router = express.Router();
 
 const VALID_SOURCES = ['manual', 'ai_generated', 'ai_edited', 'cloned_task'];
+// A case may only opt in effects that actually exist — server-emitted ones plus
+// every registered action hook (a hook's registry key is its effect id). Computed
+// rather than hardcoded so a newly registered hook is allow-listable immediately.
+const validEffectIds = () => [...BUILTIN_EFFECT_IDS, ...Object.keys(ACTION_HOOKS)];
+function badEffects(list) {
+  if (list === undefined || list === null) return null;
+  if (!Array.isArray(list)) return 'allowed_effects must be an array of effect ids';
+  const valid = validEffectIds();
+  const unknown = list.filter(e => !valid.includes(e));
+  return unknown.length ? `unknown effect id(s): ${unknown.join(', ')}. Valid: ${valid.join(', ')}` : null;
+}
 const VALID_LAYERS = ['workspace', 'board'];
 
 // Returns true for JWT-authenticated users and legacy X-Agent-Id: human — this
@@ -25,7 +38,9 @@ function isHuman(req) {
 }
 
 function fmtCase(c) {
-  return { ...c, rubric: JSON.parse(c.rubric || '{}') };
+  let allowed = [];
+  try { allowed = JSON.parse(c.allowed_effects || '[]'); } catch { allowed = []; }
+  return { ...c, rubric: JSON.parse(c.rubric || '{}'), allowed_effects: Array.isArray(allowed) ? allowed : [] };
 }
 
 function fmtRun(r) {
@@ -59,7 +74,7 @@ router.get('/cases', attachAgent, (req, res) => {
 router.post('/cases', attachAgent, async (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can create benchmark tasks' });
   const db = getDb();
-  const { subscription_id, project_id, layer, title, description, rubric, rule_reference, source, capability, acceptance_criteria } = req.body;
+  const { subscription_id, project_id, layer, title, description, rubric, rule_reference, source, capability, acceptance_criteria, allowed_effects } = req.body;
 
   if (!subscription_id || !layer || !title || !description) {
     return res.status(400).json({ error: 'subscription_id, layer, title, and description are required' });
@@ -70,15 +85,17 @@ router.post('/cases', attachAgent, async (req, res) => {
   if (capability && !VALID_CAPABILITIES.includes(capability)) {
     return res.status(400).json({ error: `capability must be one of: ${VALID_CAPABILITIES.join(', ')}` });
   }
+  const effectsError = badEffects(allowed_effects);
+  if (effectsError) return res.status(400).json({ error: effectsError });
   const resolvedCapability = capability || PLANNING_CAPABILITY;
   const resolvedSource = source && VALID_SOURCES.includes(source) ? source : 'manual';
   const needsRubric = !rubric || Object.keys(rubric).length === 0;
 
   const id = 'bmc_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, capability, rule_reference, title, description, acceptance_criteria, rubric, source, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, subscription_id, project_id || null, layer, resolvedCapability, rule_reference || null, title, description, acceptance_criteria || null, JSON.stringify(rubric || {}), resolvedSource, req.user?.sub || null);
+    INSERT INTO benchmark_cases (id, subscription_id, project_id, layer, capability, rule_reference, title, description, acceptance_criteria, rubric, allowed_effects, source, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, subscription_id, project_id || null, layer, resolvedCapability, rule_reference || null, title, description, acceptance_criteria || null, JSON.stringify(rubric || {}), allowed_effects && allowed_effects.length ? JSON.stringify(allowed_effects) : null, resolvedSource, req.user?.sub || null);
 
   res.status(201).json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(id)));
 
@@ -120,17 +137,23 @@ router.patch('/cases/:id', attachAgent, (req, res) => {
   const existing = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Case not found' });
 
-  const { title, description, rubric, acceptance_criteria } = req.body;
+  const { title, description, rubric, acceptance_criteria, allowed_effects } = req.body;
+  const patchEffectsError = badEffects(allowed_effects);
+  if (patchEffectsError) return res.status(400).json({ error: patchEffectsError });
   db.prepare(`
     UPDATE benchmark_cases SET
       title = COALESCE(?, title),
       description = COALESCE(?, description),
       acceptance_criteria = CASE WHEN ? THEN ? ELSE acceptance_criteria END,
-      rubric = COALESCE(?, rubric)
+      rubric = COALESCE(?, rubric),
+      allowed_effects = CASE WHEN ? THEN ? ELSE allowed_effects END
     WHERE id = ?
   `).run(title || null, description || null,
     acceptance_criteria !== undefined ? 1 : 0, acceptance_criteria || null,
-    rubric ? JSON.stringify(rubric) : null, req.params.id);
+    rubric ? JSON.stringify(rubric) : null,
+    allowed_effects !== undefined ? 1 : 0,
+    allowed_effects && allowed_effects.length ? JSON.stringify(allowed_effects) : null,
+    req.params.id);
 
   res.json(fmtCase(db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(req.params.id)));
 });
