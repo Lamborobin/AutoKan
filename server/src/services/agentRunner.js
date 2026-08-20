@@ -21,7 +21,17 @@ const { loadModels } = require('./modelRegistry');
 // tool (ask_question, approve_task, ...) — no separate permission check here.
 const ACTION_HOOK_TOOL = {
   name: 'invoke_action_hook',
-  description: 'Invoke a named action referenced in your instructions (System Behavior or your own capability behavior file). Action names appear in that prose wrapped in underscores, e.g. "_notify_all_" — pass the bare name here, without the underscores. Only call this when your instructions explicitly reference an action by name; never invent an action name.',
+  description: [
+    'Invoke a named action referenced in your instructions (System Behavior, your own capability behavior file, or the task brief). Action names appear in that prose wrapped in underscores, e.g. "_notify_all_" — pass the bare name here, without the underscores. Only call this when your instructions explicitly reference an action by name; never invent an action name.',
+    '',
+    'Available actions and their params:',
+    // Generated from the registry so a newly registered hook documents itself to
+    // the model. Without this the params object had no schema at all and the model
+    // could only guess at field names — observed failing a real run with
+    // `"title" is required` on a call it had every reason to think was correct.
+    ...Object.entries(ACTION_HOOKS).map(([name, hook]) =>
+      `  ${name} — ${hook.description}${hook.params_schema ? ` params: ${hook.params_schema}` : ''}`),
+  ].join('\n'),
   input_schema: {
     type: 'object',
     properties: {
@@ -66,7 +76,7 @@ async function runActionHook(action, params, task, agent) {
   }
 
   try {
-    const message = await hook.run(params, { taskId: task.id });
+    const message = await hook.run(params, { taskId: task.id, task });
     db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
       .run(uuidv4(), task.id, agent.id, 'note', message || `Invoked "${action}"`);
     return { success: true, message };
@@ -705,12 +715,15 @@ async function runClarifyAndApprove(task, agent, runner) {
     try {
       response = await getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
-        // Was 1024 — too small now that the model spends part of its budget on
-        // internal reasoning before it ever reaches the actual tool call, which was
-        // silently truncating (or fully consuming) the budget and produced an empty
-        // ask_question/approve_task payload instead of a real one. Matches the
-        // budget every other capability already uses (4096-8192).
-        max_tokens: 4096,
+        // Was 1024, then 4096. Raised to match the coder/tester handlers because
+        // this handler is single-shot: unlike them it never loops on tool results,
+        // so the model has exactly one turn in which to emit BOTH its outcome tool
+        // and any action hook its instructions asked for. Budget spent on internal
+        // reasoning came out of that same turn, and a run that reached approve_task
+        // and stopped left the hook silently uncalled — the same model succeeding on
+        // some runs and not others. More room is not a guarantee here, it just
+        // removes one cause; the single-turn shape is the real constraint.
+        max_tokens: 8192,
         system: systemPrompt,
         tools: getToolSet(runner),
         messages: attempt === 1 ? baseMessages : [

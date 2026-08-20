@@ -12,7 +12,7 @@ const {
   PLANNING_CAPABILITY,
 } = require('../services/benchmarkRunner');
 const { getValidModelIds } = require('../services/modelRegistry');
-const { BUILTIN_EFFECT_IDS } = require('../services/effects');
+const { BUILTIN_EFFECT_IDS, capabilityActions } = require('../services/effects');
 const { ACTION_HOOKS } = require('../services/actionHooks');
 
 const router = express.Router();
@@ -109,6 +109,17 @@ router.post('/cases', attachAgent, async (req, res) => {
       })
       .catch(err => console.error('[benchmark] background rubric draft failed:', err.message));
   }
+});
+
+// GET /api/benchmark/effect-options?capability= — which effects a case for this
+// capability may opt back in. Everything is suppressed on a benchmark run by
+// default; this is the menu of what can be re-enabled for a smoke-test case.
+router.get('/effect-options', attachAgent, (req, res) => {
+  const { capability } = req.query;
+  if (capability && !VALID_CAPABILITIES.includes(capability)) {
+    return res.status(400).json({ error: `capability must be one of: ${VALID_CAPABILITIES.join(', ')}` });
+  }
+  res.json({ available: capabilityActions(capability || PLANNING_CAPABILITY) });
 });
 
 // POST /api/benchmark/cases/draft — AI drafts title/description/rubric from a board's

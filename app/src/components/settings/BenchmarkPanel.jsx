@@ -6,6 +6,7 @@ import { tasksApi } from '../../api';
 import MarkdownText from '../shared/MarkdownText';
 import DocumentViewerModal from '../shared/DocumentViewerModal';
 import NewBenchmarkTaskModal from './NewBenchmarkTaskModal';
+import { effectLabel } from '../../constants/effects';
 
 const REVIEW_LEVELS = [
   { value: 'unacceptable',    label: 'Unacceptable' },
@@ -571,6 +572,14 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
           </span>
         </div>
       </div>
+
+      {(c.allowed_effects || []).length > 0 && (
+        <div className="flex items-start gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+          <span className="flex-1">
+            Performs real actions every run: {c.allowed_effects.map(effectLabel).join(', ')}. Everything else is recorded only.
+          </span>
+        </div>
+      )}
 
       {hasNoRubric && (
         <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">

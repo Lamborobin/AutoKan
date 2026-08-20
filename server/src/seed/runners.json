@@ -16,6 +16,7 @@
       "label": "Coder",
       "description": "Implements code that satisfies an approved task. Full write access inside client/. Defaults to human action on hindrance.",
       "color": "#ec4899",
+      "actions": ["pr_create", "pr_merge"],
       "write_access": "client/",
       "context_docs": ["docs/rules.md"],
       "is_coder": true

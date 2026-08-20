@@ -131,7 +131,19 @@ Both axes fail closed: an unrecognised run mode falls back to the most restricti
 
 Recorded effects are written as plain `note` task logs — already the convention benchmark scoring reads — so a suppressed effect is scoreable with no extra wiring, and that same list is the assertion surface a test capability needs.
 
-A benchmark case may opt specific effects back in, by id, via its `allowed_effects` list — that is how a smoke-test case proves an action hook really works end-to-end rather than only proving the agent tried to call it. Matching is per effect id, never per kind, so allowing one effect can't quietly unlock another. Action hooks use their registry key as their effect id, so a newly registered hook is allow-listable with no second list to maintain.
+Three layers decide whether an effect actually happens, and they answer different questions:
+
+| Layer | Question | Lives in |
+|---|---|---|
+| **Capability** | what may this role *ever* do? | `actions` in `runners.json`, plus every registered action hook implicitly |
+| **Task** | what is *enabled* for this run? | `tasks.allowed_effects`, chosen at Start |
+| **Run mode** | does an enabled effect *really leave*? | the policy table above |
+
+The task layer is authoritative when set: a configured task performs exactly what its list names. `NULL` means never configured and falls back to the run-mode default, which is what keeps tasks predating the column — and any created straight through the API — behaving as before. An empty array is a real choice, not an absent one: perform nothing.
+
+Only capability-specific effects are declared in `runners.json` (today just `perm_coding`'s `pr_create`/`pr_merge`). Action hooks are implicit for every capability, because `invoke_action_hook` already sits in every tool set — so registering a hook makes it available everywhere with no registry edit, and a hook's registry key doubles as its effect id.
+
+Reassigning a task intersects its enabled set with the new capability's surface, so moving work from Coder to Tester drops `pr_create`/`pr_merge` instead of leaving a stale grant behind. A benchmark case's own `allowed_effects` rides onto its probing task the same way — matched per effect id, never per kind, so allowing one effect can't quietly unlock another.
 
 **Transport is not an effect, and is not renamed either.** A branch push carries work between pipeline stages (Coder → Tester) and is the only shared state once handlers no longer share a filesystem, so suppressing it would break the pipeline a benchmark exists to exercise. Renaming it per run mode fails for a different reason: the runner prompt hands the agent its branch and its push command, so a benchmark-only branch name would make the prompt untrue and the push fail. Probe branches are identified for cleanup from `benchmark_runs.probing_task_id`, which already records exactly which tasks were probes.
 

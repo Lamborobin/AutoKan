@@ -28,13 +28,19 @@ const { EXTERNAL } = require('./effects');
 const ACTION_HOOKS = {
   notify_all: {
     description: 'Send an in-app notification to every user in the app.',
-    params_schema: '{ title: string (required), body?: string }',
+    // Both optional. An agent told only "notify everyone" has no way to know what
+    // wording to invent, and failing the call over a missing title turned a
+    // working instruction into a silent no-op. The task supplies the fallback,
+    // which is the sensible default anyway — the notification links to that task.
+    params_schema: '{ title?: string, body?: string } — both optional; the task title is used when title is omitted',
     effect: EXTERNAL,
-    async run(params, { taskId }) {
+    async run(params, { taskId, task }) {
       const { title, body } = params || {};
-      if (!title) throw new Error('"title" is required');
-      notifyAllUsers(title, body || null, taskId ? `?task=${taskId}` : null);
-      return `Notified all users: "${title}"`;
+      const resolved = (title && String(title).trim())
+        || (task && task.title)
+        || 'Task update';
+      notifyAllUsers(resolved, body || null, taskId ? `?task=${taskId}` : null);
+      return `Notified all users: "${resolved}"`;
     },
   },
 };

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Plus, Sparkles, Search, Loader2 } from 'lucide-react';
 import { useStore } from '../../store';
-import { tasksApi } from '../../api';
+import { tasksApi, effectsApi } from '../../api';
+import { effectLabel } from '../../constants/effects';
 
 // Mirrors NewTaskModal.jsx's exact layout/classes — same modal chrome, same field
 // styling, same button treatment. Trimmed to just the fields a probing task needs
@@ -23,7 +24,20 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
   const [source, setSource] = useState('manual');
   const [rubric, setRubric] = useState(null); // carried silently from an AI draft, never shown
   const [ruleReference, setRuleReference] = useState(null);
+  // Effects a benchmark run may really perform. Everything is suppressed by
+  // default — this is only for a smoke-test case that exists to prove an effect
+  // works end to end, so the empty selection is the normal one.
+  const [availableEffects, setAvailableEffects] = useState([]);
+  const [allowedEffects, setAllowedEffects] = useState([]);
   const capabilityInfo = CAPABILITY_OPTIONS.find(c => c.value === capability) || CAPABILITY_OPTIONS[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    effectsApi.forCapability(capability)
+      .then(r => { if (!cancelled) setAvailableEffects(r.available || []); })
+      .catch(() => { if (!cancelled) setAvailableEffects([]); });
+    return () => { cancelled = true; };
+  }, [capability]);
 
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -74,6 +88,9 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
     setRubric(null);
     setRuleReference(null);
     setSource('manual');
+    // The surface differs per capability, so a carried-over selection could name
+    // an effect the new capability cannot perform — the server would reject it.
+    setAllowedEffects([]);
   }
 
   async function handleGenerate() {
@@ -105,6 +122,7 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
         acceptance_criteria: acceptanceCriteria.trim() || undefined,
         rule_reference: ruleReference,
         rubric: rubric || undefined,
+        allowed_effects: allowedEffects.length ? allowedEffects : undefined,
         source,
       });
       onCreated?.(created);
@@ -213,6 +231,49 @@ export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscrip
                          placeholder-gray-600 focus:outline-none focus:border-accent transition-colors resize-none"
             />
           </div>
+
+          {availableEffects.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1.5">
+                Real actions allowed <span className="text-gray-600">(optional)</span>
+              </label>
+              <p className="mb-2 text-xs text-gray-500">
+                A benchmark run records every outward action instead of performing it. Tick one only to
+                prove it genuinely works — it will really happen every time this case runs.
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                {allowedEffects.length === 0 && (
+                  <span className="text-xs text-gray-600">None — every action will be recorded.</span>
+                )}
+                {allowedEffects.map(id => (
+                  <span key={id}
+                    className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 border border-amber-500/25 px-2 py-1 text-xs text-amber-300">
+                    {effectLabel(id)}
+                    <button type="button"
+                      onClick={() => { markEdited(); setAllowedEffects(sel => sel.filter(x => x !== id)); }}
+                      aria-label={`Remove ${effectLabel(id)}`}
+                      className="text-amber-400/70 hover:text-amber-200 focus:outline-none focus:ring-2 focus:ring-accent rounded transition-colors">
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              {availableEffects.some(e => !allowedEffects.includes(e)) && (
+                <select
+                  value=""
+                  onChange={e => { if (e.target.value) { markEdited(); setAllowedEffects(sel => [...sel, e.target.value]); } }}
+                  className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-300
+                             focus:outline-none focus:border-accent transition-colors"
+                >
+                  <option value="">+ Allow a real action…</option>
+                  {availableEffects.filter(e => !allowedEffects.includes(e)).map(id => (
+                    <option key={id} value={id}>{effectLabel(id)}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check, RotateCcw, FileText, Download } from 'lucide-react';
+import { X, Trash2, ArrowRight, Clock, Tag, Activity, Lock, Unlock, Archive, Plus, CheckCircle2, Circle, Pencil, Check, RotateCcw, FileText, Download, Play } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useStore } from '../../store';
 import { tasksApi } from '../../api';
@@ -9,6 +9,7 @@ import TaskComments from './TaskComments';
 import { PRIORITIES, COMPLEXITIES, PRIORITY_COLORS, PM_STATUS, HUMAN_STATUS, LOG_ACTION } from '../../constants/tasks';
 import { COLUMN } from '../../constants/columns';
 import { getChecklistProgress } from '../../utils/checklist';
+import { effectLabel } from '../../constants/effects';
 
 export default function TaskDetail() {
   const { selectedTask, setSelectedTask, setShowNewTask, columns, agents, roles, moveTask, deleteTask, updateTask, archiveTask, bypassPm, toggleChecklistItem, setEditingAgent, currentProjectId, projects } = useStore();
@@ -17,6 +18,12 @@ export default function TaskDetail() {
   // { field, filename } for DocumentViewerModal, or null when closed — set from the
   // produce_document/verify_document deliverable block below.
   const [viewingDocument, setViewingDocument] = useState(null);
+  // Start panel — which effects this task's agent may perform on the coming run.
+  // null until loaded; { capability, available, selected, runnable } once fetched.
+  const [startOptions, setStartOptions] = useState(null);
+  const [startSelection, setStartSelection] = useState([]);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState(null);
 
   // Auto-complete (PR-based) only means something when the board both does coder
   // work and has an actual git repo connected to open a PR against.
@@ -83,6 +90,17 @@ export default function TaskDetail() {
       setDescriptionDraft(t.description || '');
       setCriteriaDraft(t.acceptance_criteria || '');
       setCheckingPr(needsPrCheck);
+
+      // What this task's agent may perform if started now. Fetched on open so the
+      // panel is populated before the human touches anything.
+      if (t.assigned_agent_id) {
+        tasksApi.startOptions(t.id)
+          .then(opts => { if (!cancelled) { setStartOptions(opts); setStartSelection(opts.selected || []); } })
+          .catch(() => { if (!cancelled) setStartOptions(null); });
+      } else {
+        setStartOptions(null);
+        setStartSelection([]);
+      }
 
       const pmIsProcessing =
         (t.pm_approval_status === PM_STATUS.PENDING && !t.pm_pending_question) ||
@@ -394,6 +412,39 @@ export default function TaskDetail() {
   async function handleAgentChange(agentId) {
     await updateTask(task.id, { assigned_agent_id: agentId || null });
     setTask(t => ({ ...t, assigned_agent_id: agentId || null }));
+    // Assigning no longer starts anything — reload what the new agent may do so
+    // the Start panel reflects the new capability rather than the previous one.
+    loadStartOptions(agentId);
+  }
+
+  async function loadStartOptions(agentId) {
+    setStartError(null);
+    if (!agentId) { setStartOptions(null); setStartSelection([]); return; }
+    try {
+      const opts = await tasksApi.startOptions(task.id);
+      setStartOptions(opts);
+      setStartSelection(opts.selected || []);
+    } catch {
+      setStartOptions(null);
+    }
+  }
+
+  function toggleStartEffect(effectId) {
+    setStartSelection(sel => sel.includes(effectId) ? sel.filter(e => e !== effectId) : [...sel, effectId]);
+  }
+
+  async function handleStartTask() {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const updated = await tasksApi.start(task.id, { allowed_effects: startSelection });
+      setTask(updated);
+      useStore.getState().upsertTasks([updated]);
+    } catch (err) {
+      setStartError(err?.response?.data?.error || 'Could not start the task');
+    } finally {
+      setStarting(false);
+    }
   }
 
   function hasUnsavedChanges() {
@@ -1207,6 +1258,68 @@ export default function TaskDetail() {
                 ))}
               </select>
             </div>
+
+            {/* Configure & start — assigning an agent no longer runs anything on its
+                own (Planning excepted, which is a conversation the human is already
+                in). Everything else waits here so the effects a run may perform can
+                be reviewed before it spends anything or touches a repo. */}
+            {startOptions?.runnable && !isLocked && (
+              <div className="rounded-lg border border-border bg-surface-2 p-3 space-y-3">
+                <div>
+                  <div className="text-sm font-medium text-gray-500">Actions this run may perform</div>
+                  <p className="mt-0.5 text-xs text-gray-400">
+                    Anything not listed here is recorded in the task log instead of performed.
+                  </p>
+                </div>
+
+                {/* Chips for what's enabled + a select to add more. A checklist of
+                    every possible action does not survive a registry with dozens of
+                    entries; this stays the same height whether there are 4 or 100. */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {startSelection.length === 0 && (
+                    <span className="text-xs text-gray-500">Nothing enabled — every action will be recorded.</span>
+                  )}
+                  {startSelection.map(effectId => (
+                    <span key={effectId}
+                      className="inline-flex items-center gap-1 rounded-lg bg-surface-3 border border-border px-2 py-1 text-xs text-gray-200">
+                      {effectLabel(effectId)}
+                      <button
+                        type="button"
+                        onClick={() => toggleStartEffect(effectId)}
+                        aria-label={`Remove ${effectLabel(effectId)}`}
+                        className="text-gray-500 hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-accent rounded transition-colors"
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                {startOptions.available.some(e => !startSelection.includes(e)) && (
+                  <select
+                    value=""
+                    onChange={e => { if (e.target.value) toggleStartEffect(e.target.value); }}
+                    className="w-full bg-surface-3 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-accent focus:ring-2 focus:ring-accent transition-colors"
+                  >
+                    <option value="">+ Allow another action…</option>
+                    {startOptions.available.filter(e => !startSelection.includes(e)).map(effectId => (
+                      <option key={effectId} value={effectId}>{effectLabel(effectId)}</option>
+                    ))}
+                  </select>
+                )}
+
+                {startError && <p className="text-xs text-amber-400">{startError}</p>}
+
+                <button
+                  onClick={handleStartTask}
+                  disabled={starting}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white hover:bg-accent/80 focus:outline-none focus:ring-2 focus:ring-accent disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                >
+                  <Play size={13} />
+                  {starting ? 'Starting…' : 'Start task'}
+                </button>
+              </div>
+            )}
 
             {/* Unsaved changes prompt — shown when user tries to open agent editor */}
             {pendingEditAgent && (

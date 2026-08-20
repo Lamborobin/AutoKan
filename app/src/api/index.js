@@ -35,6 +35,11 @@ export const projectsApi = {
   sectors: () => api.get('/projects/sectors').then(r => r.data),
 };
 
+export const effectsApi = {
+  forCapability: (capability) =>
+    api.get('/benchmark/effect-options', { params: { capability } }).then(r => r.data),
+};
+
 export const tasksApi = {
   list: (params) => api.get('/tasks', { params }).then(r => r.data),
   get: (id) => api.get(`/tasks/${id}`).then(r => r.data),
@@ -59,6 +64,8 @@ export const tasksApi = {
   create: (data) => api.post('/tasks', data).then(r => r.data),
   update: (id, data) => api.patch(`/tasks/${id}`, data).then(r => r.data),
   move: (id, column_id, message) => api.post(`/tasks/${id}/move`, { column_id, message }).then(r => r.data),
+  startOptions: (id) => api.get(`/tasks/${id}/start-options`).then(r => r.data),
+  start: (id, data) => api.post(`/tasks/${id}/start`, data).then(r => r.data),
   log: (id, action, message) => api.post(`/tasks/${id}/log`, { action, message }).then(r => r.data),
   delete: (id) => api.delete(`/tasks/${id}`).then(r => r.data),
   requestPmReview: (id) => api.post(`/tasks/${id}/request_pm_review`).then(r => r.data),

@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent, requireAuth } = require('../middleware/auth');
 const { triggerRunner } = require('../services/agentRunner');
+const { capabilityActions, defaultEnabledFor, enabledList, runModeOf, LIVE } = require('../services/effects');
 const { broadcast } = require('../sse');
 const { sendMentionEmail } = require('../services/emailService');
 const { createNotification, notifyHumanActionMembers } = require('../services/notificationsService');
@@ -51,6 +52,7 @@ function fmt(task) {
     tags: JSON.parse(task.tags || '[]'),
     metadata: JSON.parse(task.metadata || '{}'),
     pm_checklist: task.pm_checklist ? JSON.parse(task.pm_checklist) : null,
+    allowed_effects: enabledList(task),
     is_locked: isTaskLocked(task),
   };
 }
@@ -153,7 +155,7 @@ router.post('/', requirePermission('task:create'), (req, res) => {
     title, description, acceptance_criteria, column_id = 'col_backlog',
     assigned_agent_id, priority = 'medium', complexity = 'medium',
     auto_complete = 0, project_id,
-    tags = [], metadata = {}
+    tags = [], metadata = {}, allowed_effects
   } = req.body;
 
   if (!title) return res.status(400).json({ error: 'title is required' });
@@ -175,10 +177,11 @@ router.post('/', requirePermission('task:create'), (req, res) => {
   }
 
   db.prepare(`
-    INSERT INTO tasks (id, title, description, acceptance_criteria, column_id, assigned_agent_id, priority, complexity, auto_complete, tags, metadata, pm_approval_status, project_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO tasks (id, title, description, acceptance_criteria, column_id, assigned_agent_id, priority, complexity, auto_complete, tags, metadata, allowed_effects, pm_approval_status, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(id, title, description, acceptance_criteria || null, column_id, assigned_agent_id || null, priority, complexity,
-    auto_complete ? 1 : 0, JSON.stringify(tags), JSON.stringify(metadata), pmReviewStatus, resolvedProject);
+    auto_complete ? 1 : 0, JSON.stringify(tags), JSON.stringify(metadata),
+    Array.isArray(allowed_effects) ? JSON.stringify(allowed_effects) : null, pmReviewStatus, resolvedProject);
 
   // Log it
   const agentId = req.agent && db.prepare('SELECT id FROM agents WHERE id = ?').get(req.agent.id) ? req.agent.id : null;
@@ -270,39 +273,38 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
   db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
     .run(uuidv4(), task.id, agentId, 'updated', `Fields updated: ${Object.keys(allowed).join(', ')}`);
 
-  // Trigger registered runner if assignment changed and task is in a column
-  // where the agent's capability has a registered runner. PM-specific bookkeeping
-  // (pm_approval_status = pending) still happens here because it's a precondition
-  // the planning runner reads.
+  // Assignment bookkeeping. Planning is the ONE capability that still dispatches
+  // straight off the dropdown: its runner is a conversation the human is already
+  // in the middle of (every other triggerRunner call in this file continues that
+  // same conversation — answering a question, resolving a split), and it has
+  // nothing to configure, since its whole tool set is internal. Every other
+  // capability now waits for an explicit POST /:id/start, so a human can review
+  // the agent and the effects it may perform before anything runs or spends money.
+  //
+  // Reassigning also refreshes the enabled effects: the set is intersected with
+  // what the NEW capability can actually do, so moving a task from Coder to Tester
+  // silently drops pr_create/pr_merge rather than leaving a stale grant behind.
   let shouldTrigger = false;
   if (req.body.assigned_agent_id !== undefined) {
     const newAgentId = req.body.assigned_agent_id;
     const capabilities = getAgentCapabilities(newAgentId, db);
+
+    const existing = enabledList(db.prepare('SELECT allowed_effects FROM tasks WHERE id = ?').get(task.id));
+    if (existing) {
+      const permitted = capabilities.flatMap(c => capabilityActions(c));
+      const refreshed = existing.filter(e => permitted.includes(e));
+      if (refreshed.length !== existing.length) {
+        db.prepare('UPDATE tasks SET allowed_effects = ? WHERE id = ?').run(JSON.stringify(refreshed), task.id);
+        db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+          .run(uuidv4(), task.id, agentId, 'note',
+            `Enabled actions refreshed for the new assignee — dropped: ${existing.filter(e => !permitted.includes(e)).join(', ')}`);
+      }
+    }
+
     if (task.column_id === 'col_backlog' && capabilities.includes('perm_planning') && !task.pm_approval_status) {
       db.prepare(`UPDATE tasks SET pm_approval_status = 'pending' WHERE id = ?`).run(task.id);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), task.id, agentId, 'pm_review_requested', 'PM review automatically requested on assignment');
-      shouldTrigger = true;
-    } else if (task.column_id === 'col_inprogress' && capabilities.includes('perm_coding')) {
-      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), task.id, agentId, 'developer_assigned', 'Developer assigned — starting implementation');
-      shouldTrigger = true;
-    } else if (task.column_id === 'col_inprogress' && capabilities.includes('perm_producing')) {
-      // perm_producing shares col_inprogress with perm_coding (see CAPABILITY_START_COLUMN
-      // in benchmarkRunner.js) — this branch was missing entirely, so reassigning a
-      // document-producing agent here silently did nothing. Only the benchmark harness's
-      // direct triggerRunner() call ever actually exercised produce_document.
-      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), task.id, agentId, 'producer_assigned', 'Document producer assigned — starting document production');
-      shouldTrigger = true;
-    } else if (task.column_id === 'col_testing' && capabilities.includes('perm_coding_tester')) {
-      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), task.id, agentId, 'tester_assigned', 'Tester assigned — starting test run');
-      shouldTrigger = true;
-    } else if (task.column_id === 'col_testing' && capabilities.includes('perm_verifying')) {
-      // Same gap as perm_producing above, for perm_verifying's shared col_testing.
-      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), task.id, agentId, 'verifier_assigned', 'Document verifier assigned — starting verification');
       shouldTrigger = true;
     }
   }
@@ -313,6 +315,86 @@ router.patch('/:id', requirePermission('task:update'), (req, res) => {
   broadcast('task_updated', { task: fmtUpdated });
 
   if (shouldTrigger) triggerRunner(task.id);
+});
+
+// GET /tasks/:id/start-options — what the Start dialog needs: the effects this
+// task's assigned capability can perform, and the selection to pre-tick. Returns
+// the already-configured set when there is one, so reopening the dialog shows
+// what was chosen last rather than resetting to defaults.
+router.get('/:id/start-options', attachAgent, (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (!task.assigned_agent_id) return res.json({ available: [], selected: [], capability: null, runnable: false });
+
+  const capabilities = getAgentCapabilities(task.assigned_agent_id, db);
+  const capability = capabilities.find(c => c.startsWith('perm_')) || null;
+  if (!capability) return res.json({ available: [], selected: [], capability: null, runnable: false });
+
+  const available = capabilityActions(capability);
+  const configured = enabledList(task);
+  const selected = configured
+    || defaultEnabledFor(capability, runModeOf(db, task), { autoComplete: !!task.auto_complete });
+
+  res.json({
+    capability,
+    available,
+    selected: selected.filter(e => available.includes(e)),
+    // Planning dispatches off the dropdown and has nothing to configure, so the
+    // Start button is for every other capability.
+    runnable: capability !== 'perm_planning',
+  });
+});
+
+// POST /tasks/:id/start — configure and run. This is the explicit replacement for
+// the old assign-a-dropdown-and-it-runs behaviour: nothing dispatches until a human
+// has seen which agent will run and which effects it may actually perform.
+router.post('/:id/start', requirePermission('task:create'), (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const { assigned_agent_id, allowed_effects } = req.body;
+  const agentId = assigned_agent_id !== undefined ? assigned_agent_id : task.assigned_agent_id;
+  if (!agentId) return res.status(400).json({ error: 'A task needs an assigned agent before it can be started' });
+
+  const agentRow = db.prepare('SELECT id, active FROM agents WHERE id = ?').get(agentId);
+  if (!agentRow) return res.status(400).json({ error: 'Unknown agent' });
+  if (!agentRow.active) return res.status(400).json({ error: 'That agent is not active' });
+
+  const capabilities = getAgentCapabilities(agentId, db);
+  const capability = capabilities.find(c => c.startsWith('perm_'));
+  if (!capability) return res.status(400).json({ error: 'That agent has no capability to run with' });
+
+  if (!canAgentBeInColumn(agentId, task.column_id, db)) {
+    return res.status(400).json({ error: 'That agent does not have access to this column' });
+  }
+
+  // The selection can only ever narrow what the capability is already able to do —
+  // the registry stays the outer bound, so a request can't grant an effect the
+  // capability has no business performing.
+  const permitted = capabilityActions(capability);
+  let effects = Array.isArray(allowed_effects)
+    ? allowed_effects
+    : defaultEnabledFor(capability, runModeOf(db, task), { autoComplete: !!task.auto_complete });
+  const unknown = effects.filter(e => !permitted.includes(e));
+  if (unknown.length) {
+    return res.status(400).json({ error: `${capability} cannot perform: ${unknown.join(', ')}. Allowed: ${permitted.join(', ')}` });
+  }
+
+  db.prepare('UPDATE tasks SET assigned_agent_id = ?, allowed_effects = ? WHERE id = ?')
+    .run(agentId, JSON.stringify(effects), task.id);
+
+  const actor = req.agent && db.prepare('SELECT id FROM agents WHERE id = ?').get(req.agent.id) ? req.agent.id : null;
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, actor, 'task_started',
+      `Started with ${capability} — enabled actions: ${effects.length ? effects.join(', ') : 'none'}`);
+
+  const updated = fmt(db.prepare('SELECT * FROM tasks WHERE id = ?').get(task.id));
+  res.json(updated);
+  broadcast('task_updated', { task: updated });
+
+  triggerRunner(task.id);
 });
 
 // POST /tasks/:id/move — move task to a different column

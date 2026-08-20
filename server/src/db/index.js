@@ -214,6 +214,11 @@ function applySchema(db) {
       pm_client_context_draft TEXT,
       pr_url TEXT,
       auto_complete INTEGER DEFAULT 0,
+      -- JSON array of effect ids this task's run may actually perform (see
+      -- services/effects.js). NULL means "never configured" — fall back to the
+      -- run-mode default, which keeps every pre-existing task behaving exactly
+      -- as before. An empty array is a real choice: perform nothing.
+      allowed_effects TEXT,
       archived_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -416,6 +421,10 @@ function applySchema(db) {
   }
   if (!benchmarkCasesColumns.includes('allowed_effects')) {
     db.exec(`ALTER TABLE benchmark_cases ADD COLUMN allowed_effects TEXT`);
+  }
+  const tasksColumns = db.prepare(`PRAGMA table_info(tasks)`).all().map(c => c.name);
+  if (!tasksColumns.includes('allowed_effects')) {
+    db.exec(`ALTER TABLE tasks ADD COLUMN allowed_effects TEXT`);
   }
 }
 

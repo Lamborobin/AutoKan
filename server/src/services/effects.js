@@ -58,20 +58,66 @@ const PR_CREATE = 'pr_create';
 const PR_MERGE = 'pr_merge';
 const BUILTIN_EFFECT_IDS = [NOTIFY_HUMAN_ACTION, PR_CREATE, PR_MERGE];
 
-function metaOf(db, taskOrId) {
-  const task = typeof taskOrId === 'string'
-    ? db.prepare('SELECT metadata FROM tasks WHERE id = ?').get(taskOrId)
+function rowOf(db, taskOrId) {
+  return typeof taskOrId === 'string'
+    ? db.prepare('SELECT metadata, allowed_effects FROM tasks WHERE id = ?').get(taskOrId)
     : taskOrId;
+}
+
+function metaOf(db, taskOrId) {
+  const task = rowOf(db, taskOrId);
   if (!task) return {};
   try { return JSON.parse(task.metadata || '{}'); } catch { return {}; }
+}
+
+// The configured enabled-set for a task, or null when it was never configured.
+// null and [] mean different things and must stay distinguishable: null is
+// "nobody has chosen yet, use the run-mode default", [] is the deliberate
+// choice to perform nothing.
+function enabledList(task) {
+  if (!task || task.allowed_effects === null || task.allowed_effects === undefined) return null;
+  try {
+    const parsed = JSON.parse(task.allowed_effects);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
+// Every capability can invoke every registered action hook (invoke_action_hook is
+// in each tool set) and every handler can escalate to a human, so those are
+// implicit — only capability-specific effects are declared in runners.json. That
+// way registering a new hook makes it available everywhere with no registry edit.
+// ACTION_HOOKS is required lazily: actionHooks.js imports EXTERNAL from this file,
+// so a top-level require here would be a load-order cycle.
+function capabilityActions(capabilityId) {
+  const registry = require('../seed/runners.json');
+  const { ACTION_HOOKS } = require('./actionHooks');
+  const cap = registry.capabilities.find(c => c.id === capabilityId);
+  return [NOTIFY_HUMAN_ACTION, ...Object.keys(ACTION_HOOKS), ...((cap && cap.actions) || [])];
 }
 
 // The ONLY place `is_benchmark_probe` is read as a run mode. Keeping that
 // coupling in one function is what makes introducing a real `run_mode` field
 // later (and migrating the two board-hiding queries that also read the flag,
 // in routes/tasks.js and routes/other.js) a localized change rather than a hunt.
+function runModeOfRow(task) {
+  if (!task) return LIVE;
+  let meta = {};
+  try { meta = JSON.parse(task.metadata || '{}'); } catch { /* malformed → live */ }
+  return meta.is_benchmark_probe ? BENCHMARK : LIVE;
+}
+
 function runModeOf(db, taskOrId) {
-  return metaOf(db, taskOrId).is_benchmark_probe ? BENCHMARK : LIVE;
+  return runModeOfRow(rowOf(db, taskOrId));
+}
+
+// The set a task should start with when it is configured for the first time:
+// everything its capability can do on a live run, nothing on a benchmark probe
+// (which opts effects back in explicitly, per case). pr_merge is the exception —
+// it only pre-fills when the task's auto-merge box is ticked, so "merge to master"
+// is never enabled by simply accepting the defaults.
+function defaultEnabledFor(capabilityId, runMode, { autoComplete = false } = {}) {
+  if (runMode === BENCHMARK) return [];
+  return capabilityActions(capabilityId).filter(a => a !== PR_MERGE || autoComplete);
 }
 
 // Fails closed in both directions: an unrecognised run mode falls back to the
@@ -89,16 +135,15 @@ function decide(runMode, kind) {
 // matched by effect ID, not by kind, so allowing `notify_all` on one case can't
 // also unlock PR creation. The list rides on the probing task's metadata, put
 // there by dispatchProbingTask the same way model_override already is.
-function allowsEffect(meta, effectId) {
-  const allowed = meta.allowed_effects;
-  return Array.isArray(allowed) && allowed.includes(effectId);
-}
-
+// One rule covers live and benchmark alike: a configured task says exactly what
+// it may perform, and an unconfigured one falls back to its run mode's default.
+// That fallback is what keeps every task predating this column — and any task
+// created straight through the API without a Start step — behaving as it did.
 function shouldPerform(db, taskOrId, effectId, kind) {
-  const meta = metaOf(db, taskOrId);
-  const mode = meta.is_benchmark_probe ? BENCHMARK : LIVE;
-  if (decide(mode, kind) === 'perform') return true;
-  return allowsEffect(meta, effectId);
+  const task = rowOf(db, taskOrId);
+  const list = enabledList(task);
+  if (list) return list.includes(effectId);
+  return decide(runModeOfRow(task), kind) === 'perform';
 }
 
 // Recorded effects are written as plain 'note' task_logs on purpose: that is
@@ -129,6 +174,7 @@ async function notifyHumanActionMembers(db, taskId, reason) {
 
 module.exports = {
   LIVE, BENCHMARK,
+  capabilityActions, defaultEnabledFor, enabledList,
   ORCHESTRATION, EXTERNAL,
   NOTIFY_HUMAN_ACTION, PR_CREATE, PR_MERGE, BUILTIN_EFFECT_IDS,
   runModeOf,

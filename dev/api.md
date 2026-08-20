@@ -54,8 +54,10 @@ The `/api/docs` group serves the editable doc files driven by `agent.config.json
 | GET | /api/tasks | List tasks (`?column_id=`, `?assigned_agent_id=`, `?project_id=`, `?include_archived=true`) |
 | GET | /api/tasks/:id | Get single task |
 | POST | /api/tasks | Create task |
-| PATCH | /api/tasks/:id | Update task fields |
+| PATCH | /api/tasks/:id | Update task fields. Assigning an agent no longer dispatches a runner (except `perm_planning`) — use `/start`. Reassignment intersects `allowed_effects` with the new capability's surface, dropping effects it cannot perform. |
 | POST | /api/tasks/:id/move | Move to a column |
+| GET | /api/tasks/:id/start-options | Effects the assigned agent's capability may perform, plus the selection to pre-tick. Returns `{ capability, available, selected, runnable }`; `runnable` is false for `perm_planning`, which dispatches on assignment instead. |
+| POST | /api/tasks/:id/start | Configure and run. Body `{ assigned_agent_id?, allowed_effects? }`. Writes the enabled effect set and dispatches the runner. Rejects any effect outside the capability's surface. Replaces the old assign-and-it-runs behaviour for every capability except `perm_planning`. |
 | POST | /api/tasks/:id/toggle_checklist_item | Check/uncheck a checklist item |
 | POST | /api/tasks/:id/log | Add an activity log entry |
 | POST | /api/tasks/:id/request_human | Flag as blocked, move to Human Action |

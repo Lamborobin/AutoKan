@@ -75,7 +75,7 @@ The `personality_file` is stored as a short reference (e.g. `instructions/dev-im
 
 ## Default Seeded Agents
 
-Agents are server-side processes triggered automatically by the pipeline — they fire when a task lands in the right column, not when invoked directly.
+Agents are server-side processes, not chat participants — they are dispatched by the pipeline rather than invoked directly. Planning dispatches automatically on assignment, because its runner is a conversation a human is already in the middle of and it has nothing to configure. Every other capability waits for an explicit start, so the agent and the effects it may perform can be reviewed before a run spends anything or touches a repo. Agent-to-agent handoffs (a failed test run handing back to the developer, a failed verification handing back to the producer) stay automatic — the pause is for humans starting work, not for the pipeline continuing it.
 
 | Agent | ID | Capabilities |
 |---|---|---|
