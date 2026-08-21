@@ -165,28 +165,33 @@ const PROJECT_ROOT = path.join(__dirname, '../../..');
 // GitHub PR creation (no gh CLI required — uses token from env or git remote)
 // ---------------------------------------------------------------------------
 
-function getGithubToken() {
+// repoPath is the repository the PR belongs to — the BOARD's linked repo, not
+// AutoKan. These used to read AutoKan's own origin unconditionally, which was
+// harmless only while the Coder worked inside an AutoKan worktree. Now that it
+// works in the board's project, resolving AutoKan here would open a pull request
+// against the wrong repository, for a branch that only exists in the other one.
+function getGithubToken(repoPath = PROJECT_ROOT) {
   if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
   try {
     const remote = require('child_process')
-      .execSync('git remote get-url origin', { cwd: PROJECT_ROOT }).toString().trim();
+      .execSync('git remote get-url origin', { cwd: repoPath }).toString().trim();
     const match = remote.match(/https:\/\/[^:]+:([^@]+)@github\.com/);
     return match ? match[1] : null;
   } catch { return null; }
 }
 
-function getGithubRepoInfo() {
+function getGithubRepoInfo(repoPath = PROJECT_ROOT) {
   try {
     const remote = require('child_process')
-      .execSync('git remote get-url origin', { cwd: PROJECT_ROOT }).toString().trim();
+      .execSync('git remote get-url origin', { cwd: repoPath }).toString().trim();
     const match = remote.match(/github\.com[/:]([^/]+)\/(.+?)(?:\.git)?$/);
     return match ? { owner: match[1], repo: match[2] } : null;
   } catch { return null; }
 }
 
-function githubRequest({ path, method = 'GET', body = null }) {
-  const token = getGithubToken();
-  const repoInfo = getGithubRepoInfo();
+function githubRequest({ path, method = 'GET', body = null, repoPath = PROJECT_ROOT }) {
+  const token = getGithubToken(repoPath);
+  const repoInfo = getGithubRepoInfo(repoPath);
   if (!token || !repoInfo) return Promise.resolve(null);
 
   const payload = body ? JSON.stringify(body) : null;
@@ -219,21 +224,23 @@ function githubRequest({ path, method = 'GET', body = null }) {
   });
 }
 
-async function createGithubPr({ title, body, head, base = 'master' }) {
+async function createGithubPr({ title, body, head, base = 'master', repoPath = PROJECT_ROOT }) {
   const json = await githubRequest({
     path: '/repos/{owner}/{repo}/pulls',
     method: 'POST',
     body: { title, body, head, base },
+    repoPath,
   });
   if (!json || !json.html_url) return null;
   return { url: json.html_url, number: json.number };
 }
 
-async function mergeGithubPr(prNumber) {
+async function mergeGithubPr(prNumber, repoPath = PROJECT_ROOT) {
   const json = await githubRequest({
     path: `/repos/{owner}/{repo}/pulls/${prNumber}/merge`,
     method: 'PUT',
     body: { merge_method: 'merge' },
+    repoPath,
   });
   return json && (json.merged === true || json.sha);
 }
@@ -242,8 +249,90 @@ async function mergeGithubPr(prNumber) {
 // Git worktree helpers — one isolated directory per implementation task
 // ---------------------------------------------------------------------------
 
-function createWorktree(taskId) {
-  const worktreePath = path.resolve(PROJECT_ROOT, '..', `AutoKan-wt-${taskId}`);
+// Is THIS folder its own git repo, and does it have a remote?
+//
+// Deliberately compares --show-toplevel against the folder itself instead of
+// asking --is-inside-work-tree. Every board folder lives under client/, which
+// sits inside AutoKan's own working tree, so is-inside-work-tree answers "yes"
+// and show-toplevel answers "AutoKan" for a plain, git-less client folder —
+// which would have the Coder branching and pushing AutoKan itself.
+function detectRepo(absPath) {
+  let toplevel;
+  try {
+    toplevel = execSync('git rev-parse --show-toplevel', { cwd: absPath, stdio: 'pipe' }).toString().trim();
+  } catch {
+    return { isRepo: false, hasRemote: false };
+  }
+  const same = path.resolve(toplevel) === path.resolve(absPath);
+  if (!same) return { isRepo: false, hasRemote: false };
+  let hasRemote = false;
+  try {
+    hasRemote = !!execSync('git remote get-url origin', { cwd: absPath, stdio: 'pipe' }).toString().trim();
+  } catch { /* no origin configured */ }
+  return { isRepo: true, hasRemote };
+}
+
+// What the run actually changed, captured BEFORE the worktree is torn down —
+// otherwise the only artifact of a coding run is the agent's own prose summary,
+// which is exactly the thing a benchmark should not have to take on trust.
+// Logged under its own action rather than 'note' so it never gets mistaken for a
+// side effect in benchmark scoring. Degrades honestly: a folder with no repo has
+// no diff to give, and says so.
+function captureWork(workDir, repo) {
+  if (!repo.isRepo) return null;
+  try {
+    const diff = execSync('git diff HEAD --stat && git diff HEAD', { cwd: workDir, stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 }).toString();
+    if (!diff.trim()) return null;
+    const LIMIT = 20000;
+    return diff.length > LIMIT ? diff.slice(0, LIMIT) + '\n… (diff truncated)' : diff;
+  } catch { return null; }
+}
+
+// The runner prompt has to describe the workflow that ACTUALLY applies. An agent
+// told to push to a remote that does not exist will run the command, watch it
+// fail, and treat that as a blocker — so the instructions degrade with the target
+// instead of the server quietly skipping steps the agent still believes in.
+function workflowVarsFor(repo, task) {
+  const taskId = task.id;
+  const taskTitle = task.title;
+
+  if (!repo.isRepo) {
+    return {
+      taskId, taskTitle,
+      workspaceIntro: "You are working directly in the project folder. It is not a git repository, so there is no branch to create and nothing to commit or push — your edits are the deliverable.",
+      gitWorkflow: [
+        "1. Implement the change in this folder",
+        "2. Call " + '`' + "task_complete" + '`' + " with a brief summary of what you changed",
+      ].join("\n"),
+      blockedGuidance: "leave the files in a working state",
+    };
+  }
+
+  const branchIntro = "You are working in an isolated git worktree of this project, already checked out on branch " + '`' + "feature/" + taskId + '`' + ". Do NOT run " + '`' + "git checkout" + '`' + " or " + '`' + "git worktree" + '`' + " — you are already on the correct branch.";
+  const commitStep = "2. " + '`' + "git add -A && git commit -m \"[" + taskId + "] " + taskTitle + "\"" + '`';
+
+  if (!repo.hasRemote) {
+    return {
+      taskId, taskTitle,
+      workspaceIntro: branchIntro + " This repository has no remote, so commit your work but do not push.",
+      gitWorkflow: ["1. Implement the change", commitStep, "3. Call " + '`' + "task_complete" + '`' + " with a brief summary"].join("\n"),
+      blockedGuidance: "commit whatever you have first (" + '`' + "git add -A && git commit -m \"[" + taskId + "] WIP\"" + '`' + ")",
+    };
+  }
+
+  return {
+    taskId, taskTitle,
+    workspaceIntro: branchIntro,
+    gitWorkflow: ["1. Implement the change", commitStep, "3. " + '`' + "git push -u origin feature/" + taskId + '`', "4. Call " + '`' + "task_complete" + '`' + " with a brief summary"].join("\n"),
+    blockedGuidance: "push whatever you have first (" + '`' + "git add -A && git commit -m \"[" + taskId + "] WIP\" && git push -u origin feature/" + taskId + '`' + ")",
+  };
+}
+
+// Worktree of whichever repo is passed in — the board's linked repo, not AutoKan.
+// Named after the repo folder so two boards can have a task in flight at once.
+function createWorktree(taskId, repoPath) {
+  const repoName = path.basename(repoPath).replace(/[^a-zA-Z0-9_-]/g, '-');
+  const worktreePath = path.resolve(repoPath, '..', `${repoName}-wt-${taskId}`);
   const branch = `feature/${taskId}`;
 
   if (fs.existsSync(worktreePath)) {
@@ -252,19 +341,19 @@ function createWorktree(taskId) {
   }
 
   try {
-    execSync(`git worktree add "${worktreePath}" -b ${branch}`, { cwd: PROJECT_ROOT, stdio: 'pipe' });
+    execSync(`git worktree add "${worktreePath}" -b ${branch}`, { cwd: repoPath, stdio: 'pipe' });
   } catch {
     // Branch may already exist from a previous run — add without -b
-    execSync(`git worktree add "${worktreePath}" ${branch}`, { cwd: PROJECT_ROOT, stdio: 'pipe' });
+    execSync(`git worktree add "${worktreePath}" ${branch}`, { cwd: repoPath, stdio: 'pipe' });
   }
 
   console.log(`[AgentRunner] Created worktree: ${worktreePath} (${branch})`);
   return worktreePath;
 }
 
-function removeWorktree(worktreePath) {
+function removeWorktree(worktreePath, repoPath) {
   try {
-    execSync(`git worktree remove --force "${worktreePath}"`, { cwd: PROJECT_ROOT, stdio: 'pipe' });
+    execSync(`git worktree remove --force "${worktreePath}"`, { cwd: repoPath || PROJECT_ROOT, stdio: 'pipe' });
     console.log(`[AgentRunner] Removed worktree: ${worktreePath}`);
   } catch (err) {
     console.error(`[AgentRunner] Failed to remove worktree ${worktreePath}:`, err.message);
@@ -974,11 +1063,25 @@ async function runImplementInWorktree(task, agent, runner) {
   const db = getDb();
   const taskId = task.id;
 
-  // Create an isolated git worktree for this task so the main checkout is never touched
+  // Work inside the BOARD's own linked folder, not a worktree of AutoKan. The
+  // client folders stopped being tracked in AutoKan's history, so an AutoKan
+  // worktree no longer contains client/ at all — the Coder was being pointed at a
+  // checkout where the code it was told to edit did not exist. Producing and
+  // Verifying already resolve client_path this way; this brings the Coder in line.
+  const linkCheck = requireLinkedClientPath(task, agent, runner);
+  if (!linkCheck.ok) return;
+  const { subscriptionId, clientPath } = linkCheck;
+  const repoPath = path.join(PROJECT_ROOT, clientPath);
+
+  // How much of the git flow this board can actually support. A plain folder with
+  // no repo still gets real edits — it just has no branch to isolate them on and
+  // nowhere to push, so those steps are recorded instead of performed.
+  const repo = detectRepo(repoPath);
+
   let worktreePath;
-  if (runner.use_worktree) {
+  if (runner.use_worktree && repo.isRepo) {
     try {
-      worktreePath = createWorktree(task.id);
+      worktreePath = createWorktree(task.id, repoPath);
     } catch (err) {
       console.error(`[AgentRunner] Failed to create worktree for task ${taskId}:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
@@ -986,9 +1089,14 @@ async function runImplementInWorktree(task, agent, runner) {
       return;
     }
   }
+  // Where the agent's bash/read/write actually land.
+  const workDir = worktreePath || repoPath;
 
-  const project = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
-  const subscriptionId = project?.subscription_id || null;
+  if (!repo.isRepo) {
+    db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+      .run(uuidv4(), taskId, agent.id, 'note',
+        `${clientPath} is not a git repository — editing it directly. No branch isolation, and push/PR steps will be recorded rather than performed.`);
+  }
   const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
   const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
 
@@ -1002,7 +1110,7 @@ async function runImplementInWorktree(task, agent, runner) {
     `PM Brief: ${task.pm_review_comment || '(none — check task description)'}`,
     `Priority: ${task.priority} | Complexity: ${task.complexity}`,
     ``,
-    loadRunnerPrompt('implement-in-worktree', { taskId: task.id, taskTitle: task.title }),
+    loadRunnerPrompt('implement-in-worktree', workflowVarsFor(repo, task)),
   ].filter(Boolean).join('\n');
 
   const messages = [{ role: 'user', content: initialPrompt }];
@@ -1029,7 +1137,7 @@ async function runImplementInWorktree(task, agent, runner) {
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
-      if (worktreePath) removeWorktree(worktreePath);
+      if (worktreePath) removeWorktree(worktreePath, repoPath);
       break;
     }
 
@@ -1046,14 +1154,14 @@ async function runImplementInWorktree(task, agent, runner) {
 
       if (block.name === 'bash') {
         console.log(`[AgentRunner][${runner.id}][${taskId}] bash: ${block.input.command}`);
-        result = await runBash(block.input.command, worktreePath);
+        result = await runBash(block.input.command, workDir);
 
       } else if (block.name === 'read_file') {
-        const content = readFileFromDir(block.input.path, worktreePath);
+        const content = readFileFromDir(block.input.path, workDir);
         result = content ? { success: true, content } : { error: 'File not found' };
 
       } else if (block.name === 'write_file') {
-        result = writeFileSafe(block.input.path, block.input.content, runner.capability, worktreePath || PROJECT_ROOT, { subscriptionId, projectId: task.project_id });
+        result = writeFileSafe(block.input.path, block.input.content, runner.capability, workDir, { subscriptionId, projectId: task.project_id });
 
       } else if (block.name === 'task_log') {
         const { progress, message } = block.input;
@@ -1069,22 +1177,31 @@ async function runImplementInWorktree(task, agent, runner) {
       } else if (block.name === 'task_complete') {
         const { summary } = block.input;
         const prBody = `## Summary\n${summary}\n\n## Task\n${task.title}\n\n${task.acceptance_criteria ? `## Acceptance Criteria\n${task.acceptance_criteria}` : ''}`.trim();
-        // Opening a PR reaches outside AutoKan, so it runs only when the effect
-        // gate allows it. A suppressed run still gets a PR-shaped result: the two
-        // branches below (auto-merge → Testing vs. park in Human Action) are part
-        // of what a coding benchmark exists to exercise, so they must still run —
-        // only the GitHub calls are skipped.
-        const prAllowed = shouldPerform(db, task, PR_CREATE, EXTERNAL);
+        // Two independent reasons a PR may not happen, and they mean different
+        // things. The board's folder may simply have no remote to open one against
+        // (a plain local folder, or a repo with no origin) — that is a fact about
+        // the target, not a policy decision. Separately the effect gate may forbid
+        // it for this run. Either way the branches below still execute: the
+        // auto-merge → Testing vs. park-in-Human-Action split is real pipeline
+        // behaviour and a coding benchmark exists to exercise it.
+        const prAllowed = repo.hasRemote && shouldPerform(db, task, PR_CREATE, EXTERNAL);
+        if (!repo.hasRemote) {
+          recordEffect(db, taskId, agent.id, PR_CREATE,
+            `no remote configured for ${clientPath} — nowhere to open "[${taskId}] ${task.title}"`);
+        }
         let pr;
         if (prAllowed) {
           pr = await createGithubPr({
             title: `[${taskId}] ${task.title}`,
             body: prBody,
             head: `feature/${taskId}`,
+            repoPath,
           });
         } else {
-          recordEffect(db, taskId, agent.id, PR_CREATE, `open PR "[${taskId}] ${task.title}" from feature/${taskId}`);
-          pr = { url: `benchmark://pr/${taskId}`, number: null };
+          if (repo.hasRemote) {
+            recordEffect(db, taskId, agent.id, PR_CREATE, `open PR "[${taskId}] ${task.title}" from feature/${taskId}`);
+          }
+          pr = { url: `local://task/${taskId}`, number: null };
         }
         const pr_url = pr ? pr.url : '';
 
@@ -1094,8 +1211,8 @@ async function runImplementInWorktree(task, agent, runner) {
           // never land probe code on master — so when suppressed it is recorded
           // and reported as merged, keeping the Testing transition exercised.
           let merged;
-          if (prAllowed && shouldPerform(db, task, PR_MERGE, EXTERNAL)) {
-            merged = await mergeGithubPr(pr.number);
+          if (prAllowed && pr.number && shouldPerform(db, task, PR_MERGE, EXTERNAL)) {
+            merged = await mergeGithubPr(pr.number, repoPath);
           } else {
             recordEffect(db, taskId, agent.id, PR_MERGE, `merge PR for ${taskId} into master`);
             merged = true;
@@ -1121,8 +1238,13 @@ async function runImplementInWorktree(task, agent, runner) {
           notifyHumanActionMembers(db, taskId, 'PR ready for review').catch(() => {});
         }
         broadcastTask(db, taskId);
+        const changed = captureWork(workDir, repo);
+        if (changed) {
+          db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), taskId, agent.id, 'work_captured', changed);
+        }
         completed = true;
-        if (worktreePath) removeWorktree(worktreePath);
+        if (worktreePath) removeWorktree(worktreePath, repoPath);
         result = { success: true, pr_url };
 
       } else if (block.name === 'request_human') {
@@ -1133,8 +1255,13 @@ async function runImplementInWorktree(task, agent, runner) {
         console.log(`[AgentRunner][${runner.id}][${taskId}] requested human: ${reason}`);
         notifyHumanActionMembers(db, taskId, reason).catch(() => {});
         broadcastTask(db, taskId);
+        const wip = captureWork(workDir, repo);
+        if (wip) {
+          db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+            .run(uuidv4(), taskId, agent.id, 'work_captured', wip);
+        }
         completed = true; // stop the loop; human must resume
-        if (worktreePath) removeWorktree(worktreePath);
+        if (worktreePath) removeWorktree(worktreePath, repoPath);
         result = { success: true };
 
       } else if (block.name === 'invoke_action_hook') {
@@ -1153,6 +1280,9 @@ async function runImplementInWorktree(task, agent, runner) {
       messages.push({ role: 'user', content: toolResults });
     }
   }
+
+  // Fell out of the loop with no outcome tool called — do not leave this silent.
+  if (!completed) escalateStalled(task, agent, runner, { worktreePath, repoPath });
 }
 
 // ---------------------------------------------------------------------------
@@ -1240,8 +1370,13 @@ async function runTestWithRetry(task, agent, runner) {
   const db = getDb();
   const taskId = task.id;
 
-  const project = task.project_id ? db.prepare('SELECT subscription_id FROM projects WHERE id = ?').get(task.project_id) : null;
-  const subscriptionId = project?.subscription_id || null;
+  // Same move as the Coder: test the BOARD's project, not AutoKan. This handler
+  // used to run npm test in AutoKan's own root, which meant it exercised the
+  // platform rather than the code the Coder had just written.
+  const linkCheck = requireLinkedClientPath(task, agent, runner);
+  if (!linkCheck.ok) return;
+  const { subscriptionId, clientPath } = linkCheck;
+  const workDir = path.join(PROJECT_ROOT, clientPath);
   const systemPrompt = buildSystemPrompt(agent, runner, subscriptionId, task.project_id);
   const contextBlock = buildContextBlock(agent, subscriptionId, task.project_id);
 
@@ -1303,14 +1438,14 @@ async function runTestWithRetry(task, agent, runner) {
 
       if (block.name === 'bash') {
         console.log(`[AgentRunner][${runner.id}][${taskId}] bash: ${block.input.command}`);
-        result = await runBash(block.input.command, PROJECT_ROOT);
+        result = await runBash(block.input.command, workDir);
 
       } else if (block.name === 'read_file') {
-        const content = readFileFromDir(block.input.path, PROJECT_ROOT);
+        const content = readFileFromDir(block.input.path, workDir);
         result = content ? { success: true, content } : { error: 'File not found' };
 
       } else if (block.name === 'write_file') {
-        result = writeFileSafe(block.input.path, block.input.content, runner.capability, PROJECT_ROOT, { subscriptionId, projectId: task.project_id });
+        result = writeFileSafe(block.input.path, block.input.content, runner.capability, workDir, { subscriptionId, projectId: task.project_id });
 
       } else if (block.name === 'task_log') {
         const { progress, message } = block.input;
@@ -1392,6 +1527,33 @@ async function runTestWithRetry(task, agent, runner) {
       messages.push({ role: 'user', content: toolResults });
     }
   }
+
+  // Fell out of the loop with no outcome tool called — do not leave this silent.
+  if (!completed) escalateStalled(task, agent, runner);
+}
+
+// Every tool-loop handler can fall out of its loop without the agent ever calling
+// an outcome tool — iterations exhausted, or an API error breaking out early. Both
+// used to just return: the task sat where it was with nothing recorded, and a
+// benchmark run waited out its whole poll timeout before reporting 'timeout' on a
+// run that had actually stopped minutes earlier. Escalating uses the same action
+// name the settled-action watchers already look for, so the run resolves promptly
+// and a human sees why. Worded to cover both causes, since the specific one is
+// already in the task log (an API error leaves its own note).
+function escalateStalled(task, agent, runner, opts) {
+  const { worktreePath, repoPath } = opts || {};
+  const db = getDb();
+  const reason = 'The agent stopped without completing the task or asking for help. Its work so far is in the task log — please review and decide what to do next.';
+  db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+    .run('col_humanaction', reason, task.id);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agent.id, 'human_action_requested', reason);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    .run(uuidv4(), task.id, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+  console.log(`[AgentRunner][${runner.id}][${task.id}] stalled without an outcome → Human Action`);
+  if (worktreePath) removeWorktree(worktreePath, repoPath);
+  notifyHumanActionMembers(db, task.id, reason).catch(() => {});
+  broadcastTask(db, task.id);
 }
 
 // Shared guard for produce_document/verify_document — both need the board linked to a
@@ -1582,6 +1744,7 @@ async function runProduceDocument(task, agent, runner) {
       console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true; // a resolution, not a silent exit — see escalateStalled
       break;
     }
 
@@ -1696,6 +1859,9 @@ async function runProduceDocument(task, agent, runner) {
       messages.push({ role: 'user', content: toolResults });
     }
   }
+
+  // Fell out of the loop with no outcome tool called — do not leave this silent.
+  if (!completed) escalateStalled(task, agent, runner);
 }
 
 // ---------------------------------------------------------------------------
@@ -1861,6 +2027,7 @@ async function runVerifyDocument(task, agent, runner) {
       console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true; // a resolution, not a silent exit — see escalateStalled
       break;
     }
 
@@ -2007,6 +2174,9 @@ async function runVerifyDocument(task, agent, runner) {
       messages.push({ role: 'user', content: toolResults });
     }
   }
+
+  // Fell out of the loop with no outcome tool called — do not leave this silent.
+  if (!completed) escalateStalled(task, agent, runner);
 }
 
 // ── Dispatch ─────────────────────────────────────────────────────────────────

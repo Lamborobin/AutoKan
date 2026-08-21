@@ -13,6 +13,8 @@ const CAPABILITY_OPTIONS = [
   { value: 'perm_planning', label: 'Planning', placeholder: 'What should the planner review?', brief: 'The brief the planner will actually see…' },
   { value: 'perm_producing', label: 'Producing', placeholder: 'What document should be produced?', brief: 'The brief the document producer will actually see…' },
   { value: 'perm_verifying', label: 'Verifying', placeholder: 'What should verification check for?', brief: 'The same brief is first sent to Producing to generate a real document, then Verifying checks that document against this brief…' },
+  { value: 'perm_coding', label: 'Coding', placeholder: 'What change should the developer make?', brief: 'The brief the coding agent will actually see. It works inside the folder this board is linked to…' },
+  { value: 'perm_coding_tester', label: 'Test running', placeholder: 'What should the test run cover?', brief: 'The brief the test runner will actually see. It runs the automated suite in the folder this board is linked to…' },
 ];
 
 export default function NewBenchmarkTaskModal({ scope, targetProjectId, subscriptionId, onClose, onCreated }) {

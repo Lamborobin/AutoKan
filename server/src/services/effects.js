@@ -14,11 +14,13 @@
 //     next move is unaffected, and nothing downstream breaks.
 //   - Anything the agent OPERATES ON — a branch name, a file path, a tool
 //     result it reasons from — must stay true. Lying there doesn't protect the
-//     blind test, it breaks the run. This is why branch pushes are NOT gated or
-//     renamed here: the runner prompt hands the agent its branch and push
-//     command, so a benchmark-only branch name would just make the push fail.
-//     Probe branches are cleaned up from benchmark_runs.probing_task_id, which
-//     already records exactly which tasks were probes.
+//     blind test, it breaks the run. So a branch is never renamed per run mode:
+//     the runner prompt hands the agent its branch and push command, and a
+//     benchmark-only name would simply make the push fail. What IS gated is
+//     whether the push happens at all — the agent is only told to push when the
+//     target actually has a remote, so the instruction it acts on stays true
+//     either way. Probe branches are identified from
+//     benchmark_runs.probing_task_id, which records which tasks were probes.
 const { v4: uuidv4 } = require('uuid');
 const notifications = require('./notificationsService');
 
@@ -54,9 +56,10 @@ const POLICY = {
 // so `notify_all` is both the hook name and the effect name — no second list to
 // keep in sync. These are the ids for effects the SERVER emits directly.
 const NOTIFY_HUMAN_ACTION = 'notify_human_action';
+const GIT_PUSH = 'git_push';
 const PR_CREATE = 'pr_create';
 const PR_MERGE = 'pr_merge';
-const BUILTIN_EFFECT_IDS = [NOTIFY_HUMAN_ACTION, PR_CREATE, PR_MERGE];
+const BUILTIN_EFFECT_IDS = [NOTIFY_HUMAN_ACTION, GIT_PUSH, PR_CREATE, PR_MERGE];
 
 function rowOf(db, taskOrId) {
   return typeof taskOrId === 'string'
@@ -176,7 +179,7 @@ module.exports = {
   LIVE, BENCHMARK,
   capabilityActions, defaultEnabledFor, enabledList,
   ORCHESTRATION, EXTERNAL,
-  NOTIFY_HUMAN_ACTION, PR_CREATE, PR_MERGE, BUILTIN_EFFECT_IDS,
+  NOTIFY_HUMAN_ACTION, GIT_PUSH, PR_CREATE, PR_MERGE, BUILTIN_EFFECT_IDS,
   runModeOf,
   shouldPerform,
   recordEffect,

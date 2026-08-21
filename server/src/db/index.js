@@ -320,7 +320,7 @@ function applySchema(db) {
       subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
       layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
-      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying')),
+      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester')),
       rule_reference TEXT,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
@@ -422,6 +422,54 @@ function applySchema(db) {
   if (!benchmarkCasesColumns.includes('allowed_effects')) {
     db.exec(`ALTER TABLE benchmark_cases ADD COLUMN allowed_effects TEXT`);
   }
+  // SQLite cannot ALTER a CHECK constraint, and CREATE TABLE IF NOT EXISTS never
+  // touches an existing table — so a dev DB created before the coding capabilities
+  // became benchmarkable still carries a CHECK that rejects them outright. Rebuild
+  // the table when its stored DDL is the stale one. Columns are listed explicitly
+  // rather than using SELECT *: allowed_effects was added by ALTER on older DBs and
+  // therefore sits last there but mid-table on a freshly created one, so positional
+  // copying would silently shuffle values between columns. The whole thing runs in
+  // one transaction, and the updated_at trigger is recreated because DROP TABLE
+  // takes its triggers with it.
+  const casesDdl = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='benchmark_cases'`).get();
+  if (casesDdl && !casesDdl.sql.includes('perm_coding')) {
+    const cols = [
+      'id', 'subscription_id', 'project_id', 'layer', 'capability', 'rule_reference',
+      'title', 'description', 'acceptance_criteria', 'rubric', 'allowed_effects',
+      'source', 'created_by', 'archived_at', 'created_at', 'updated_at',
+    ].join(', ');
+    db.exec('PRAGMA foreign_keys=off');
+    db.exec(`
+      BEGIN;
+      CREATE TABLE benchmark_cases_migrated (
+        id TEXT PRIMARY KEY,
+        subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+        project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
+        layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
+        capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester')),
+        rule_reference TEXT,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        acceptance_criteria TEXT,
+        rubric TEXT NOT NULL DEFAULT '{}',
+        allowed_effects TEXT,
+        source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ai_generated','ai_edited','cloned_task')),
+        created_by TEXT REFERENCES users(id),
+        archived_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO benchmark_cases_migrated (${cols}) SELECT ${cols} FROM benchmark_cases;
+      DROP TABLE benchmark_cases;
+      ALTER TABLE benchmark_cases_migrated RENAME TO benchmark_cases;
+      CREATE TRIGGER IF NOT EXISTS benchmark_cases_updated_at AFTER UPDATE ON benchmark_cases
+        BEGIN UPDATE benchmark_cases SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;
+      COMMIT;
+    `);
+    db.exec('PRAGMA foreign_keys=on');
+    console.log('✅ benchmark_cases migrated — coding capabilities are now accepted');
+  }
+
   const tasksColumns = db.prepare(`PRAGMA table_info(tasks)`).all().map(c => c.name);
   if (!tasksColumns.includes('allowed_effects')) {
     db.exec(`ALTER TABLE tasks ADD COLUMN allowed_effects TEXT`);

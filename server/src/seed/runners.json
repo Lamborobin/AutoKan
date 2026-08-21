@@ -14,10 +14,10 @@
     {
       "id": "perm_coding",
       "label": "Coder",
-      "description": "Implements code that satisfies an approved task. Full write access inside client/. Defaults to human action on hindrance.",
+      "description": "Implements code that satisfies an approved task, inside the board's own linked folder. Defaults to human action on hindrance.",
       "color": "#ec4899",
-      "actions": ["pr_create", "pr_merge"],
-      "write_access": "client/",
+      "actions": ["git_push", "pr_create", "pr_merge"],
+      "write_access": "*",
       "context_docs": ["docs/rules.md"],
       "is_coder": true
     },

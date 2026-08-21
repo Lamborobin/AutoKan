@@ -67,25 +67,45 @@ function VerdictChip({ who, value, icon: Icon, tone }) {
   );
 }
 
+// The same tool name means different things depending on who called it —
+// task_complete is "produced the document" for a producer and "implemented the
+// change" for a coder. Generic wording lives here as the fallback; anything that
+// reads wrong for a specific capability is overridden below.
 const TOOL_LABELS = {
   ask_question: 'asked a clarifying question',
   approve_task: 'approved the task',
   suggest_split: 'suggested splitting the task',
   suggest_abandon: 'suggested abandoning the task',
-  task_complete: 'produced the document',
-  task_complete_pass: 'verified the document as passing',
-  task_complete_fail: 'verified the document as failing',
+  task_complete: 'completed the work',
+  task_complete_pass: 'reported a pass',
+  task_complete_fail: 'reported a failure',
   request_human: 'escalated to a human',
+};
+
+const TOOL_LABELS_BY_CAPABILITY = {
+  perm_producing: { task_complete: 'produced the document' },
+  perm_verifying: {
+    task_complete_pass: 'verified the document as passing',
+    task_complete_fail: 'verified the document as failing',
+  },
+  perm_coding: { task_complete: 'implemented the change' },
+  perm_coding_tester: {
+    task_complete_pass: 'reported the tests passing',
+    task_complete_fail: 'reported the tests failing',
+  },
 };
 
 const CAPABILITY_LABELS = {
   perm_planning: 'Planning',
   perm_producing: 'Producing',
   perm_verifying: 'Verifying',
+  perm_coding: 'Coding',
+  perm_coding_tester: 'Test running',
 };
 
-function toolLabel(tool) {
-  return TOOL_LABELS[tool] || (tool ? `did "${tool}"` : "didn't take a recognized action");
+function toolLabel(tool, capability) {
+  const perCapability = TOOL_LABELS_BY_CAPABILITY[capability] || {};
+  return perCapability[tool] || TOOL_LABELS[tool] || (tool ? `did "${tool}"` : "didn't take a recognized action");
 }
 
 // Turns backend rubric-check internals (check names + pre-formatted comparison
@@ -93,16 +113,16 @@ function toolLabel(tool) {
 // UI". Falls back to the raw detail for any check shape this doesn't recognize, so
 // nothing silently disappears. The two checklist-length checks (min/max) are merged
 // into one line by the caller since they describe the same number.
-function friendlySummary(check) {
+function friendlySummary(check, capability) {
   if (check.name === 'expected_tool') {
     const m = check.detail.match(/expected "(.+)", got "([^"]+)"/);
     if (!m) return check.detail;
     const [, expectedRaw, got] = m;
     const expectedTools = expectedRaw.split('" or "');
-    const expectedLabel = expectedTools.map(toolLabel).join(' or ');
+    const expectedLabel = expectedTools.map(t => toolLabel(t, capability)).join(' or ');
     return check.passed
-      ? `Correctly ${toolLabel(got)}`
-      : `Expected it to have ${expectedLabel} — instead it ${toolLabel(got)}`;
+      ? `Correctly ${toolLabel(got, capability)}`
+      : `Expected it to have ${expectedLabel} — instead it ${toolLabel(got, capability)}`;
   }
   if (check.name.startsWith('required:')) {
     const field = check.name.slice('required:'.length);
@@ -147,7 +167,7 @@ function mergeChecklistCountChecks(checks) {
 // was actually respected, only whether the output's shape looked roughly right, so
 // it stays a secondary, opt-in detail rather than the headline result (that's
 // RuleCompliance below, which is grounded in the board's real rule docs).
-function DeterministicChecks({ result }) {
+function DeterministicChecks({ result, capability }) {
   const [open, setOpen] = useState(false);
   if (!result) return <p className="text-sm text-gray-600">Pending…</p>;
   const checks = mergeChecklistCountChecks(result.checks || []);
@@ -173,7 +193,7 @@ function DeterministicChecks({ result }) {
           {checks.map((c, i) => (
             <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
               {c.passed ? <Check size={11} className="text-green-400 mt-0.5 shrink-0" /> : <XCircle size={11} className="text-red-400 mt-0.5 shrink-0" />}
-              <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c)}</span>
+              <span>{c.name === 'checklist_count' ? c.detail : friendlySummary(c, capability)}</span>
             </div>
           ))}
         </div>
@@ -412,7 +432,7 @@ function RunCard({ run, caseId, capability }) {
 
         {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
 
-        {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} />}
+        {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} capability={capability} />}
 
         {run.status === 'completed' && <AgentOutput taskId={run.probing_task_id} capability={capability} />}
 

@@ -24,11 +24,15 @@ const VALID_REVIEW_LEVELS = ['unacceptable', 'less_acceptable', 'accepted', 'ver
 const PLANNING_CAPABILITY = 'perm_planning';
 const PRODUCING_CAPABILITY = 'perm_producing';
 const VERIFYING_CAPABILITY = 'perm_verifying';
+const CODING_CAPABILITY = 'perm_coding';
+const CODE_TESTING_CAPABILITY = 'perm_coding_tester';
 
 const CAPABILITY_LABELS = {
   [PLANNING_CAPABILITY]: 'AI planning agent (clarifies requirements with the client before any work begins)',
   [PRODUCING_CAPABILITY]: 'AI document-producing agent (writes a structured document from a brief)',
   [VERIFYING_CAPABILITY]: 'AI document-verification agent (checks a produced document against a standard and reports pass/fail)',
+  [CODING_CAPABILITY]: "AI coding agent (implements an approved task inside the project the board is linked to)",
+  [CODE_TESTING_CAPABILITY]: "AI test-running agent (runs the automated test suite for the linked project and reports pass/fail)",
 };
 
 // Column a fresh probing task starts in per capability — mirrors the real runner
@@ -38,6 +42,8 @@ const CAPABILITY_START_COLUMN = {
   [PLANNING_CAPABILITY]: 'col_backlog',
   [PRODUCING_CAPABILITY]: 'col_inprogress',
   [VERIFYING_CAPABILITY]: 'col_testing',
+  [CODING_CAPABILITY]: 'col_inprogress',
+  [CODE_TESTING_CAPABILITY]: 'col_testing',
 };
 
 // How long pollAndScore waits before giving up on a run and marking it 'timeout'.
@@ -57,6 +63,14 @@ const CAPABILITY_POLL_TIMEOUT_MS = {
   [PLANNING_CAPABILITY]: 60000,
   [PRODUCING_CAPABILITY]: 420000,
   [VERIFYING_CAPABILITY]: 300000,
+  // Coding and test-running have no wall-clock cap of their own — they stop at
+  // max_iterations (30), each iteration a full model turn plus real shell commands
+  // (installs, builds, test suites). There is no cap to stay above, so these are
+  // sized for the loop actually running to completion rather than for an escalation
+  // write landing. Generous on purpose: a run that is still working is far more
+  // expensive to lose to a premature 'timeout' than one that sits a little longer.
+  [CODING_CAPABILITY]: 1800000,
+  [CODE_TESTING_CAPABILITY]: 1200000,
 };
 
 let _client;
@@ -199,6 +213,65 @@ const CAPABILITY_PROBES = {
         `Tool fired: ${tool || '(none)'}`,
         `Document it checked: ${verifiedPath || '(none)'}`,
         `Verifier's verdict and summary: ${log?.message || '(none)'}`,
+      ];
+    },
+  },
+
+  // Coding and test-running settle on the log actions their handlers already write;
+  // nothing in agentRunner.js was changed to accommodate benchmarking.
+  //
+  // Scoring a code change is not substring work, so checkText stays deliberately
+  // thin (the outcome the agent reported) while judgeSummaryLines carries the real
+  // evidence: the diff captured by captureWork() before the worktree is torn down.
+  // A board folder with no git has no diff to give — the judge is told that
+  // explicitly rather than handed a silence it could read as no work done.
+  [CODING_CAPABILITY]: {
+    settledActions: ['pr_created', 'human_action_requested'],
+    outcomeSignals: [
+      { tool: 'task_complete', test: (task, metadata, logs) => logs.some(l => l.action === 'pr_created') },
+      { tool: 'request_human', test: (task, metadata, logs) => logs.some(l => l.action === 'human_action_requested') },
+    ],
+    toolsWithoutChecklist: [],
+    checkText: (task, logs) => {
+      const done = logs.find(l => l.action === 'pr_created');
+      const blocked = logs.find(l => l.action === 'human_action_requested');
+      return [done && done.message, blocked && blocked.message].filter(Boolean).join("\n");
+    },
+    judgeSummaryLines: (task, logs, tool) => {
+      const done = logs.find(l => l.action === 'pr_created');
+      const blocked = logs.find(l => l.action === 'human_action_requested');
+      const work = logs.find(l => l.action === 'work_captured');
+      const progress = logs.filter(l => l.action === 'note').map(l => l.message);
+      return [
+        'Tool fired: ' + (tool || '(none)'),
+        'Outcome reported: ' + ((done && done.message) || (blocked && blocked.message) || '(none)'),
+        'Progress notes: ' + (progress.length ? progress.join(' | ') : '(none)'),
+        'Actual change made:' + "\n" + (work ? work.message : '(no diff captured — the linked folder is not a git repository, so judge from the reported outcome and progress notes only)'),
+      ];
+    },
+  },
+
+  // Mirrors Verifying: a pass/fail capability whose verdict lives in the message
+  // attached to whichever settled action fired.
+  [CODE_TESTING_CAPABILITY]: {
+    settledActions: ['tests_passed', 'tests_failed', 'human_action_requested'],
+    outcomeSignals: [
+      { tool: 'task_complete_pass', test: (task, metadata, logs) => logs.some(l => l.action === 'tests_passed') },
+      { tool: 'task_complete_fail', test: (task, metadata, logs) => logs.some(l => l.action === 'tests_failed') },
+      { tool: 'request_human', test: (task, metadata, logs) => logs.some(l => l.action === 'human_action_requested') },
+    ],
+    toolsWithoutChecklist: [],
+    checkText: (task, logs) => {
+      const log = logs.find(l => ['tests_passed', 'tests_failed'].includes(l.action));
+      return (log && log.message) || '';
+    },
+    judgeSummaryLines: (task, logs, tool) => {
+      const log = logs.find(l => ['tests_passed', 'tests_failed'].includes(l.action));
+      const progress = logs.filter(l => l.action === 'note').map(l => l.message);
+      return [
+        'Tool fired: ' + (tool || '(none)'),
+        'Test verdict and summary: ' + ((log && log.message) || '(none)'),
+        'Progress notes: ' + (progress.length ? progress.join(' | ') : '(none)'),
       ];
     },
   },
@@ -631,6 +704,8 @@ const OUTCOME_TOOLS_BY_CAPABILITY = {
   [PLANNING_CAPABILITY]: ['ask_question', 'approve_task', 'suggest_split', 'suggest_abandon'],
   [PRODUCING_CAPABILITY]: ['task_complete', 'request_human'],
   [VERIFYING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
+  [CODING_CAPABILITY]: ['task_complete', 'request_human'],
+  [CODE_TESTING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
 };
 
 // Shape shared by both the whole-task draft and the rubric-only draft below —
@@ -780,6 +855,6 @@ module.exports = {
   snapshotContextVersion,
   scoreDeterministic,
   VALID_REVIEW_LEVELS,
-  VALID_CAPABILITIES: [PLANNING_CAPABILITY, PRODUCING_CAPABILITY, VERIFYING_CAPABILITY],
+  VALID_CAPABILITIES: [PLANNING_CAPABILITY, PRODUCING_CAPABILITY, VERIFYING_CAPABILITY, CODING_CAPABILITY, CODE_TESTING_CAPABILITY],
   PLANNING_CAPABILITY,
 };
