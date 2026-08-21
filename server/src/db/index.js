@@ -362,8 +362,8 @@ function applySchema(db) {
       review_provenance TEXT NOT NULL DEFAULT 'unreviewed' CHECK(review_provenance IN ('unreviewed','ai','human')),
       context_version TEXT,
       -- Model that actually ran the probed capability's task, when a run overrides
-      -- the board agent's own configured model (see dev/upcoming-changes.md's
-      -- "per-case model override"). NULL means the agent's own model was used.
+      -- the board agent's own configured model. NULL means the agent's own model
+      -- was used.
       model_override TEXT,
       error_message TEXT,
       triggered_by TEXT REFERENCES users(id),

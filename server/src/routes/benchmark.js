@@ -218,8 +218,8 @@ router.post('/cases/:id/run', attachAgent, async (req, res) => {
   if (!projectId) return res.status(400).json({ error: 'project_id is required — pick a board to run this case against' });
 
   // Optional per-run model override — lets the same case be compared across models
-  // without reassigning the board's real agent (see dev/upcoming-changes.md). Omit
-  // or leave blank to run on whatever model the board's agent is actually configured with.
+  // without reassigning the board's real agent. Omit or leave blank to run on
+  // whatever model the board's agent is actually configured with.
   const { model } = req.body;
   if (model && !getValidModelIds().has(model)) {
     return res.status(400).json({ error: `Unknown model "${model}"` });

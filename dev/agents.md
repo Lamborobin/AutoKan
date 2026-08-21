@@ -141,3 +141,5 @@ Two different paths, depending on scope:
 4. **Capability Behavior file** — tell the agent when and how to call it, in the exact format you want (title/body shape, trigger condition). The tool's JSON schema constrains the *arguments*; it does not tell the model *when* to call it — that only comes from this file's prose.
 
 A tool that skips the logging convention (either path) is invisible to benchmark runs regardless of whether it actually fires — there is no other place that detects tool activity.
+
+Capabilities that loop on tool results get repeated chances to invoke an action alongside their main work. Planning makes a single call, so it is handed one extra turn when its instructions name an action it resolved the task without invoking — worth knowing when writing a trigger for a capability, since only Planning has that safety net.

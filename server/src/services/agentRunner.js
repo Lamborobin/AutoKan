@@ -88,6 +88,14 @@ async function runActionHook(action, params, task, agent) {
   }
 }
 
+// Which registered action hooks a run has actually been TOLD to use. Instruction
+// layers name them wrapped in underscores (see the registry's own convention), so
+// that is what is matched — a hook merely existing is not an instruction to use it.
+function hooksNamedIn(text) {
+  if (!text) return [];
+  return Object.keys(ACTION_HOOKS).filter(name => text.includes('_' + name + '_'));
+}
+
 // ── Runner registry helpers ──────────────────────────────────────────────────
 // Single source of truth for (capability, column) → handler mapping lives in
 // server/src/seed/runners.json. Adding a new runner = add a registry entry +
@@ -915,6 +923,52 @@ async function runClarifyAndApprove(task, agent, runner) {
       const { action, params } = block.input;
       await runActionHook(action, params, task, agent);
       console.log(`[AgentRunner][${runner.id}][${taskId}] invoked action hook "${action}"`);
+    }
+  }
+
+  // The Planner gets a single API call, so its outcome tool AND any action hook its
+  // instructions asked for have to land in the same turn as parallel tool calls —
+  // which models do inconsistently. Observed on real runs: the same model approving
+  // correctly and firing the hook on two runs out of three, with no other difference.
+  // Every other capability loops on tool results and simply gets another chance; this
+  // one has to be handed one explicitly.
+  //
+  // Deliberately bounded: one extra call, only when the instructions actually name a
+  // hook the agent then did not use. An ordinary planning run costs exactly what it
+  // did before, and this cannot become a loop.
+  const calledHook = response.content.some(b => b.type === 'tool_use' && b.name === 'invoke_action_hook');
+  const outcomeFired = outcomeBlockOf(response);
+  const expectedHooks = hooksNamedIn(systemPrompt + '\n' + contextBlock);
+  if (outcomeFired && !calledHook && expectedHooks.length) {
+    try {
+      const toolResults = response.content
+        .filter(b => b.type === 'tool_use')
+        .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify({ success: true }) }));
+      const followUp = await getClient().messages.create({
+        model: agent.model || runner.model_default || loadModels().defaultModel,
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: getToolSet(runner),
+        messages: [
+          { role: 'user', content: userMessage },
+          { role: 'assistant', content: response.content },
+          { role: 'user', content: [
+            ...toolResults,
+            { type: 'text', text: 'Your instructions reference the action ' + expectedHooks.map(h => '_' + h + '_').join(', ') + ', which you have not invoked for this task. If the trigger condition in your instructions is met, invoke it now. If it does not apply, reply briefly saying so and call nothing.' },
+          ] },
+        ],
+      });
+      for (const block of followUp.content) {
+        // Only hooks are honoured here — the task outcome was already decided above,
+        // and a second outcome tool in this turn must not be allowed to overwrite it.
+        if (block.type === 'tool_use' && block.name === 'invoke_action_hook') {
+          await runActionHook(block.input.action, block.input.params, task, agent);
+          console.log(`[AgentRunner][${runner.id}][${taskId}] invoked action hook "${block.input.action}" on the follow-up turn`);
+        }
+      }
+    } catch (err) {
+      // A failed follow-up must never undo a correctly-resolved task.
+      console.error(`[AgentRunner][${runner.id}][${taskId}] action-hook follow-up failed:`, err.message);
     }
   }
 

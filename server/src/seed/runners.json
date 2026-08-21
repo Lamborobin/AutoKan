@@ -159,7 +159,7 @@
       "tools": "clarification_tools",
       "model_default": "claude-opus-5",
       "trigger_guard": "no_pm_approval_yet",
-      "description": "PM clarifies requirements with the human through Q&A. Single-shot per turn — sleeps between human answers."
+      "description": "PM clarifies requirements with the human through Q&A. Single-shot per turn — sleeps between human answers. One extra model call is made only when the instructions name an action hook the agent did not invoke."
     },
     {
       "id": "runner_dev_implement",
