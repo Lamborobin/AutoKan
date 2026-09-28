@@ -1171,11 +1171,34 @@ async function runImplementInWorktree(task, agent, runner) {
 
   let completed = false;
   const MAX_ITERATIONS = runner.max_iterations || 30;
+  // Wall-clock cap, independent of iteration count — same gap as produce_document
+  // originally had (see its comment): a single stuck/slow turn, or a long chain of
+  // real installs/builds/tests, can otherwise burn arbitrary time and tokens without
+  // ever hitting MAX_ITERATIONS. Longer than the document handlers' 3-4 min since
+  // this one runs genuine shell work (npm install/build/test), not just LLM writing.
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 8 * 60 * 1000;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    if (Date.now() - startedAt > MAX_DURATION_MS) {
+      const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      if (worktreePath) removeWorktree(worktreePath, repoPath);
+      broadcastTask(db, taskId);
+      completed = true;
+      break;
+    }
+
     let response;
     try {
-      response = await getClient().messages.create({
+      response = await withHardTimeout(getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
@@ -1186,12 +1209,22 @@ async function runImplementInWorktree(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      });
+      }), 150000, 'API call');
     } catch (err) {
+      // Escalate rather than just logging + breaking — an API error (including a
+      // stuck call caught by the hard timeout above) otherwise left the task
+      // silently stuck with no signal to a human that it had stopped.
+      const reason = `API error during implementation: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
+        .run(uuidv4(), taskId, agent.id, 'note', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       if (worktreePath) removeWorktree(worktreePath, repoPath);
+      broadcastTask(db, taskId);
       break;
     }
 
@@ -1456,11 +1489,32 @@ async function runTestWithRetry(task, agent, runner) {
   let completed = false;
   const MAX_ITERATIONS = runner.max_iterations || 30;
   const MAX_RETRIES = runner.max_retries ?? 1;
+  // Wall-clock cap, independent of iteration count — same gap produce_document/
+  // verify_document already close (see produce_document's comment). Shorter than
+  // the Coder's 8 min: this handler runs an existing suite or writes a small,
+  // targeted test file, not a full feature implementation.
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 5 * 60 * 1000;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    if (Date.now() - startedAt > MAX_DURATION_MS) {
+      const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      completed = true;
+      break;
+    }
+
     let response;
     try {
-      response = await getClient().messages.create({
+      response = await withHardTimeout(getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
@@ -1471,11 +1525,21 @@ async function runTestWithRetry(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      });
+      }), 150000, 'API call');
     } catch (err) {
+      // Escalate rather than just logging + breaking — an API error (including a
+      // stuck call caught by the hard timeout above) otherwise left the task
+      // silently stuck with no signal to a human that it had stopped.
+      const reason = `API error during test run: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
+        .run(uuidv4(), taskId, agent.id, 'note', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
       break;
     }
 

@@ -66,12 +66,13 @@ const CAPABILITY_POLL_TIMEOUT_MS = {
   [PLANNING_CAPABILITY]: 60000,
   [PRODUCING_CAPABILITY]: 420000,
   [VERIFYING_CAPABILITY]: 300000,
-  // Coding and test-running have no wall-clock cap of their own — they stop at
-  // max_iterations (30), each iteration a full model turn plus real shell commands
-  // (installs, builds, test suites). There is no cap to stay above, so these are
-  // sized for the loop actually running to completion rather than for an escalation
-  // write landing. Generous on purpose: a run that is still working is far more
-  // expensive to lose to a premature 'timeout' than one that sits a little longer.
+  // Coding and test-running now have their own wall-clock caps too (implement_in_worktree:
+  // 8min, test_with_retry: 5min), same escalate-on-cap pattern as Producing/Verifying —
+  // worst case is the cap plus one in-flight 150s call (≈10.5min / ≈7.5min). Kept
+  // generous well above that rather than tightened to match, since these also run real
+  // shell commands (installs, builds, test suites) whose own timing can vary more than
+  // a pure LLM-writing turn — a run that is still working is far more expensive to lose
+  // to a premature 'timeout' than one that sits a little longer.
   [CODING_CAPABILITY]: 1800000,
   [CODE_TESTING_CAPABILITY]: 1200000,
   [REGRESSION_TESTING_CAPABILITY]: 1200000,
