@@ -26,6 +26,7 @@ const PRODUCING_CAPABILITY = 'perm_producing';
 const VERIFYING_CAPABILITY = 'perm_verifying';
 const CODING_CAPABILITY = 'perm_coding';
 const CODE_TESTING_CAPABILITY = 'perm_coding_tester';
+const REGRESSION_TESTING_CAPABILITY = 'perm_test_regression';
 
 const CAPABILITY_LABELS = {
   [PLANNING_CAPABILITY]: 'AI planning agent (clarifies requirements with the client before any work begins)',
@@ -33,6 +34,7 @@ const CAPABILITY_LABELS = {
   [VERIFYING_CAPABILITY]: 'AI document-verification agent (checks a produced document against a standard and reports pass/fail)',
   [CODING_CAPABILITY]: "AI coding agent (implements an approved task inside the project the board is linked to)",
   [CODE_TESTING_CAPABILITY]: "AI test-running agent (runs the automated test suite for the linked project and reports pass/fail)",
+  [REGRESSION_TESTING_CAPABILITY]: "AI regression-test agent (reproduces a specific reported bug, confirms a fix resolves it, and reports pass/fail)",
 };
 
 // Column a fresh probing task starts in per capability — mirrors the real runner
@@ -44,6 +46,7 @@ const CAPABILITY_START_COLUMN = {
   [VERIFYING_CAPABILITY]: 'col_testing',
   [CODING_CAPABILITY]: 'col_inprogress',
   [CODE_TESTING_CAPABILITY]: 'col_testing',
+  [REGRESSION_TESTING_CAPABILITY]: 'col_testing',
 };
 
 // How long pollAndScore waits before giving up on a run and marking it 'timeout'.
@@ -71,6 +74,7 @@ const CAPABILITY_POLL_TIMEOUT_MS = {
   // expensive to lose to a premature 'timeout' than one that sits a little longer.
   [CODING_CAPABILITY]: 1800000,
   [CODE_TESTING_CAPABILITY]: 1200000,
+  [REGRESSION_TESTING_CAPABILITY]: 1200000,
 };
 
 let _client;
@@ -271,6 +275,31 @@ const CAPABILITY_PROBES = {
       return [
         'Tool fired: ' + (tool || '(none)'),
         'Test verdict and summary: ' + ((log && log.message) || '(none)'),
+        'Progress notes: ' + (progress.length ? progress.join(' | ') : '(none)'),
+      ];
+    },
+  },
+
+  // Mirrors Code Test Runner exactly — same handler (test_with_retry), same logged
+  // action names, only the scope of what's tested differs (a prompt-file concern).
+  [REGRESSION_TESTING_CAPABILITY]: {
+    settledActions: ['tests_passed', 'tests_failed', 'human_action_requested'],
+    outcomeSignals: [
+      { tool: 'task_complete_pass', test: (task, metadata, logs) => logs.some(l => l.action === 'tests_passed') },
+      { tool: 'task_complete_fail', test: (task, metadata, logs) => logs.some(l => l.action === 'tests_failed') },
+      { tool: 'request_human', test: (task, metadata, logs) => logs.some(l => l.action === 'human_action_requested') },
+    ],
+    toolsWithoutChecklist: [],
+    checkText: (task, logs) => {
+      const log = logs.find(l => ['tests_passed', 'tests_failed'].includes(l.action));
+      return (log && log.message) || '';
+    },
+    judgeSummaryLines: (task, logs, tool) => {
+      const log = logs.find(l => ['tests_passed', 'tests_failed'].includes(l.action));
+      const progress = logs.filter(l => l.action === 'note').map(l => l.message);
+      return [
+        'Tool fired: ' + (tool || '(none)'),
+        'Regression verdict and summary: ' + ((log && log.message) || '(none)'),
         'Progress notes: ' + (progress.length ? progress.join(' | ') : '(none)'),
       ];
     },
@@ -706,6 +735,7 @@ const OUTCOME_TOOLS_BY_CAPABILITY = {
   [VERIFYING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
   [CODING_CAPABILITY]: ['task_complete', 'request_human'],
   [CODE_TESTING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
+  [REGRESSION_TESTING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
 };
 
 // Shape shared by both the whole-task draft and the rubric-only draft below —
@@ -855,6 +885,6 @@ module.exports = {
   snapshotContextVersion,
   scoreDeterministic,
   VALID_REVIEW_LEVELS,
-  VALID_CAPABILITIES: [PLANNING_CAPABILITY, PRODUCING_CAPABILITY, VERIFYING_CAPABILITY, CODING_CAPABILITY, CODE_TESTING_CAPABILITY],
+  VALID_CAPABILITIES: [PLANNING_CAPABILITY, PRODUCING_CAPABILITY, VERIFYING_CAPABILITY, CODING_CAPABILITY, CODE_TESTING_CAPABILITY, REGRESSION_TESTING_CAPABILITY],
   PLANNING_CAPABILITY,
 };

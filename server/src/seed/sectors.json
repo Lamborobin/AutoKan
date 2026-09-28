@@ -15,7 +15,7 @@
       "label": "Software Development",
       "description": "A software engineering board. The deliverable is code: agents work inside the client repository, open pull requests, and run automated tests. Exposes the code, ops, and analysis capabilities; the document Producer/Verifier capabilities are hidden (those belong to document sectors).",
       "team": true,
-      "capabilities": ["perm_planning", "perm_coding", "perm_coding_tester", "perm_frontend", "perm_backend", "perm_ux", "perm_architect", "perm_code_reader", "perm_migrate", "perm_network", "perm_cloud", "perm_security_control", "perm_log_reader", "perm_data_analytic"],
+      "capabilities": ["perm_planning", "perm_coding", "perm_coding_tester", "perm_test_regression", "perm_frontend", "perm_backend", "perm_ux", "perm_architect", "perm_code_reader", "perm_migrate", "perm_network", "perm_cloud", "perm_security_control", "perm_log_reader", "perm_data_analytic"],
       "color": "#6366f1"
     },
     {

@@ -31,6 +31,15 @@
       "is_coder": true
     },
     {
+      "id": "perm_test_regression",
+      "label": "Regression Test Runner",
+      "description": "Runs targeted regression checks for a specific bug fix — reproduces the original bug, confirms the fix resolves it, and adds a regression test to prevent recurrence.",
+      "color": "#14b8a6",
+      "write_access": "*.test.*, *.spec.*, __tests__/, test/",
+      "context_docs": ["docs/rules.md"],
+      "is_coder": true
+    },
+    {
       "id": "perm_frontend",
       "label": "Frontend Coder",
       "description": "Frontend-only code changes (app/ folder).",
@@ -185,12 +194,27 @@
       "model_default": "claude-sonnet-5",
       "use_worktree": false,
       "max_iterations": 30,
-      "max_retries": 1,
+      "max_retries": 0,
       "on_pass": { "column": "col_humanaction", "message": "Tests passed — ready for human sign-off" },
-      "on_fail_retry": { "column": "col_inprogress", "message": "Tests failed — sent back to In Progress" },
-      "on_fail_max_retries": { "column": "col_humanaction", "message": "Tests failed after max retries", "require_human_action": true },
+      "on_fail": { "column": "col_humanaction", "message": "Tests failed", "require_human_action": true },
       "on_block": { "column": "col_humanaction", "require_human_action": true },
-      "description": "Runs the project's automated test suite (npm test / pytest / etc), writes missing coverage tests, reports pass/fail. Narrow scope — escalates anything not shell-validatable. Fail retries once before escalating."
+      "description": "Runs the project's automated test suite (npm test / pytest / etc), writes missing coverage tests, reports pass/fail. Narrow scope — escalates anything not shell-validatable. No automatic hand-off to the developer on fail — every failure goes to Human Action so a person decides what runs next."
+    },
+    {
+      "id": "runner_run_regression_tests",
+      "capability": "perm_test_regression",
+      "column": "col_testing",
+      "personality_file": "instructions/regression-test.md",
+      "handler": "test_with_retry",
+      "tools": "testing_tools",
+      "model_default": "claude-sonnet-5",
+      "use_worktree": false,
+      "max_iterations": 30,
+      "max_retries": 0,
+      "on_pass": { "column": "col_humanaction", "message": "Regression check passed — ready for human sign-off" },
+      "on_fail": { "column": "col_humanaction", "message": "Regression check failed", "require_human_action": true },
+      "on_block": { "column": "col_humanaction", "require_human_action": true },
+      "description": "Reproduces a specific reported bug, confirms the developer's fix resolves it, and adds a regression test to pin the fix. Narrow scope — escalates anything not shell-validatable. No automatic hand-off to the developer on fail — every failure goes to Human Action so a person decides what runs next."
     }
     ,
     { "id": "runner_frontend_placeholder",      "capability": "perm_frontend",          "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_frontend is built out." },

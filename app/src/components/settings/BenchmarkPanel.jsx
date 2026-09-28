@@ -93,6 +93,10 @@ const TOOL_LABELS_BY_CAPABILITY = {
     task_complete_pass: 'reported the tests passing',
     task_complete_fail: 'reported the tests failing',
   },
+  perm_test_regression: {
+    task_complete_pass: 'reported the regression check passing',
+    task_complete_fail: 'reported the regression check failing',
+  },
 };
 
 const CAPABILITY_LABELS = {
@@ -101,6 +105,7 @@ const CAPABILITY_LABELS = {
   perm_verifying: 'Verifying',
   perm_coding: 'Coding',
   perm_coding_tester: 'Test running',
+  perm_test_regression: 'Regression testing',
 };
 
 function toolLabel(tool, capability) {

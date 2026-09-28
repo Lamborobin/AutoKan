@@ -43,7 +43,7 @@ function scaffoldProjectInstructions(projectId, subscriptionId, clientMdContent 
     fs.writeFileSync(clientMd, body, 'utf8');
   }
 
-  const CODER_CAPS = 'perm_coding,perm_coding_tester,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader';
+  const CODER_CAPS = 'perm_coding,perm_coding_tester,perm_test_regression,perm_frontend,perm_backend,perm_ux,perm_architect,perm_migrate,perm_code_reader';
   const projectMd = path.join(projectDir, 'project.md');
   if (!fs.existsSync(projectMd)) {
     const body = projectMdContent ?? '# Project Context\n\nAdd technical project context here — tech stack, coding conventions, architecture, domain rules.\n';

@@ -320,7 +320,7 @@ function applySchema(db) {
       subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
       layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
-      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester')),
+      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester','perm_test_regression')),
       rule_reference TEXT,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
@@ -432,7 +432,7 @@ function applySchema(db) {
   // one transaction, and the updated_at trigger is recreated because DROP TABLE
   // takes its triggers with it.
   const casesDdl = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='benchmark_cases'`).get();
-  if (casesDdl && !casesDdl.sql.includes('perm_coding')) {
+  if (casesDdl && (!casesDdl.sql.includes('perm_coding') || !casesDdl.sql.includes('perm_test_regression'))) {
     const cols = [
       'id', 'subscription_id', 'project_id', 'layer', 'capability', 'rule_reference',
       'title', 'description', 'acceptance_criteria', 'rubric', 'allowed_effects',
@@ -446,7 +446,7 @@ function applySchema(db) {
         subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
         project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
         layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
-        capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester')),
+        capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester','perm_test_regression')),
         rule_reference TEXT,
         title TEXT NOT NULL,
         description TEXT NOT NULL,

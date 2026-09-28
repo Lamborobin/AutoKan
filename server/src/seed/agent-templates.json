@@ -65,6 +65,19 @@
       "personality_file": "instructions/run-code-tests.md",
       "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
       "role_ids": ["perm_coding_tester", "role_access_testing"]
+    },
+    {
+      "id": "tpl_test_regression",
+      "agent_id": "agent_test_regression",
+      "name": "Regression Tester",
+      "role": "tester",
+      "model": "claude-sonnet-5",
+      "color": "#14b8a6",
+      "description": "Reproduces a specific reported bug, confirms the developer's fix resolves it, and adds a regression test to pin it down.",
+      "template_system_prompt": "You are a Regression Test Runner agent. Given a specific reported bug and a developer's fix, you reproduce the original failure, confirm the fix actually resolves that exact scenario, and add a focused regression test so the bug can't silently return. Stay narrow — this is about the one bug in front of you, not a general audit.",
+      "personality_file": "instructions/regression-test.md",
+      "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
+      "role_ids": ["perm_test_regression", "role_access_testing"]
     }
   ],
   "steel_agents": [
@@ -229,6 +242,16 @@
       "color": "#8b5cf6",
       "description": "Runs tests for the Velour board.",
       "role_ids": ["perm_coding_tester", "role_access_testing"]
+    },
+    {
+      "id": "agent_test_regression_velour",
+      "template_id": "tpl_test_regression",
+      "name": "Regression Tester",
+      "role": "tester",
+      "model": "claude-sonnet-5",
+      "color": "#14b8a6",
+      "description": "Reproduces reported bugs and verifies fixes for the Velour board.",
+      "role_ids": ["perm_test_regression", "role_access_testing"]
     }
   ]
 }
