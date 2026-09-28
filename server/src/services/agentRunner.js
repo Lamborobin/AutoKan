@@ -1198,7 +1198,7 @@ async function runImplementInWorktree(task, agent, runner) {
 
     let response;
     try {
-      response = await withHardTimeout(getClient().messages.create({
+      response = await withHardTimeout((signal) => getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
@@ -1209,22 +1209,22 @@ async function runImplementInWorktree(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      }), 150000, 'API call');
+      }, { signal }), 150000, 'API call');
     } catch (err) {
-      // Escalate rather than just logging + breaking — an API error (including a
-      // stuck call caught by the hard timeout above) otherwise left the task
-      // silently stuck with no signal to a human that it had stopped.
+      // Escalate with the specific error, then mark resolved so escalateStalled
+      // below doesn't escalate (and notify) a second time with a generic reason.
       const reason = `API error during implementation: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', reason);
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       if (worktreePath) removeWorktree(worktreePath, repoPath);
       broadcastTask(db, taskId);
+      completed = true;
       break;
     }
 
@@ -1514,7 +1514,7 @@ async function runTestWithRetry(task, agent, runner) {
 
     let response;
     try {
-      response = await withHardTimeout(getClient().messages.create({
+      response = await withHardTimeout((signal) => getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
@@ -1525,21 +1525,21 @@ async function runTestWithRetry(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      }), 150000, 'API call');
+      }, { signal }), 150000, 'API call');
     } catch (err) {
-      // Escalate rather than just logging + breaking — an API error (including a
-      // stuck call caught by the hard timeout above) otherwise left the task
-      // silently stuck with no signal to a human that it had stopped.
+      // Escalate with the specific error, then mark resolved so escalateStalled
+      // below doesn't escalate (and notify) a second time with a generic reason.
       const reason = `API error during test run: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', reason);
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true;
       break;
     }
 
@@ -1589,13 +1589,19 @@ async function runTestWithRetry(task, agent, runner) {
         } else {
           const newRetryCount = retryCount + 1;
           if (newRetryCount > MAX_RETRIES) {
-            const maxRetryReason = `Test run failed after ${newRetryCount} attempts: ${summary}`;
+            const failReason = MAX_RETRIES > 0
+              ? `Test run failed after ${newRetryCount} attempts: ${summary}`
+              : `Tests failed: ${summary}`;
             db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
-              .run('col_humanaction', maxRetryReason, taskId);
+              .run('col_humanaction', failReason, taskId);
+            // 'tests_failed' is what benchmark settlement and outcome scoring watch for.
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, agent.id, 'tests_failed', failReason);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
-            console.log(`[AgentRunner][${runner.id}][${taskId}] max retries → Human Action`);
-            notifyHumanActionMembers(db, taskId, maxRetryReason).catch(() => {});
+              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction',
+                MAX_RETRIES > 0 ? 'Max retries reached — moved to Human Action' : 'Tests failed — moved to Human Action');
+            console.log(`[AgentRunner][${runner.id}][${taskId}] tests failed → Human Action`);
+            notifyHumanActionMembers(db, taskId, failReason).catch(() => {});
           } else {
             const newMeta = JSON.stringify({ ...metadata, test_retry_count: newRetryCount });
             // Hand the task back to whoever does the implementing — leaving it
@@ -1706,17 +1712,23 @@ function requireLinkedClientPath(task, agent, runner) {
   return { ok: false };
 }
 
-// Guaranteed-independent timeout for a single LLM call — does NOT rely on the SDK's
-// own `{ timeout }` request option, which was observed not actually cutting off a
-// stuck call (a produce_document run sat well past its computed timeout with no
-// escalation). Races the real request against a plain setTimeout instead, so control
-// returns to the caller within `ms` no matter what's happening inside the SDK/network.
-function withHardTimeout(promise, ms, label) {
+// Guaranteed-independent timeout for a single LLM call. The SDK's own `{ timeout }`
+// was observed not cutting off a stuck call — the SDK retries timed-out requests
+// (maxRetries defaults to 2), so a per-request timeout can run ~3x its value. Racing
+// alone isn't enough either: an abandoned promise leaves the request running (and
+// retrying) in the background, still billing tokens. So `run` receives an AbortSignal
+// that is aborted when the deadline hits — the SDK treats a user abort as final and
+// does not retry it.
+function withHardTimeout(run, ms, label) {
+  const controller = new AbortController();
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([run(controller.signal), timeout]).finally(() => clearTimeout(timer));
 }
 
 // ---------------------------------------------------------------------------
@@ -1868,7 +1880,7 @@ async function runProduceDocument(task, agent, runner) {
 
     let response;
     try {
-      response = await withHardTimeout(getClient().messages.create({
+      response = await withHardTimeout((signal) => getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
         // Higher than the other handlers' 4096 — a full multi-section document is the
         // tool_use argument itself (write_file's content field), and 4096 was observed
@@ -1880,7 +1892,7 @@ async function runProduceDocument(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      }), 150000, 'API call');
+      }, { signal }), 150000, 'API call');
     } catch (err) {
       // Escalate rather than just logging + breaking — an API error or SDK-level
       // timeout (the actual per-request cap for a single hung call, complementing the
@@ -1898,6 +1910,7 @@ async function runProduceDocument(task, agent, runner) {
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true; // already escalated — keep escalateStalled from doing it again
       break;
     }
 
@@ -2151,7 +2164,7 @@ async function runVerifyDocument(task, agent, runner) {
 
     let response;
     try {
-      response = await withHardTimeout(getClient().messages.create({
+      response = await withHardTimeout((signal) => getClient().messages.create({
         model: agent.model || runner.model_default || loadModels().defaultModel,
         // Was 4096 — same class of bug as Planning's (see its max_tokens comment):
         // a model that spends part of its budget on internal reasoning before ever
@@ -2163,7 +2176,7 @@ async function runVerifyDocument(task, agent, runner) {
         system: systemPrompt,
         tools: getToolSet(runner),
         messages,
-      }), 60000, 'API call');
+      }, { signal }), 60000, 'API call');
     } catch (err) {
       const reason = `API error during verification: ${describeApiError(err)}`;
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
@@ -2177,6 +2190,7 @@ async function runVerifyDocument(task, agent, runner) {
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true; // already escalated — keep escalateStalled from doing it again
       break;
     }
 
