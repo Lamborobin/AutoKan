@@ -103,8 +103,8 @@ export const createBenchmarkSlice = (set, get) => ({
     }
   },
 
-  async runBenchmarkCase(caseId, projectId, model) {
-    const run = await benchmarkApi.runCase(caseId, projectId, model);
+  async runBenchmarkCase(caseId, projectId, model, thinking) {
+    const run = await benchmarkApi.runCase(caseId, projectId, model, thinking);
     set(s => ({
       benchmarkRunsByCaseId: { ...s.benchmarkRunsByCaseId, [caseId]: [run, ...(s.benchmarkRunsByCaseId[caseId] || [])] },
     }));

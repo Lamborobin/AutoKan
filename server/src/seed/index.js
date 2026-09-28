@@ -125,13 +125,13 @@ function seedProjects(db) {
 function seedAgentTemplates(db) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agent_templates
-      (id, name, description, model, color, suggested_role,
+      (id, name, description, model, thinking, color, suggested_role,
        template_system_prompt, permissions)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const t of agentTemplates.templates) {
     insert.run(
-      t.id, t.name, t.description, t.model, t.color, t.role,
+      t.id, t.name, t.description, t.model, t.thinking ?? null, t.color, t.role,
       t.template_system_prompt,
       JSON.stringify(t.permissions),
     );
@@ -147,16 +147,16 @@ function seedAgentTemplates(db) {
 function seedVelourAgents(db) {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
+      (id, name, role, model, thinking, description, permissions, personality_file,
        is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const a of agentTemplates.velour_agents) {
     const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
     if (!tpl) continue;
     insert.run(
-      a.id, a.name, a.role, a.model, a.description,
+      a.id, a.name, a.role, a.model, a.thinking ?? tpl.thinking ?? null, a.description,
       JSON.stringify(tpl.permissions),
       tpl.personality_file || null,
       tpl.template_system_prompt ? 1 : 0,
@@ -199,16 +199,16 @@ function seedSteelFactory(db) {
   // Agents
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
+      (id, name, role, model, thinking, description, permissions, personality_file,
        is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const a of agentTemplates.steel_agents) {
     const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
     if (!tpl) continue;
     insert.run(
-      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      a.id, a.name, a.role, a.model || tpl.model, a.thinking ?? tpl.thinking ?? null, a.description,
       JSON.stringify(tpl.permissions),
       tpl.personality_file || null,
       tpl.template_system_prompt ? 1 : 0,
@@ -251,16 +251,16 @@ function seedHealthcare(db) {
   // Agents
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
+      (id, name, role, model, thinking, description, permissions, personality_file,
        is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const a of agentTemplates.health_agents) {
     const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
     if (!tpl) continue;
     insert.run(
-      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      a.id, a.name, a.role, a.model || tpl.model, a.thinking ?? tpl.thinking ?? null, a.description,
       JSON.stringify(tpl.permissions),
       tpl.personality_file || null,
       tpl.template_system_prompt ? 1 : 0,
@@ -303,16 +303,16 @@ function seedFinance(db) {
   // Agents
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
+      (id, name, role, model, thinking, description, permissions, personality_file,
        is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const a of agentTemplates.finance_agents) {
     const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
     if (!tpl) continue;
     insert.run(
-      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      a.id, a.name, a.role, a.model || tpl.model, a.thinking ?? tpl.thinking ?? null, a.description,
       JSON.stringify(tpl.permissions),
       tpl.personality_file || null,
       tpl.template_system_prompt ? 1 : 0,
@@ -358,16 +358,16 @@ function seedNordvik(db) {
   // Agents
   const insert = db.prepare(`
     INSERT OR IGNORE INTO agents
-      (id, name, role, model, description, permissions, personality_file,
+      (id, name, role, model, thinking, description, permissions, personality_file,
        is_template, system_prompt, color, created_from_template_id, project_id, role_ids)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   for (const a of agentTemplates.nordvik_agents) {
     const tpl = agentTemplates.templates.find(t => t.id === a.template_id);
     if (!tpl) continue;
     insert.run(
-      a.id, a.name, a.role, a.model || tpl.model, a.description,
+      a.id, a.name, a.role, a.model || tpl.model, a.thinking ?? tpl.thinking ?? null, a.description,
       JSON.stringify(tpl.permissions),
       tpl.personality_file || null,
       tpl.template_system_prompt ? 1 : 0,

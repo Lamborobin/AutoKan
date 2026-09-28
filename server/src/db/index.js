@@ -153,6 +153,7 @@ function applySchema(db) {
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       model TEXT DEFAULT 'claude-sonnet-5',
+      thinking TEXT,
       description TEXT,
       permissions TEXT NOT NULL DEFAULT '[]',
       role_ids TEXT DEFAULT '[]',
@@ -174,6 +175,7 @@ function applySchema(db) {
       name TEXT NOT NULL,
       description TEXT,
       model TEXT DEFAULT 'claude-sonnet-5',
+      thinking TEXT,
       color TEXT DEFAULT '#6366f1',
       suggested_role TEXT,
       template_system_prompt TEXT,
@@ -365,6 +367,7 @@ function applySchema(db) {
       -- the board agent's own configured model. NULL means the agent's own model
       -- was used.
       model_override TEXT,
+      thinking_override TEXT,
       error_message TEXT,
       triggered_by TEXT REFERENCES users(id),
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -473,6 +476,24 @@ function applySchema(db) {
   const tasksColumns = db.prepare(`PRAGMA table_info(tasks)`).all().map(c => c.name);
   if (!tasksColumns.includes('allowed_effects')) {
     db.exec(`ALTER TABLE tasks ADD COLUMN allowed_effects TEXT`);
+  }
+
+  // When `thinking` first appears, backfill the same per-role defaults a fresh seed
+  // gets (agent-templates.json), so an existing dev DB matches without a db:reset.
+  const thinkingByRole = (col) => `CASE WHEN ${col} IN ('producer','tester') THEN 'disabled'
+    WHEN ${col} IN ('pm','developer','verifier') THEN 'adaptive' ELSE NULL END`;
+  const agentColumns = db.prepare(`PRAGMA table_info(agents)`).all().map(c => c.name);
+  if (!agentColumns.includes('thinking')) {
+    db.exec(`ALTER TABLE agents ADD COLUMN thinking TEXT`);
+    db.exec(`UPDATE agents SET thinking = ${thinkingByRole('role')}`);
+  }
+  const templateColumns = db.prepare(`PRAGMA table_info(agent_templates)`).all().map(c => c.name);
+  if (!templateColumns.includes('thinking')) {
+    db.exec(`ALTER TABLE agent_templates ADD COLUMN thinking TEXT`);
+    db.exec(`UPDATE agent_templates SET thinking = ${thinkingByRole('suggested_role')}`);
+  }
+  if (!benchmarkRunsColumns.includes('thinking_override')) {
+    db.exec(`ALTER TABLE benchmark_runs ADD COLUMN thinking_override TEXT`);
   }
 }
 

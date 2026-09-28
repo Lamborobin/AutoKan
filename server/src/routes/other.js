@@ -5,7 +5,15 @@ const path = require('path');
 const { getDb } = require('../db');
 const { requirePermission, attachAgent } = require('../middleware/auth');
 const { broadcast } = require('../sse');
-const { loadModels } = require('../services/modelRegistry');
+const { loadModels, THINKING_MODES } = require('../services/modelRegistry');
+
+// undefined = not sent; '' / null = model default (stored NULL); false = invalid.
+function normalizeThinking(value) {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  return THINKING_MODES.includes(value) ? value : false;
+}
+const THINKING_ERROR = `thinking must be one of: ${THINKING_MODES.join(', ')} (or empty for the model default)`;
 
 const PROJECT_ROOT = path.join(__dirname, '../../..');
 
@@ -92,6 +100,8 @@ agentsRouter.post('/', (req, res) => {
   } = req.body;
   const resolvedModel = model || loadModels().defaultModel;
   if (!name || !role) return res.status(400).json({ error: 'name and role are required' });
+  const thinking = normalizeThinking(req.body.thinking);
+  if (thinking === false) return res.status(400).json({ error: THINKING_ERROR });
 
   const permErr = validateAgentRoles(req.body.role_ids || []);
   if (permErr) return res.status(400).json({ error: permErr });
@@ -116,9 +126,9 @@ agentsRouter.post('/', (req, res) => {
   const role_ids_val = req.body.role_ids?.length ? JSON.stringify(req.body.role_ids) : JSON.stringify(['role_any']);
 
   db.prepare(`
-    INSERT INTO agents (id, name, role, model, description, permissions, personality_file, color, created_from_template_id, is_template, system_prompt, role_ids, project_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, role, resolvedModel, description, JSON.stringify(permissions), personality_file, color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
+    INSERT INTO agents (id, name, role, model, thinking, description, permissions, personality_file, color, created_from_template_id, is_template, system_prompt, role_ids, project_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, role, resolvedModel, thinking ?? null, description, JSON.stringify(permissions), personality_file, color, created_from_template_id || null, is_template_flag, bodySystemPrompt || null, role_ids_val, project_id || null);
 
   const agent = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
   res.status(201).json(parseAgent(agent));
@@ -149,9 +159,9 @@ agentsRouter.post('/:id/save-as-template', (req, res) => {
   }
 
   db.prepare(`
-    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, template_system_prompt, permissions, source_agent_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, agent.description, agent.model, agent.color, agent.role,
+    INSERT INTO agent_templates (id, name, description, model, thinking, color, suggested_role, template_system_prompt, permissions, source_agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, agent.description, agent.model, agent.thinking ?? null, agent.color, agent.role,
     snapshotPrompt,
     agent.permissions, agent.id);
 
@@ -179,9 +189,13 @@ agentsRouter.patch('/:id', (req, res) => {
     if (permErr) return res.status(400).json({ error: permErr });
   }
 
+  const thinking = normalizeThinking(req.body.thinking);
+  if (thinking === false) return res.status(400).json({ error: THINKING_ERROR });
+
   const allowed = {};
   if (name !== undefined) allowed.name = name;
   if (model !== undefined) allowed.model = model;
+  if (thinking !== undefined) allowed.thinking = thinking;
   if (description !== undefined) allowed.description = description;
   if (permissions !== undefined) allowed.permissions = JSON.stringify(permissions);
   if (color !== undefined) allowed.color = color;
@@ -863,12 +877,14 @@ agentTemplatesRouter.post('/', (req, res) => {
   } = req.body;
   const resolvedModel = model || loadModels().defaultModel;
   if (!name) return res.status(400).json({ error: 'name is required' });
+  const thinking = normalizeThinking(req.body.thinking);
+  if (thinking === false) return res.status(400).json({ error: THINKING_ERROR });
 
   const id = 'tpl_' + uuidv4().replace(/-/g, '').slice(0, 12);
   db.prepare(`
-    INSERT INTO agent_templates (id, name, description, model, color, suggested_role, template_system_prompt, permissions)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, name, description, resolvedModel, color, suggested_role,
+    INSERT INTO agent_templates (id, name, description, model, thinking, color, suggested_role, template_system_prompt, permissions)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, name, description, resolvedModel, thinking ?? null, color, suggested_role,
     template_system_prompt || null,
     JSON.stringify(permissions));
 
@@ -886,10 +902,13 @@ agentTemplatesRouter.patch('/:id', (req, res) => {
   if (!tpl) return res.status(404).json({ error: 'Template not found' });
 
   const { name, description, model, color, suggested_role, template_system_prompt, permissions } = req.body;
+  const thinking = normalizeThinking(req.body.thinking);
+  if (thinking === false) return res.status(400).json({ error: THINKING_ERROR });
   const allowed = {};
   if (name !== undefined) allowed.name = name;
   if (description !== undefined) allowed.description = description;
   if (model !== undefined) allowed.model = model;
+  if (thinking !== undefined) allowed.thinking = thinking;
   if (color !== undefined) allowed.color = color;
   if (suggested_role !== undefined) allowed.suggested_role = suggested_role;
   if (Object.prototype.hasOwnProperty.call(req.body, 'template_system_prompt')) {

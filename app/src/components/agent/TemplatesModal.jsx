@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react';
 import { X, Plus, Archive, RotateCcw, Pencil, Trash2, Check, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useStore } from '../../store';
-import { COLORS } from '../../constants/agents';
+import { COLORS, THINKING_OPTIONS } from '../../constants/agents';
 import { checkModelStaleness } from '../../utils/modelStaleness';
 
 function TemplateForm({ initial, onSave, onCancel }) {
   const modelsDefault = useStore(s => s.modelsDefault);
   const models = useStore(s => s.models);
-  const emptyForm = { name: '', description: '', model: modelsDefault, color: '#6366f1', template_system_prompt: '' };
+  const emptyForm = { name: '', description: '', model: modelsDefault, thinking: '', color: '#6366f1', template_system_prompt: '' };
   const [form, setForm] = useState({
     ...emptyForm,
     ...initial,
+    thinking: initial?.thinking || '',
     template_system_prompt: initial?.template_system_prompt || '',
   });
   const [saving, setSaving] = useState(false);
@@ -27,6 +28,7 @@ function TemplateForm({ initial, onSave, onCancel }) {
         name: form.name.trim(),
         description: form.description.trim() || undefined,
         model: form.model,
+        thinking: form.thinking || null,
         color: form.color,
         template_system_prompt: form.template_system_prompt.trim() || null,
       });
@@ -75,6 +77,13 @@ function TemplateForm({ initial, onSave, onCancel }) {
           </select>
         </div>
         <div>
+          <label className="block text-sm font-medium text-gray-400 mb-1.5">Thinking</label>
+          <select value={form.thinking} onChange={e => set('thinking', e.target.value)}
+            className="w-full bg-surface-1 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent">
+            {THINKING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.shortLabel}</option>)}
+          </select>
+        </div>
+        <div className="col-span-2">
           <label className="block text-sm font-medium text-gray-400 mb-2">Color</label>
           <div className="flex gap-2 flex-wrap">
             {COLORS.map(c => (

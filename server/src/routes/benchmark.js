@@ -11,7 +11,7 @@ const {
   VALID_CAPABILITIES,
   PLANNING_CAPABILITY,
 } = require('../services/benchmarkRunner');
-const { getValidModelIds } = require('../services/modelRegistry');
+const { getValidModelIds, THINKING_MODES } = require('../services/modelRegistry');
 const { BUILTIN_EFFECT_IDS, capabilityActions } = require('../services/effects');
 const { ACTION_HOOKS } = require('../services/actionHooks');
 
@@ -220,13 +220,17 @@ router.post('/cases/:id/run', attachAgent, async (req, res) => {
   // Optional per-run model override — lets the same case be compared across models
   // without reassigning the board's real agent. Omit or leave blank to run on
   // whatever model the board's agent is actually configured with.
-  const { model } = req.body;
+  const { model, thinking } = req.body;
   if (model && !getValidModelIds().has(model)) {
     return res.status(400).json({ error: `Unknown model "${model}"` });
   }
+  // Same idea for thinking: blank runs with the agent's own setting.
+  if (thinking && !THINKING_MODES.includes(thinking)) {
+    return res.status(400).json({ error: `Unknown thinking mode "${thinking}"` });
+  }
 
   try {
-    const run = await createRunAndDispatch(caseRow, { projectId, userId: req.user?.sub || null, model: model || null });
+    const run = await createRunAndDispatch(caseRow, { projectId, userId: req.user?.sub || null, model: model || null, thinking: thinking || null });
     res.status(201).json(fmtRun(run));
   } catch (err) {
     res.status(500).json({ error: err.message });

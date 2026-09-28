@@ -30,4 +30,20 @@ function describeStaleness(modelId) {
   };
 }
 
-module.exports = { loadModels, getValidModelIds, describeStaleness };
+const THINKING_MODES = ['adaptive', 'disabled'];
+
+// Haiku 4.5 predates adaptive thinking — flagged `adaptiveThinking: false` in models.json.
+function supportsAdaptiveThinking(modelId) {
+  const entry = loadModels().models.find(m => m.value === modelId);
+  return entry ? entry.adaptiveThinking !== false : true;
+}
+
+// Request params for an agent's `thinking` setting. NULL/unknown sends nothing, i.e. the
+// model's own default (Sonnet 5 / Opus 5 think adaptively by default).
+function thinkingParams(mode, modelId) {
+  if (mode === 'disabled') return { thinking: { type: 'disabled' } };
+  if (mode === 'adaptive' && supportsAdaptiveThinking(modelId)) return { thinking: { type: 'adaptive' } };
+  return {};
+}
+
+module.exports = { loadModels, getValidModelIds, describeStaleness, THINKING_MODES, thinkingParams };

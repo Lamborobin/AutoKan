@@ -12,7 +12,7 @@ const { notifyHumanActionMembers, shouldPerform, recordEffect, EXTERNAL, PR_CREA
 const { writeFileSafe } = require('../utils/writeGuard');
 const { ACTION_HOOKS } = require('./actionHooks');
 const runnersRegistry = require('../seed/runners.json');
-const { loadModels } = require('./modelRegistry');
+const { loadModels, thinkingParams } = require('./modelRegistry');
 
 // Generic tool for invoking a registered action hook — added to every
 // capability's tool set below. What it may actually DO is entirely code-curated
@@ -382,6 +382,13 @@ function getClient() {
     _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
   return _client;
+}
+
+// Model + thinking for every messages.create — both come from the agent, falling back
+// to the runner's default model.
+function modelParams(agent, runner) {
+  const model = agent.model || runner.model_default || loadModels().defaultModel;
+  return { model, ...thinkingParams(agent.thinking, model) };
 }
 
 // The Anthropic SDK's own err.message is `${status} ${rawJsonBody}` — technically
@@ -811,7 +818,7 @@ async function runClarifyAndApprove(task, agent, runner) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       response = await getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+        ...modelParams(agent, runner),
         // Was 1024, then 4096. Raised to match the coder/tester handlers because
         // this handler is single-shot: unlike them it never loops on tool results,
         // so the model has exactly one turn in which to emit BOTH its outcome tool
@@ -945,7 +952,7 @@ async function runClarifyAndApprove(task, agent, runner) {
         .filter(b => b.type === 'tool_use')
         .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify({ success: true }) }));
       const followUp = await getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+        ...modelParams(agent, runner),
         max_tokens: 4096,
         system: systemPrompt,
         tools: getToolSet(runner),
@@ -1199,7 +1206,7 @@ async function runImplementInWorktree(task, agent, runner) {
     let response;
     try {
       response = await withHardTimeout((signal) => getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+        ...modelParams(agent, runner),
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
         // before ever reaching a tool call can get cut off mid-"thinking", leaving a
@@ -1515,7 +1522,7 @@ async function runTestWithRetry(task, agent, runner) {
     let response;
     try {
       response = await withHardTimeout((signal) => getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+        ...modelParams(agent, runner),
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
         // before ever reaching a tool call can get cut off mid-"thinking", leaving a
@@ -1881,7 +1888,7 @@ async function runProduceDocument(task, agent, runner) {
     let response;
     try {
       response = await withHardTimeout((signal) => getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+        ...modelParams(agent, runner),
         // Higher than the other handlers' 4096 — a full multi-section document is the
         // tool_use argument itself (write_file's content field), and 4096 was observed
         // truncating mid-document on real runs (the model logs "writing full document
@@ -2165,7 +2172,7 @@ async function runVerifyDocument(task, agent, runner) {
     let response;
     try {
       response = await withHardTimeout((signal) => getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+        ...modelParams(agent, runner),
         // Was 4096 — same class of bug as Planning's (see its max_tokens comment):
         // a model that spends part of its budget on internal reasoning before ever
         // reaching a tool call can get cut off mid-"thinking", leaving a turn whose
@@ -2382,6 +2389,9 @@ async function dispatch(taskId) {
   const taskMetadata = JSON.parse(task.metadata || '{}');
   if (taskMetadata.is_benchmark_probe && taskMetadata.model_override) {
     agent = { ...agent, model: taskMetadata.model_override };
+  }
+  if (taskMetadata.is_benchmark_probe && taskMetadata.thinking_override) {
+    agent = { ...agent, thinking: taskMetadata.thinking_override };
   }
 
   const capability = getAgentCapability(agent);

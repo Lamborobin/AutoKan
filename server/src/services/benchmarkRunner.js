@@ -422,7 +422,7 @@ function findCapableAgent(projectId, capability) {
   }) || null;
 }
 
-async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride, allowedEffects }) {
+async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride, thinkingOverride, allowedEffects }) {
   const res = await fetch(`http://localhost:${PORT}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-agent-id': 'human' },
@@ -445,6 +445,7 @@ async function dispatchProbingTask({ title, description, acceptanceCriteria, col
       metadata: {
         is_benchmark_probe: true,
         ...(modelOverride ? { model_override: modelOverride } : {}),
+        ...(thinkingOverride ? { thinking_override: thinkingOverride } : {}),
       },
       // Always sent as an explicit array, even when empty. A probe is never
       // "unconfigured" — an empty list states outright that nothing may be
@@ -487,7 +488,7 @@ async function waitForSettlement(taskId, settledActions, { timeoutMs = 270000, i
   return { task, logs, settled };
 }
 
-async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) {
+async function createRunAndDispatch(caseRow, { projectId, userId, model, thinking } = {}) {
   const db = getDb();
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
   if (!project) throw new Error('Unknown project');
@@ -518,15 +519,16 @@ async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) 
     projectId,
     capability,
     modelOverride: model || null,
+    thinkingOverride: thinking || null,
     allowedEffects: Array.isArray(allowedEffects) ? allowedEffects : [],
   });
 
   const runId = 'bmr_' + uuidv4().replace(/-/g, '').slice(0, 12);
   const contextVersion = snapshotContextVersion(project.subscription_id, projectId);
   db.prepare(`
-    INSERT INTO benchmark_runs (id, case_id, project_id, probing_task_id, source_task_id, status, context_version, model_override, triggered_by)
-    VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?, ?)
-  `).run(runId, caseRow.id, projectId, task.id, sourceTaskId, JSON.stringify(contextVersion), model || null, userId || null);
+    INSERT INTO benchmark_runs (id, case_id, project_id, probing_task_id, source_task_id, status, context_version, model_override, thinking_override, triggered_by)
+    VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?, ?, ?)
+  `).run(runId, caseRow.id, projectId, task.id, sourceTaskId, JSON.stringify(contextVersion), model || null, thinking || null, userId || null);
 
   pollAndScore(runId).catch(err => console.error('[benchmarkRunner] poll error:', err.message));
 

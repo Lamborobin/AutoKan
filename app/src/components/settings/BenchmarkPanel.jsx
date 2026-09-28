@@ -7,6 +7,17 @@ import MarkdownText from '../shared/MarkdownText';
 import DocumentViewerModal from '../shared/DocumentViewerModal';
 import NewBenchmarkTaskModal from './NewBenchmarkTaskModal';
 import { effectLabel } from '../../constants/effects';
+import { THINKING_OPTIONS } from '../../constants/agents';
+
+function ThinkingOverrideBadge({ value, className = '' }) {
+  if (!value) return null;
+  return (
+    <span title="This run overrode the board agent's own thinking setting"
+      className={`text-xs font-medium px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-300 border border-purple-500/25 ${className}`}>
+      {THINKING_OPTIONS.find(o => o.value === value)?.shortLabel || value}
+    </span>
+  );
+}
 
 const REVIEW_LEVELS = [
   { value: 'unacceptable',    label: 'Unacceptable' },
@@ -426,6 +437,7 @@ function RunCard({ run, caseId, capability }) {
               {run.model_override}
             </span>
           )}
+          <ThinkingOverrideBadge value={run.thinking_override} />
           <StatusBadge status={run.status} />
         </div>
       </div>
@@ -514,6 +526,7 @@ function CompactRunRow({ run, onClick }) {
           {run.model_override}
         </span>
       )}
+      <ThinkingOverrideBadge value={run.thinking_override} className="shrink-0" />
       <StatusBadge status={run.status} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <VerdictChip
@@ -547,12 +560,14 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
   // configured with (the normal path); picking a specific model here overrides
   // that for just this one run, so comparing models never touches the real agent.
   const [modelOverride, setModelOverride] = useState('');
+  // Same idea for thinking: '' = the board agent's own setting.
+  const [thinkingOverride, setThinkingOverride] = useState('');
   const hasNoRubric = !c.rubric || Object.keys(c.rubric).length === 0;
 
   async function handleRun() {
     setRunning(true);
     try {
-      const run = await onRun(c.id, modelOverride || undefined);
+      const run = await onRun(c.id, modelOverride || undefined, thinkingOverride || undefined);
       setExpanded(true);
       setSelectedRunId(run?.id || null);
     }
@@ -624,6 +639,12 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
           <option value="">Board's agent (default)</option>
           {models.map(m => <option key={m.value} value={m.value}>{m.shortLabel || m.label}</option>)}
         </select>
+        <select value={thinkingOverride} onChange={e => setThinkingOverride(e.target.value)} disabled={running}
+          title="Whether the model thinks before acting — leave as the agent's setting to use what the board agent is configured with"
+          className="bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-300 outline-none focus:border-accent/50 disabled:opacity-40">
+          <option value="">Agent's thinking setting</option>
+          {THINKING_OPTIONS.filter(o => o.value).map(o => <option key={o.value} value={o.value}>{o.shortLabel}</option>)}
+        </select>
         <button onClick={handleRun} disabled={running || !targetProjectId}
           title={c.capability === 'perm_verifying' ? "Checks whatever's already in the board's docs folder — name a specific file in the description if you want a particular one checked" : undefined}
           className="flex items-center gap-1 text-sm px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent/80 text-white transition-colors disabled:opacity-40">
@@ -692,8 +713,8 @@ export default function BenchmarkPanel({ scope }) {
     }
   }, [scope, currentProjectId, subscription?.id]);
 
-  async function handleRun(caseId, model) {
-    return runBenchmarkCase(caseId, targetProjectId, model);
+  async function handleRun(caseId, model, thinking) {
+    return runBenchmarkCase(caseId, targetProjectId, model, thinking);
   }
 
   async function handleDelete(caseId) {
