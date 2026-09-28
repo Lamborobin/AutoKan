@@ -9,6 +9,22 @@ import NewBenchmarkTaskModal from './NewBenchmarkTaskModal';
 import { effectLabel } from '../../constants/effects';
 import { THINKING_OPTIONS } from '../../constants/agents';
 
+// What this run cost in API calls — the agent's run plus the AI review, if one was done.
+function CostBadge({ cost, className = '' }) {
+  if (!cost) return null;
+  const fmt = v => `$${v < 0.01 ? v.toFixed(4) : v.toFixed(3)}`;
+  const title = [
+    cost.agent_usd != null && `Agent run: ${fmt(cost.agent_usd)}`,
+    cost.judge_usd != null && `AI review: ${fmt(cost.judge_usd)}`,
+  ].filter(Boolean).join(' · ');
+  return (
+    <span title={title}
+      className={`text-xs font-medium font-mono px-1.5 py-0.5 rounded-full bg-surface-3 text-gray-300 border border-border ${className}`}>
+      {fmt(cost.total_usd)}
+    </span>
+  );
+}
+
 function ThinkingOverrideBadge({ value, className = '' }) {
   if (!value) return null;
   return (
@@ -214,20 +230,6 @@ function DeterministicChecks({ result, capability }) {
           ))}
         </div>
       )}
-      {/* What the agent actually did, in its own words — its task_log progress notes.
-          Not pass/fail, just a plain record, shown regardless of collapse state since
-          it's easy to miss otherwise. */}
-      {result.side_effects?.length > 0 && (
-        <div className="mt-1.5 space-y-1 pl-[15px]">
-          <p className="text-xs text-gray-600 uppercase tracking-wide">Progress notes</p>
-          {result.side_effects.map((msg, i) => (
-            <div key={i} className="flex items-start gap-1.5 text-xs text-gray-500">
-              <Sparkles size={11} className="text-accent mt-0.5 shrink-0" />
-              <span>{msg}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -247,7 +249,77 @@ function RuleCompliance({ result }) {
         </span>
         Rule compliance
       </p>
-      <MarkdownText text={result.rationale} className="text-gray-500 mt-1.5" />
+      {Array.isArray(result.checks) && result.checks.length > 0 ? (
+        <>
+          {result.summary && <p className="text-gray-300 mt-1.5">{result.summary}</p>}
+          <ul className="mt-2 space-y-1.5">
+            {result.checks.map((c, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                {c.passed
+                  ? <Check size={12} className="text-green-400 mt-0.5 shrink-0" />
+                  : <XCircle size={12} className="text-red-400 mt-0.5 shrink-0" />}
+                <span>
+                  <span className={c.passed ? 'text-gray-300' : 'text-red-300'}>{c.criterion}</span>
+                  <span className="text-gray-500"> — {c.note}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        // Runs judged before verdicts were structured only have free-text rationale.
+        <MarkdownText text={result.rationale || result.summary || 'The judge returned an unreadable verdict — re-review to try again.'} className="text-gray-500 mt-1.5" />
+      )}
+    </div>
+  );
+}
+
+// Plain-text first sentence of a markdown note, for a one-line step title.
+function stepTitle(text) {
+  const plain = text.replace(/```[\s\S]*?```/g, ' ').replace(/^\s*[#>]+\s?/gm, '').replace(/[*`]/g, '').replace(/\s+/g, ' ').trim();
+  const sentence = plain.match(/^.*?[.!?](\s|$)/)?.[0]?.trim() || plain;
+  return sentence.length > 140 ? `${sentence.slice(0, 137)}…` : sentence;
+}
+
+// The agent's task_log notes as numbered steps: one readable line each, full text on
+// click. Suppressed effects ("Effect not performed (benchmark run) — X: ...") are
+// labelled as such, since their long message is usually a copy of the final report.
+function AgentSteps({ notes }) {
+  const [openIndex, setOpenIndex] = useState(null);
+  if (!notes?.length) return null;
+
+  const steps = notes.map(msg => {
+    const effect = msg.match(/^Effect not performed \(benchmark run\) — ([\w_]+): /);
+    // No body: the notification carries the agent's final report, shown under "What the
+    // tester/developer reported" — expanding it here would just repeat it.
+    return effect
+      ? { title: `Recorded, not sent: ${effect[1].replace(/_/g, ' ')}`, body: null, muted: true }
+      : { title: stepTitle(msg), body: msg, muted: false };
+  });
+
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-gray-600 uppercase tracking-wide">What the agent did</p>
+      <ol className="space-y-1">
+        {steps.map((s, i) => {
+          const open = openIndex === i;
+          return (
+            <li key={i} className="text-xs">
+              <button onClick={() => s.body && setOpenIndex(open ? null : i)} disabled={!s.body}
+                className="w-full flex items-start gap-2 text-left enabled:hover:text-gray-200 transition-colors">
+                <span className="text-gray-600 font-mono w-4 shrink-0 text-right">{i + 1}.</span>
+                <span className={`flex-1 ${s.muted ? 'text-gray-600 italic' : 'text-gray-400'}`}>{s.title}</span>
+                {s.body && (open ? <ChevronDown size={11} className="text-gray-600 mt-0.5 shrink-0" /> : <ChevronRight size={11} className="text-gray-600 mt-0.5 shrink-0" />)}
+              </button>
+              {open && s.body && (
+                <div className="ml-6 mt-1 mb-2 border-l-2 border-border pl-2.5">
+                  <MarkdownText text={s.body} className="text-xs text-gray-500 leading-relaxed" />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }
@@ -276,6 +348,8 @@ function AgentOutput({ taskId, capability }) {
 
   const isPlanning = capability === 'perm_planning';
   const isVerifying = capability === 'perm_verifying';
+  const isTesting = ['perm_coding_tester', 'perm_test_regression'].includes(capability);
+  const isCoding = capability === 'perm_coding';
   // tasksApi.get() already returns pm_checklist parsed (server/src/routes/tasks.js) — don't re-parse it.
   const checklist = task?.pm_checklist || [];
   const verifyChecks = task?.metadata?.verify_checks || [];
@@ -288,6 +362,10 @@ function AgentOutput({ taskId, capability }) {
     // still worth surfacing here rather than showing "Nothing recorded for this run"
     // on a run that in fact explained exactly what happened.
     ? task?.logs?.find(l => ['verification_passed', 'verification_failed', 'human_action_requested'].includes(l.action))
+    : isTesting
+    ? task?.logs?.find(l => ['tests_passed', 'tests_failed', 'human_action_requested'].includes(l.action))
+    : isCoding
+    ? task?.logs?.find(l => ['pr_created', 'human_action_requested'].includes(l.action))
     : null;
   const docField = capability === 'perm_producing' ? 'produced' : isVerifying ? 'verified' : null;
   const docPath = capability === 'perm_producing'
@@ -303,6 +381,8 @@ function AgentOutput({ taskId, capability }) {
 
   const label = capability === 'perm_producing' ? 'What the producer wrote'
     : capability === 'perm_verifying' ? 'What the verifier found'
+    : isTesting ? 'What the tester reported'
+    : isCoding ? 'What the developer reported'
     : 'What the planner said';
 
   return (
@@ -438,6 +518,7 @@ function RunCard({ run, caseId, capability }) {
             </span>
           )}
           <ThinkingOverrideBadge value={run.thinking_override} />
+          <CostBadge cost={run.cost} />
           <StatusBadge status={run.status} />
         </div>
       </div>
@@ -448,6 +529,8 @@ function RunCard({ run, caseId, capability }) {
         )}
 
         {run.status === 'completed' && run.judge_result && <RuleCompliance result={run.judge_result} />}
+
+        {run.status === 'completed' && <AgentSteps notes={run.deterministic_result?.side_effects} />}
 
         {run.status === 'completed' && <DeterministicChecks result={run.deterministic_result} capability={capability} />}
 
@@ -527,6 +610,7 @@ function CompactRunRow({ run, onClick }) {
         </span>
       )}
       <ThinkingOverrideBadge value={run.thinking_override} className="shrink-0" />
+      <CostBadge cost={run.cost} className="shrink-0" />
       <StatusBadge status={run.status} />
       <div className="ml-auto flex items-center gap-1.5 shrink-0">
         <VerdictChip
@@ -549,12 +633,17 @@ function CompactRunRow({ run, onClick }) {
 }
 
 function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
-  const { draftRubricForCase } = useStore();
   const models = useStore(s => s.models);
+  const agents = useStore(s => s.agents);
+  // Same pick as benchmarkRunner.js's findCapableAgent, so the default options can say
+  // what they'll actually run with. Only known when the target board is the loaded one.
+  const boardAgent = agents.find(a => a.project_id === targetProjectId && a.active
+    && (a.role_ids || []).includes(c.capability));
+  const agentModelLabel = boardAgent && (models.find(m => m.value === boardAgent.model)?.shortLabel || boardAgent.model);
+  const agentThinkingLabel = boardAgent && ({ adaptive: 'On', disabled: 'Off' }[boardAgent.thinking] || 'Model default');
   const [expanded, setExpanded] = useState(false);
   const [showDescription, setShowDescription] = useState(false);
   const [running, setRunning] = useState(false);
-  const [draftingRubric, setDraftingRubric] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState(null);
   // '' = run on whatever model the board's real agent for this capability is
   // configured with (the normal path); picking a specific model here overrides
@@ -562,7 +651,6 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
   const [modelOverride, setModelOverride] = useState('');
   // Same idea for thinking: '' = the board agent's own setting.
   const [thinkingOverride, setThinkingOverride] = useState('');
-  const hasNoRubric = !c.rubric || Object.keys(c.rubric).length === 0;
 
   async function handleRun() {
     setRunning(true);
@@ -573,16 +661,6 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
     }
     catch (err) { alert(err.response?.data?.error || 'Run failed to start'); }
     finally { setRunning(false); }
-  }
-
-  // For a case whose background rubric draft never landed on creation — without a
-  // rubric it never gets scored beyond "no checks configured" and never gets an
-  // automatic AI review, regardless of capability.
-  async function handleDraftRubric() {
-    setDraftingRubric(true);
-    try { await draftRubricForCase(c.id); }
-    catch (err) { alert(err.response?.data?.error || 'Could not draft a rubric'); }
-    finally { setDraftingRubric(false); }
   }
 
   return (
@@ -621,28 +699,17 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
         </div>
       )}
 
-      {hasNoRubric && (
-        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
-          <span className="flex-1">No scoring rubric — runs won't get an automatic AI review until one exists.</span>
-          <button onClick={handleDraftRubric} disabled={draftingRubric}
-            className="flex items-center gap-1 shrink-0 underline underline-offset-2 hover:text-amber-300 transition-colors disabled:opacity-40">
-            {draftingRubric ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
-            {draftingRubric ? 'Drafting…' : 'Draft one now'}
-          </button>
-        </div>
-      )}
-
       <div className="flex items-center gap-2">
         <select value={modelOverride} onChange={e => setModelOverride(e.target.value)} disabled={running}
           title="Which model runs this probe — leave as board default to use the board agent's own configured model"
           className="bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-300 outline-none focus:border-accent/50 disabled:opacity-40">
-          <option value="">Board's agent (default)</option>
+          <option value="">{agentModelLabel ? `Agent's model (${agentModelLabel})` : "Board's agent (default)"}</option>
           {models.map(m => <option key={m.value} value={m.value}>{m.shortLabel || m.label}</option>)}
         </select>
         <select value={thinkingOverride} onChange={e => setThinkingOverride(e.target.value)} disabled={running}
           title="Whether the model thinks before acting — leave as the agent's setting to use what the board agent is configured with"
           className="bg-surface-2 border border-border rounded-lg px-2 py-1.5 text-xs text-gray-300 outline-none focus:border-accent/50 disabled:opacity-40">
-          <option value="">Agent's thinking setting</option>
+          <option value="">{agentThinkingLabel ? `Agent's thinking (${agentThinkingLabel})` : "Agent's thinking setting"}</option>
           {THINKING_OPTIONS.filter(o => o.value).map(o => <option key={o.value} value={o.value}>{o.shortLabel}</option>)}
         </select>
         <button onClick={handleRun} disabled={running || !targetProjectId}

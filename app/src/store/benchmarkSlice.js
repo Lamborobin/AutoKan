@@ -113,8 +113,9 @@ export const createBenchmarkSlice = (set, get) => ({
   },
 
   async reviewRunWithAI(runId, caseId) {
-    const run = await benchmarkApi.reviewWithAI(runId);
+    const { case: updatedCase, ...run } = await benchmarkApi.reviewWithAI(runId);
     set(s => ({
+      benchmarkCases: updatedCase ? s.benchmarkCases.map(c => (c.id === updatedCase.id ? updatedCase : c)) : s.benchmarkCases,
       benchmarkRunsByCaseId: {
         ...s.benchmarkRunsByCaseId,
         [caseId]: (s.benchmarkRunsByCaseId[caseId] || []).map(r => (r.id === runId ? run : r)),

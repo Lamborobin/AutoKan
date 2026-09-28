@@ -44,12 +44,21 @@ function fmtCase(c) {
 }
 
 function fmtRun(r) {
+  const judge = r.judge_result ? JSON.parse(r.judge_result) : null;
+  // The probe task accumulates the agent's API usage (agentRunner.js recordRunUsage);
+  // add the judge's own call so the run shows one total.
+  const task = r.probing_task_id ? getDb().prepare('SELECT metadata FROM tasks WHERE id = ?').get(r.probing_task_id) : null;
+  let agentCost = null;
+  try { agentCost = JSON.parse(task?.metadata || '{}').usage?.cost_usd ?? null; } catch {}
+  const judgeCost = judge?.cost_usd ?? null;
   return {
     ...r,
     deterministic_result: r.deterministic_result ? JSON.parse(r.deterministic_result) : null,
-    judge_result: r.judge_result ? JSON.parse(r.judge_result) : null,
+    judge_result: judge,
     manual_review: r.manual_review ? JSON.parse(r.manual_review) : null,
     context_version: r.context_version ? JSON.parse(r.context_version) : [],
+    cost: agentCost == null && judgeCost == null ? null
+      : { agent_usd: agentCost, judge_usd: judgeCost, total_usd: (agentCost || 0) + (judgeCost || 0) },
   };
 }
 
@@ -259,7 +268,10 @@ router.post('/runs/:id/review-ai', attachAgent, async (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can trigger an AI review' });
   try {
     const run = await reviewWithAI(req.params.id);
-    res.json(fmtRun(run));
+    // The review may have drafted the case's rubric on the way — send the case back
+    // so the UI can drop its "no scoring rubric" banner.
+    const caseRow = getDb().prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
+    res.json({ ...fmtRun(run), case: caseRow ? fmtCase(caseRow) : null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
