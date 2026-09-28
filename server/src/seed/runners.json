@@ -1,5 +1,5 @@
 {
-  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. context_docs is the static map of which docs/ files get bundled into an agent's starting context for that capability (every app agent gets docs/rules.md today; AutoKan-internal docs like api.md/frontend.md map to no capability on purpose). README.md is added on top for is_coder capabilities. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
+  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. context_docs is the static map of which docs/ files get bundled into an agent's starting context for that capability (every app agent gets docs/rules.md today; AutoKan-internal docs like api.md/frontend.md map to no capability on purpose). max_run_cost_usd is a hard per-run API cost cap — when reached, the run stops and goes to Human Action. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
 
   "capabilities": [
     {
@@ -167,6 +167,7 @@
       "handler": "clarify_and_approve",
       "tools": "clarification_tools",
       "model_default": "claude-opus-5",
+      "max_run_cost_usd": 0.15,
       "trigger_guard": "no_pm_approval_yet",
       "description": "PM clarifies requirements with the human through Q&A. Single-shot per turn — sleeps between human answers. One extra model call is made only when the instructions name an action hook the agent did not invoke."
     },
@@ -178,6 +179,7 @@
       "handler": "implement_in_worktree",
       "tools": "implementation_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.5,
       "use_worktree": true,
       "max_iterations": 30,
       "on_complete": "create_pr_and_optionally_merge",
@@ -192,6 +194,7 @@
       "handler": "test_with_retry",
       "tools": "testing_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.1,
       "use_worktree": false,
       "max_iterations": 30,
       "max_retries": 0,
@@ -208,6 +211,7 @@
       "handler": "test_with_retry",
       "tools": "testing_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.1,
       "use_worktree": false,
       "max_iterations": 30,
       "max_retries": 0,
@@ -236,6 +240,7 @@
       "handler": "produce_document",
       "tools": "producing_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.15,
       "use_worktree": false,
       "max_iterations": 30,
       "on_block": { "column": "col_humanaction", "require_human_action": true },
@@ -249,6 +254,7 @@
       "handler": "verify_document",
       "tools": "verifying_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.1,
       "use_worktree": false,
       "max_iterations": 30,
       "max_retries": 1,

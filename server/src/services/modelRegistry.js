@@ -46,4 +46,17 @@ function thinkingParams(mode, modelId) {
   return {};
 }
 
-module.exports = { loadModels, getValidModelIds, describeStaleness, THINKING_MODES, thinkingParams };
+// USD for one response's `usage`, from the per-MTok prices in models.json. Cache reads
+// bill at 0.1x input and 5-minute cache writes at 1.25x (Anthropic's published rates).
+// `input_tokens` already excludes cached tokens. Unknown model → 0 (no price on file).
+function costUsd(modelId, usage = {}) {
+  const price = loadModels().models.find(m => m.value === modelId)?.price;
+  if (!price) return 0;
+  const inRate = price.input / 1e6;
+  return (usage.input_tokens || 0) * inRate
+    + (usage.cache_read_input_tokens || 0) * inRate * 0.1
+    + (usage.cache_creation_input_tokens || 0) * inRate * 1.25
+    + (usage.output_tokens || 0) * (price.output / 1e6);
+}
+
+module.exports = { loadModels, getValidModelIds, describeStaleness, THINKING_MODES, thinkingParams, costUsd };
