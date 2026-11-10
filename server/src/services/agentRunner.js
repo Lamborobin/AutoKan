@@ -1498,6 +1498,11 @@ const PREP_SOURCE_BUDGET = 6000;
 const PREP_TEST_OUTPUT_MAX = 4000;
 const PREP_IS_TEST = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\./;
 const PREP_IS_CONFIG = /(^|\/)[^/]*\.config\.[^/]+$/;
+const PREP_TEST_TYPES = [
+  { script: 'test:unit', label: 'Unit' },
+  { script: 'test:integration', label: 'Integration' },
+];
+const PREP_OUT_OF_SCOPE_SCRIPT = /^test:(e2e|system)\b/;
 
 // Test runner output is mostly noise for a verdict — timings, stack frames, file URLs.
 // Keep each test's pass/fail line, a failure's message and expected/actual, and the
@@ -1536,16 +1541,26 @@ function listProjectFiles(root, rel = '', out = []) {
 async function prepareTestContext(workDir, task) {
   const sections = ['## Already done for you'];
 
-  let testScript = null;
-  try { testScript = JSON.parse(fs.readFileSync(path.join(workDir, 'package.json'), 'utf8')).scripts?.test || null; } catch {}
-  if (testScript && !/no test specified/.test(testScript)) {
-    const run = await runBash('npm test', workDir);
+  let scripts = {};
+  try { scripts = JSON.parse(fs.readFileSync(path.join(workDir, 'package.json'), 'utf8')).scripts || {}; } catch {}
+  const typed = PREP_TEST_TYPES.filter(t => scripts[t.script]);
+  const runs = typed.length
+    ? typed.map(t => ({ label: t.label, command: `npm run ${t.script}` }))
+    : (scripts.test && !/no test specified/.test(scripts.test) ? [{ label: null, command: 'npm test' }] : []);
+  const outputMax = Math.floor(PREP_TEST_OUTPUT_MAX / Math.max(runs.length, 1));
+  for (const r of runs) {
+    const run = await runBash(r.command, workDir);
     const compact = compactTestOutput(run.output);
-    const output = compact.length > PREP_TEST_OUTPUT_MAX
-      ? `…[earlier output cut]\n${compact.slice(-PREP_TEST_OUTPUT_MAX)}` : compact;
-    sections.push(`### Test run: \`npm test\` (${run.success ? 'exit 0 — passed' : 'non-zero exit — failures or errors'})\n\`\`\`\n${output}\n\`\`\``);
-  } else {
+    const output = compact.length > outputMax
+      ? `…[earlier output cut]\n${compact.slice(-outputMax)}` : compact;
+    sections.push(`### ${r.label ? `${r.label} tests` : 'Test run'}: \`${r.command}\` (${run.success ? 'exit 0 — passed' : 'non-zero exit — failures or errors'})\n\`\`\`\n${output}\n\`\`\``);
+  }
+  if (!runs.length) {
     sections.push('### Test run\nNo tests were run: this project has no test command in package.json. Run its tests yourself if it has any.');
+  }
+  const outOfScope = Object.keys(scripts).filter(s => PREP_OUT_OF_SCOPE_SCRIPT.test(s));
+  if (outOfScope.length) {
+    sections.push(`### Not run\n${outOfScope.map(s => `\`npm run ${s}\``).join(', ')} — end-to-end/system tests need a running environment and are outside this run.`);
   }
 
   const files = listProjectFiles(workDir);
