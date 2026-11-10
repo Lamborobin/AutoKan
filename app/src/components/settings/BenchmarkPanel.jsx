@@ -729,6 +729,11 @@ function TaskCard({ c, runs, targetProjectId, onRun, onDelete }) {
           <Trash2 size={13} />
         </button>
       </div>
+      {c.max_run_cost_usd != null && (
+        <p className="text-xs text-gray-500 -mt-1">
+          A run usually costs a few cents and can cost at most ${c.max_run_cost_usd.toFixed(2)} — past that it stops and goes to Human Action.
+        </p>
+      )}
 
       {expanded && runs?.length > 0 && (() => {
         const selectedRun = runs.find(r => r.id === selectedRunId) || runs[0];

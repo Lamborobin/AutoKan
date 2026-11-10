@@ -37,10 +37,20 @@ function isHuman(req) {
   return !!(req.user || req.headers['x-agent-id'] === 'human');
 }
 
+const runnersRegistry = require('../seed/runners.json');
+function maxRunCostFor(capability) {
+  return runnersRegistry.runners.find(r => r.capability === capability && r.max_run_cost_usd != null)?.max_run_cost_usd ?? null;
+}
+
 function fmtCase(c) {
   let allowed = [];
   try { allowed = JSON.parse(c.allowed_effects || '[]'); } catch { allowed = []; }
-  return { ...c, rubric: JSON.parse(c.rubric || '{}'), allowed_effects: Array.isArray(allowed) ? allowed : [] };
+  return {
+    ...c,
+    rubric: JSON.parse(c.rubric || '{}'),
+    allowed_effects: Array.isArray(allowed) ? allowed : [],
+    max_run_cost_usd: maxRunCostFor(c.capability || PLANNING_CAPABILITY),
+  };
 }
 
 function fmtRun(r) {
