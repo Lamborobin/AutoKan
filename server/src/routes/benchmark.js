@@ -11,7 +11,7 @@ const {
   VALID_CAPABILITIES,
   PLANNING_CAPABILITY,
 } = require('../services/benchmarkRunner');
-const { getValidModelIds } = require('../services/modelRegistry');
+const { getValidModelIds, THINKING_MODES } = require('../services/modelRegistry');
 const { BUILTIN_EFFECT_IDS, capabilityActions } = require('../services/effects');
 const { ACTION_HOOKS } = require('../services/actionHooks');
 
@@ -37,19 +37,38 @@ function isHuman(req) {
   return !!(req.user || req.headers['x-agent-id'] === 'human');
 }
 
+const runnersRegistry = require('../seed/runners.json');
+function maxRunCostFor(capability) {
+  return runnersRegistry.runners.find(r => r.capability === capability && r.max_run_cost_usd != null)?.max_run_cost_usd ?? null;
+}
+
 function fmtCase(c) {
   let allowed = [];
   try { allowed = JSON.parse(c.allowed_effects || '[]'); } catch { allowed = []; }
-  return { ...c, rubric: JSON.parse(c.rubric || '{}'), allowed_effects: Array.isArray(allowed) ? allowed : [] };
+  return {
+    ...c,
+    rubric: JSON.parse(c.rubric || '{}'),
+    allowed_effects: Array.isArray(allowed) ? allowed : [],
+    max_run_cost_usd: maxRunCostFor(c.capability || PLANNING_CAPABILITY),
+  };
 }
 
 function fmtRun(r) {
+  const judge = r.judge_result ? JSON.parse(r.judge_result) : null;
+  // The probe task accumulates the agent's API usage (agentRunner.js recordRunUsage);
+  // add the judge's own call so the run shows one total.
+  const task = r.probing_task_id ? getDb().prepare('SELECT metadata FROM tasks WHERE id = ?').get(r.probing_task_id) : null;
+  let agentCost = null;
+  try { agentCost = JSON.parse(task?.metadata || '{}').usage?.cost_usd ?? null; } catch {}
+  const judgeCost = judge?.cost_usd ?? null;
   return {
     ...r,
     deterministic_result: r.deterministic_result ? JSON.parse(r.deterministic_result) : null,
-    judge_result: r.judge_result ? JSON.parse(r.judge_result) : null,
+    judge_result: judge,
     manual_review: r.manual_review ? JSON.parse(r.manual_review) : null,
     context_version: r.context_version ? JSON.parse(r.context_version) : [],
+    cost: agentCost == null && judgeCost == null ? null
+      : { agent_usd: agentCost, judge_usd: judgeCost, total_usd: (agentCost || 0) + (judgeCost || 0) },
   };
 }
 
@@ -220,13 +239,17 @@ router.post('/cases/:id/run', attachAgent, async (req, res) => {
   // Optional per-run model override — lets the same case be compared across models
   // without reassigning the board's real agent. Omit or leave blank to run on
   // whatever model the board's agent is actually configured with.
-  const { model } = req.body;
+  const { model, thinking } = req.body;
   if (model && !getValidModelIds().has(model)) {
     return res.status(400).json({ error: `Unknown model "${model}"` });
   }
+  // Same idea for thinking: blank runs with the agent's own setting.
+  if (thinking && !THINKING_MODES.includes(thinking)) {
+    return res.status(400).json({ error: `Unknown thinking mode "${thinking}"` });
+  }
 
   try {
-    const run = await createRunAndDispatch(caseRow, { projectId, userId: req.user?.sub || null, model: model || null });
+    const run = await createRunAndDispatch(caseRow, { projectId, userId: req.user?.sub || null, model: model || null, thinking: thinking || null });
     res.status(201).json(fmtRun(run));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -255,7 +278,10 @@ router.post('/runs/:id/review-ai', attachAgent, async (req, res) => {
   if (!isHuman(req)) return res.status(403).json({ error: 'Only humans can trigger an AI review' });
   try {
     const run = await reviewWithAI(req.params.id);
-    res.json(fmtRun(run));
+    // The review may have drafted the case's rubric on the way — send the case back
+    // so the UI can drop its "no scoring rubric" banner.
+    const caseRow = getDb().prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
+    res.json({ ...fmtRun(run), case: caseRow ? fmtCase(caseRow) : null });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

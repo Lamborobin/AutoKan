@@ -2,12 +2,14 @@ import React from 'react';
 
 function renderInline(text) {
   const parts = [];
-  const regex = /\*\*(.+?)\*\*/g;
+  const regex = /\*\*(.+?)\*\*|`([^`]+)`/g;
   let last = 0;
   let match;
   while ((match = regex.exec(text)) !== null) {
     if (match.index > last) parts.push(text.slice(last, match.index));
-    parts.push(<strong key={match.index} className="font-semibold">{match[1]}</strong>);
+    parts.push(match[1] !== undefined
+      ? <strong key={match.index} className="font-semibold">{match[1]}</strong>
+      : <code key={match.index} className="font-mono text-[0.95em] px-1 rounded bg-surface-3 text-gray-300">{match[2]}</code>);
     last = regex.lastIndex;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -39,6 +41,19 @@ export default function MarkdownText({ text, className = '' }) {
 
     if (line.trim() === '') {
       i++;
+      continue;
+    }
+
+    if (line.trim().startsWith('```')) {
+      const code = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) code.push(lines[i++]);
+      i++; // closing fence
+      nodes.push(
+        <pre key={keyCounter++} className="font-mono text-[0.95em] bg-surface-3 border border-border rounded-md px-2.5 py-2 overflow-x-auto whitespace-pre text-gray-300">
+          {code.join('\n')}
+        </pre>
+      );
       continue;
     }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useStore } from '../../store';
-import { COLORS } from '../../constants/agents';
+import { COLORS, THINKING_OPTIONS } from '../../constants/agents';
 import { checkModelStaleness } from '../../utils/modelStaleness';
 import InfoModal from '../settings/InfoModal';
 
@@ -27,6 +27,7 @@ export function useAgentForm(initial = {}) {
   const [form, setForm] = useState({
     name: '',
     model: initial.model || defaultAgentModel || modelsDefault,
+    thinking: '',
     description: '',
     color: '#6366f1',
     is_template: false,
@@ -103,6 +104,27 @@ export function ModelField({ value, onChange }) {
             {value} — {reason.toLowerCase()}. The agent keeps running on the stored model; switch it above if you'd like to update.
           </p>
         </div>
+      )}
+    </div>
+  );
+}
+
+export function ThinkingField({ value, onChange, model }) {
+  const models = useStore(s => s.models);
+  const noAdaptive = value === 'adaptive' && models.find(m => m.value === model)?.adaptiveThinking === false;
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-400 mb-1.5">Thinking</label>
+      <select
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        className="w-full bg-surface-3 border border-border rounded-lg px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-accent"
+      >
+        {THINKING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      {noAdaptive && (
+        <p className="mt-1 text-xs text-gray-600">This model can't think adaptively — it runs without thinking.</p>
       )}
     </div>
   );

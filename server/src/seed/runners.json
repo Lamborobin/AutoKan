@@ -1,5 +1,5 @@
 {
-  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. context_docs is the static map of which docs/ files get bundled into an agent's starting context for that capability (every app agent gets docs/rules.md today; AutoKan-internal docs like api.md/frontend.md map to no capability on purpose). README.md is added on top for is_coder capabilities. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
+  "description": "Capability + runner registry. CAPABILITIES are skills an agent can have (one per agent). RUNNERS map (capability, column) → an executable flow. Adding a new runner = add an entry here + (optionally) create the personality_file + (if no existing handler fits) implement a handler in server/src/services/agentRunner.js. The personality_file is ADDITIVE context — if missing, the runner still works via a baked-in baseline. context_docs is the static map of which docs/ files get bundled into an agent's starting context for that capability (every app agent gets docs/rules.md today; AutoKan-internal docs like api.md/frontend.md map to no capability on purpose). max_run_cost_usd is a hard per-run API cost cap — when reached, the run stops and goes to Human Action. Changes apply on next server restart for runners, or on `npm run db:reset` for capabilities.",
 
   "capabilities": [
     {
@@ -26,6 +26,15 @@
       "label": "Code Test Runner",
       "description": "Runs the project's automated test suite and reports pass/fail. Narrow scope — escalates anything that needs non-shell verification.",
       "color": "#8b5cf6",
+      "write_access": "*.test.*, *.spec.*, __tests__/, test/",
+      "context_docs": ["docs/rules.md"],
+      "is_coder": true
+    },
+    {
+      "id": "perm_test_regression",
+      "label": "Regression Test Runner",
+      "description": "Runs targeted regression checks for a specific bug fix — reproduces the original bug, confirms the fix resolves it, and adds a regression test to prevent recurrence.",
+      "color": "#14b8a6",
       "write_access": "*.test.*, *.spec.*, __tests__/, test/",
       "context_docs": ["docs/rules.md"],
       "is_coder": true
@@ -158,6 +167,7 @@
       "handler": "clarify_and_approve",
       "tools": "clarification_tools",
       "model_default": "claude-opus-5",
+      "max_run_cost_usd": 0.15,
       "trigger_guard": "no_pm_approval_yet",
       "description": "PM clarifies requirements with the human through Q&A. Single-shot per turn — sleeps between human answers. One extra model call is made only when the instructions name an action hook the agent did not invoke."
     },
@@ -169,6 +179,7 @@
       "handler": "implement_in_worktree",
       "tools": "implementation_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.5,
       "use_worktree": true,
       "max_iterations": 30,
       "on_complete": "create_pr_and_optionally_merge",
@@ -183,14 +194,31 @@
       "handler": "test_with_retry",
       "tools": "testing_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.1,
       "use_worktree": false,
       "max_iterations": 30,
-      "max_retries": 1,
+      "max_retries": 0,
       "on_pass": { "column": "col_humanaction", "message": "Tests passed — ready for human sign-off" },
-      "on_fail_retry": { "column": "col_inprogress", "message": "Tests failed — sent back to In Progress" },
-      "on_fail_max_retries": { "column": "col_humanaction", "message": "Tests failed after max retries", "require_human_action": true },
+      "on_fail": { "column": "col_humanaction", "message": "Tests failed", "require_human_action": true },
       "on_block": { "column": "col_humanaction", "require_human_action": true },
-      "description": "Runs the project's automated test suite (npm test / pytest / etc), writes missing coverage tests, reports pass/fail. Narrow scope — escalates anything not shell-validatable. Fail retries once before escalating."
+      "description": "Runs the project's automated test suite (npm test / pytest / etc), writes missing coverage tests, reports pass/fail. Narrow scope — escalates anything not shell-validatable. No automatic hand-off to the developer on fail — every failure goes to Human Action so a person decides what runs next."
+    },
+    {
+      "id": "runner_run_regression_tests",
+      "capability": "perm_test_regression",
+      "column": "col_testing",
+      "personality_file": "instructions/regression-test.md",
+      "handler": "test_with_retry",
+      "tools": "testing_tools",
+      "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.1,
+      "use_worktree": false,
+      "max_iterations": 30,
+      "max_retries": 0,
+      "on_pass": { "column": "col_humanaction", "message": "Regression check passed — ready for human sign-off" },
+      "on_fail": { "column": "col_humanaction", "message": "Regression check failed", "require_human_action": true },
+      "on_block": { "column": "col_humanaction", "require_human_action": true },
+      "description": "Reproduces a specific reported bug, confirms the developer's fix resolves it, and adds a regression test to pin the fix. Narrow scope — escalates anything not shell-validatable. No automatic hand-off to the developer on fail — every failure goes to Human Action so a person decides what runs next."
     }
     ,
     { "id": "runner_frontend_placeholder",      "capability": "perm_frontend",          "column": "col_inprogress", "handler": "placeholder", "is_placeholder": true, "description": "Stub — replace handler + add tools when perm_frontend is built out." },
@@ -212,6 +240,7 @@
       "handler": "produce_document",
       "tools": "producing_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.15,
       "use_worktree": false,
       "max_iterations": 30,
       "on_block": { "column": "col_humanaction", "require_human_action": true },
@@ -225,6 +254,7 @@
       "handler": "verify_document",
       "tools": "verifying_tools",
       "model_default": "claude-sonnet-5",
+      "max_run_cost_usd": 0.1,
       "use_worktree": false,
       "max_iterations": 30,
       "max_retries": 1,

@@ -4,7 +4,7 @@ import { useStore } from '../../store';
 import { COLUMN } from '../../constants/columns';
 import {
   useAgentForm, agentRolesValid,
-  ModelField, ColorField,
+  ModelField, ThinkingField, ColorField,
   TemplatePromptField, RoleField,
 } from './AgentForm';
 
@@ -18,6 +18,7 @@ export default function EditAgentModal() {
     name: agent.name,
     role: agent.role,
     model: agent.model,
+    thinking: agent.thinking || '',
     description: agent.description || '',
     color: agent.color,
     is_template: agent.is_template || false,
@@ -74,6 +75,7 @@ export default function EditAgentModal() {
       const payload = {
         name: form.name.trim(),
         model: form.model,
+        thinking: form.thinking || null,
         description: form.description,
         color: form.color,
         system_prompt: form.system_prompt || null,
@@ -183,6 +185,7 @@ export default function EditAgentModal() {
           </div>
 
           <ModelField value={form.model} onChange={v => set('model', v)} />
+          <ThinkingField value={form.thinking} onChange={v => set('thinking', v)} model={form.model} />
 
           <RoleField selectedRoleIds={form.role_ids} onToggle={toggleRole} />
 

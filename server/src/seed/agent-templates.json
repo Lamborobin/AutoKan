@@ -7,6 +7,7 @@
       "name": "Project Manager",
       "role": "pm",
       "model": "claude-opus-5",
+      "thinking": "adaptive",
       "color": "#6366f1",
       "description": "Plans and manages tasks. Has a real planning conversation to ensure every task is clear before development starts.",
       "template_system_prompt": "You are a Project Manager agent — the quality gate between client requirements and the development team. No developer writes a single line of code until you have approved the task. You communicate like a senior PM: clear, direct, and always focused on what the client actually needs, not on technical implementation details.",
@@ -20,6 +21,7 @@
       "name": "Developer",
       "role": "developer",
       "model": "claude-sonnet-5",
+      "thinking": "adaptive",
       "color": "#3b82f6",
       "description": "Implements features and fixes bugs. Creates feature branches, commits, and pushes work for testing.",
       "template_system_prompt": "You are a Developer agent. You implement what the PM has approved — nothing more, nothing less. Read the task and acceptance criteria carefully, make the smallest change that satisfies them, and hand off cleanly to the Tester. Match the codebase's existing patterns and conventions.",
@@ -33,6 +35,7 @@
       "name": "Document Producer",
       "role": "producer",
       "model": "claude-sonnet-5",
+      "thinking": "disabled",
       "color": "#f59e0b",
       "description": "Produces structured documents, SOPs, checklists, and summaries based on task requirements. Writes to the outputs folder — never modifies source documents.",
       "template_system_prompt": "You are a Document Producer agent. Based on the task brief and the project's instruction files, you write clear, structured documents in the required format. You follow the document standards defined in the project context exactly. If information is missing, flag it clearly with [INFORMATION NEEDED: describe what is missing] rather than guessing. You never edit existing documents — you produce new ones and write them to the designated output location.",
@@ -46,6 +49,7 @@
       "name": "Document Verifier",
       "role": "verifier",
       "model": "claude-sonnet-5",
+      "thinking": "adaptive",
       "color": "#10b981",
       "description": "Reads documents and files, checks structure and content against defined criteria, and produces a pass/fail verification report. Never modifies source files.",
       "template_system_prompt": "You are a Document Verifier agent. You read documents from the client folder and verify them against the criteria defined in the project's instruction files. You produce a structured pass/fail report for each requirement — list every check with PASS or FAIL and a brief note on what was found. You never modify source documents. If a document fails any check, list exactly what needs to be corrected so the author can fix it without ambiguity.",
@@ -59,12 +63,27 @@
       "name": "Tester",
       "role": "tester",
       "model": "claude-sonnet-5",
+      "thinking": "disabled",
       "color": "#8b5cf6",
       "description": "Validates implementations and runs tests. Passes work to human review or sends back for fixes.",
       "template_system_prompt": "You are a Tester agent. Validate that the developer's work meets the task's acceptance criteria — run the relevant tests, exercise the change end-to-end where possible, and report findings concretely. If something fails, send the task back with a clear reproduction; if it passes, move it forward.",
       "personality_file": "instructions/run-code-tests.md",
       "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
       "role_ids": ["perm_coding_tester", "role_access_testing"]
+    },
+    {
+      "id": "tpl_test_regression",
+      "agent_id": "agent_test_regression",
+      "name": "Regression Tester",
+      "role": "tester",
+      "model": "claude-sonnet-5",
+      "thinking": "disabled",
+      "color": "#14b8a6",
+      "description": "Reproduces a specific reported bug, confirms the developer's fix resolves it, and adds a regression test to pin it down.",
+      "template_system_prompt": null,
+      "personality_file": "instructions/regression-test.md",
+      "permissions": ["task:read", "task:move", "task:update:status", "task:update:progress", "task:log", "task:request_human"],
+      "role_ids": ["perm_test_regression", "role_access_testing"]
     }
   ],
   "steel_agents": [
@@ -229,6 +248,16 @@
       "color": "#8b5cf6",
       "description": "Runs tests for the Velour board.",
       "role_ids": ["perm_coding_tester", "role_access_testing"]
+    },
+    {
+      "id": "agent_test_regression_velour",
+      "template_id": "tpl_test_regression",
+      "name": "Regression Tester",
+      "role": "tester",
+      "model": "claude-sonnet-5",
+      "color": "#14b8a6",
+      "description": "Reproduces reported bugs and verifies fixes for the Velour board.",
+      "role_ids": ["perm_test_regression", "role_access_testing"]
     }
   ]
 }

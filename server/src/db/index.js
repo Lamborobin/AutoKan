@@ -153,6 +153,7 @@ function applySchema(db) {
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       model TEXT DEFAULT 'claude-sonnet-5',
+      thinking TEXT,
       description TEXT,
       permissions TEXT NOT NULL DEFAULT '[]',
       role_ids TEXT DEFAULT '[]',
@@ -174,6 +175,7 @@ function applySchema(db) {
       name TEXT NOT NULL,
       description TEXT,
       model TEXT DEFAULT 'claude-sonnet-5',
+      thinking TEXT,
       color TEXT DEFAULT '#6366f1',
       suggested_role TEXT,
       template_system_prompt TEXT,
@@ -320,7 +322,7 @@ function applySchema(db) {
       subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
       project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
       layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
-      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester')),
+      capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester','perm_test_regression')),
       rule_reference TEXT,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
@@ -365,6 +367,7 @@ function applySchema(db) {
       -- the board agent's own configured model. NULL means the agent's own model
       -- was used.
       model_override TEXT,
+      thinking_override TEXT,
       error_message TEXT,
       triggered_by TEXT REFERENCES users(id),
       started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -432,7 +435,7 @@ function applySchema(db) {
   // one transaction, and the updated_at trigger is recreated because DROP TABLE
   // takes its triggers with it.
   const casesDdl = db.prepare(`SELECT sql FROM sqlite_master WHERE type='table' AND name='benchmark_cases'`).get();
-  if (casesDdl && !casesDdl.sql.includes('perm_coding')) {
+  if (casesDdl && (!casesDdl.sql.includes('perm_coding') || !casesDdl.sql.includes('perm_test_regression'))) {
     const cols = [
       'id', 'subscription_id', 'project_id', 'layer', 'capability', 'rule_reference',
       'title', 'description', 'acceptance_criteria', 'rubric', 'allowed_effects',
@@ -446,7 +449,7 @@ function applySchema(db) {
         subscription_id TEXT NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
         project_id TEXT REFERENCES projects(id) ON DELETE CASCADE,
         layer TEXT NOT NULL CHECK(layer IN ('workspace','board')),
-        capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester')),
+        capability TEXT NOT NULL DEFAULT 'perm_planning' CHECK(capability IN ('perm_planning','perm_producing','perm_verifying','perm_coding','perm_coding_tester','perm_test_regression')),
         rule_reference TEXT,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
@@ -473,6 +476,24 @@ function applySchema(db) {
   const tasksColumns = db.prepare(`PRAGMA table_info(tasks)`).all().map(c => c.name);
   if (!tasksColumns.includes('allowed_effects')) {
     db.exec(`ALTER TABLE tasks ADD COLUMN allowed_effects TEXT`);
+  }
+
+  // When `thinking` first appears, backfill the same per-role defaults a fresh seed
+  // gets (agent-templates.json), so an existing dev DB matches without a db:reset.
+  const thinkingByRole = (col) => `CASE WHEN ${col} IN ('producer','tester') THEN 'disabled'
+    WHEN ${col} IN ('pm','developer','verifier') THEN 'adaptive' ELSE NULL END`;
+  const agentColumns = db.prepare(`PRAGMA table_info(agents)`).all().map(c => c.name);
+  if (!agentColumns.includes('thinking')) {
+    db.exec(`ALTER TABLE agents ADD COLUMN thinking TEXT`);
+    db.exec(`UPDATE agents SET thinking = ${thinkingByRole('role')}`);
+  }
+  const templateColumns = db.prepare(`PRAGMA table_info(agent_templates)`).all().map(c => c.name);
+  if (!templateColumns.includes('thinking')) {
+    db.exec(`ALTER TABLE agent_templates ADD COLUMN thinking TEXT`);
+    db.exec(`UPDATE agent_templates SET thinking = ${thinkingByRole('suggested_role')}`);
+  }
+  if (!benchmarkRunsColumns.includes('thinking_override')) {
+    db.exec(`ALTER TABLE benchmark_runs ADD COLUMN thinking_override TEXT`);
   }
 }
 

@@ -62,7 +62,7 @@ Assembled once into the agent's starting context bundle (see the layering note a
 - **Capability docs** — the `docs/` files mapped to the agent's capability, picked up from `context_docs` in `runners.json` (every capability currently maps to `docs/rules.md` — Layer 3, System Behavior, above; the registry is the source of truth for the mapping, not duplicated here).
 - **Workspace files** — every top-level `.md` in `instructions/{sub}/` (excluding capability behavior files, already in the system prompt). Unconditional — no capability filtering, unlike board files below. A workspace file applies across every board in the subscription, so it's meant to stay generic enough for any capability to read; scoping it to one role belongs at board level instead.
 - **Board files** — every top-level `.md` in `instructions/{sub}/{proj}/` (e.g. `client.md`, `project.md`). Auto-scanned — drop a `.md` in and it loads, no per-agent wiring. This is where role-scoping actually happens: a file's own `capabilities:` front matter is optional, not required — absent means visible to every agent on the board (`client.md`'s case); present means visible only to agents whose capability is in that list (e.g. `doc-guide.md` carries `capabilities: perm_producing`, so a Producer's context picks it up automatically and a Coder's does not — no separate registration anywhere, the board folder is scanned fresh per agent).
-- **Always** — the app agent's base instruction file, for every agent; the project's human-facing setup file, additionally, for `is_coder` capabilities (the registry is the source of truth — the coder set is not duplicated here).
+- **Always** — the app agent's base instruction file, for every agent. (AutoKan's own README used to be added for `is_coder` capabilities; it describes AutoKan rather than the board's project and was dropped — coders read the project's own files.)
 
 ### Path resolution
 
@@ -70,6 +70,18 @@ The `personality_file` is stored as a short reference (e.g. `instructions/dev-im
 
 1. `instructions/{subscriptionId}/{projectId}/X.md` — board-level (most specific, overrides subscription)
 2. `instructions/{subscriptionId}/X.md` — subscription-level (shared, applies to all boards)
+
+---
+
+## Cost per run
+
+Every model call re-sends the whole conversation so far, so a run's cost grows with its number of round-trips. Handlers are built to need as few as possible, and this is code's job — an instruction file can't change how many calls a handler makes.
+
+- **Gather in code, not in turns.** Whatever a run predictably needs is collected before the first call and sent with it. The test runners get the test command's result, the file list and the most relevant source up front (`prepareTestContext` in `agentRunner.js`), so a test run usually finishes in one or two calls. New handlers should follow the same pattern for their own predictable inputs.
+- **Batch what's left.** Runner prompts tell the agent to ask for several things in one turn rather than one at a time.
+- **Every call goes through `createMessage()`**, which applies prompt caching (a cached system block plus automatic caching of the growing conversation), counts usage and cost, and enforces the runner's `max_run_cost_usd` — past the cap the run stops and goes to Human Action. Never call the SDK directly from a handler.
+- **Keep what's re-sent small.** Tool results are clipped (`clipToolResult`), and context holds only what the agent needs — not AutoKan's own docs.
+- Each run's cost is saved on the task (`metadata.usage`) with a readable activity-log line, and shown per run in Benchmark Tasks. The benchmark AI review runs only on request, on Sonnet.
 
 ---
 

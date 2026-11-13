@@ -3,7 +3,7 @@ import { X, Plus, LayoutTemplate } from 'lucide-react';
 import { useStore } from '../../store';
 import {
   useAgentForm, agentRolesValid,
-  NameField, ModelField, ColorField,
+  NameField, ModelField, ThinkingField, ColorField,
   TemplatePromptField, RoleField,
 } from './AgentForm';
 
@@ -38,6 +38,7 @@ export default function NewAgentModal() {
     set('created_from_template_id', templateId);
     handleNameChange(tpl.name);
     set('model', tpl.model);
+    set('thinking', tpl.thinking || '');
     set('color', tpl.color);
     set('description', tpl.description || '');
 
@@ -63,6 +64,7 @@ export default function NewAgentModal() {
         name: form.name.trim(),
         role: generatedRole,
         model: form.model,
+        thinking: form.thinking || null,
         description: form.description,
         color: form.color,
         permissions: ['task:read'],
@@ -126,6 +128,7 @@ export default function NewAgentModal() {
           </div>
 
           <ModelField value={form.model} onChange={v => set('model', v)} />
+          <ThinkingField value={form.thinking} onChange={v => set('thinking', v)} model={form.model} />
 
           <RoleField selectedRoleIds={form.role_ids} onToggle={toggleRole} />
 

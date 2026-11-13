@@ -7,6 +7,13 @@ const { getDb } = require('../db');
 const { GLOBAL_INSTRUCTIONS_DIR, PROJECT_ROOT } = require('../utils/instructions');
 const { triggerRunner } = require('./agentRunner');
 const { ACTION_HOOKS } = require('./actionHooks');
+const { costUsd } = require('./modelRegistry');
+
+// Judge and case/rubric drafting: Sonnet without thinking. These were on Opus; grading
+// a short report against a rubric doesn't need the most expensive model, and every
+// call here is overhead on top of the run being tested.
+const GRADER_MODEL = 'claude-sonnet-5';
+const GRADER_PARAMS = { model: GRADER_MODEL, thinking: { type: 'disabled' } };
 
 // ── Benchmark Tasks runner ──────────────────────────────────────────────────
 //
@@ -26,6 +33,7 @@ const PRODUCING_CAPABILITY = 'perm_producing';
 const VERIFYING_CAPABILITY = 'perm_verifying';
 const CODING_CAPABILITY = 'perm_coding';
 const CODE_TESTING_CAPABILITY = 'perm_coding_tester';
+const REGRESSION_TESTING_CAPABILITY = 'perm_test_regression';
 
 const CAPABILITY_LABELS = {
   [PLANNING_CAPABILITY]: 'AI planning agent (clarifies requirements with the client before any work begins)',
@@ -33,6 +41,7 @@ const CAPABILITY_LABELS = {
   [VERIFYING_CAPABILITY]: 'AI document-verification agent (checks a produced document against a standard and reports pass/fail)',
   [CODING_CAPABILITY]: "AI coding agent (implements an approved task inside the project the board is linked to)",
   [CODE_TESTING_CAPABILITY]: "AI test-running agent (runs the automated test suite for the linked project and reports pass/fail)",
+  [REGRESSION_TESTING_CAPABILITY]: "AI regression-test agent (reproduces a specific reported bug, confirms a fix resolves it, and reports pass/fail)",
 };
 
 // Column a fresh probing task starts in per capability — mirrors the real runner
@@ -44,6 +53,7 @@ const CAPABILITY_START_COLUMN = {
   [VERIFYING_CAPABILITY]: 'col_testing',
   [CODING_CAPABILITY]: 'col_inprogress',
   [CODE_TESTING_CAPABILITY]: 'col_testing',
+  [REGRESSION_TESTING_CAPABILITY]: 'col_testing',
 };
 
 // How long pollAndScore waits before giving up on a run and marking it 'timeout'.
@@ -63,14 +73,16 @@ const CAPABILITY_POLL_TIMEOUT_MS = {
   [PLANNING_CAPABILITY]: 60000,
   [PRODUCING_CAPABILITY]: 420000,
   [VERIFYING_CAPABILITY]: 300000,
-  // Coding and test-running have no wall-clock cap of their own — they stop at
-  // max_iterations (30), each iteration a full model turn plus real shell commands
-  // (installs, builds, test suites). There is no cap to stay above, so these are
-  // sized for the loop actually running to completion rather than for an escalation
-  // write landing. Generous on purpose: a run that is still working is far more
-  // expensive to lose to a premature 'timeout' than one that sits a little longer.
+  // Coding and test-running now have their own wall-clock caps too (implement_in_worktree:
+  // 8min, test_with_retry: 5min), same escalate-on-cap pattern as Producing/Verifying —
+  // worst case is the cap plus one in-flight 150s call (≈10.5min / ≈7.5min). Kept
+  // generous well above that rather than tightened to match, since these also run real
+  // shell commands (installs, builds, test suites) whose own timing can vary more than
+  // a pure LLM-writing turn — a run that is still working is far more expensive to lose
+  // to a premature 'timeout' than one that sits a little longer.
   [CODING_CAPABILITY]: 1800000,
   [CODE_TESTING_CAPABILITY]: 1200000,
+  [REGRESSION_TESTING_CAPABILITY]: 1200000,
 };
 
 let _client;
@@ -275,6 +287,31 @@ const CAPABILITY_PROBES = {
       ];
     },
   },
+
+  // Mirrors Code Test Runner exactly — same handler (test_with_retry), same logged
+  // action names, only the scope of what's tested differs (a prompt-file concern).
+  [REGRESSION_TESTING_CAPABILITY]: {
+    settledActions: ['tests_passed', 'tests_failed', 'human_action_requested'],
+    outcomeSignals: [
+      { tool: 'task_complete_pass', test: (task, metadata, logs) => logs.some(l => l.action === 'tests_passed') },
+      { tool: 'task_complete_fail', test: (task, metadata, logs) => logs.some(l => l.action === 'tests_failed') },
+      { tool: 'request_human', test: (task, metadata, logs) => logs.some(l => l.action === 'human_action_requested') },
+    ],
+    toolsWithoutChecklist: [],
+    checkText: (task, logs) => {
+      const log = logs.find(l => ['tests_passed', 'tests_failed'].includes(l.action));
+      return (log && log.message) || '';
+    },
+    judgeSummaryLines: (task, logs, tool) => {
+      const log = logs.find(l => ['tests_passed', 'tests_failed'].includes(l.action));
+      const progress = logs.filter(l => l.action === 'note').map(l => l.message);
+      return [
+        'Tool fired: ' + (tool || '(none)'),
+        'Regression verdict and summary: ' + ((log && log.message) || '(none)'),
+        'Progress notes: ' + (progress.length ? progress.join(' | ') : '(none)'),
+      ];
+    },
+  },
 };
 
 // Every agent can invoke registered action hooks on top of its capability's own
@@ -292,6 +329,11 @@ function actionHooksBlock() {
     'Instruction files and task briefs name them wrapped in underscores, e.g. "_notify_all_". These genuinely exist and genuinely perform their effect. An agent invoking one, or reporting that it did, is correct behaviour — never treat it as a fabricated or non-existent tool. Whether a given run was permitted to really perform the action is decided by the system, not the agent, so a recorded action is never evidence of dishonesty.',
   ].join('\n');
 }
+
+// Same class of mistake for board docs: a rubric drafted while project.md described a
+// never-built stack declared "there is no src/App.jsx — FAIL", and the judge then failed
+// a run that had read the real file correctly. Docs are background; the code is the truth.
+const BOARD_DOCS_ARE_CONTEXT = 'IMPORTANT — board documents (project.md, client.md and similar) give background: purpose, client priorities, conventions, domain rules. They are not a description of the code. The stack, file layout and what is already built are whatever the board\'s linked folder actually contains, and the agent is expected to find that out by reading the code. Never build a criterion that expects the code to match a document\'s description of files, frameworks or structure, and never treat a mismatch between a document and what the agent found in the code as evidence that the agent fabricated something.';
 
 function probeFor(capability) {
   return CAPABILITY_PROBES[capability] || CAPABILITY_PROBES[PLANNING_CAPABILITY];
@@ -392,7 +434,7 @@ function findCapableAgent(projectId, capability) {
   }) || null;
 }
 
-async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride, allowedEffects }) {
+async function dispatchProbingTask({ title, description, acceptanceCriteria, columnId, agentId, projectId, capability, modelOverride, thinkingOverride, allowedEffects }) {
   const res = await fetch(`http://localhost:${PORT}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-agent-id': 'human' },
@@ -415,6 +457,7 @@ async function dispatchProbingTask({ title, description, acceptanceCriteria, col
       metadata: {
         is_benchmark_probe: true,
         ...(modelOverride ? { model_override: modelOverride } : {}),
+        ...(thinkingOverride ? { thinking_override: thinkingOverride } : {}),
       },
       // Always sent as an explicit array, even when empty. A probe is never
       // "unconfigured" — an empty list states outright that nothing may be
@@ -457,7 +500,7 @@ async function waitForSettlement(taskId, settledActions, { timeoutMs = 270000, i
   return { task, logs, settled };
 }
 
-async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) {
+async function createRunAndDispatch(caseRow, { projectId, userId, model, thinking } = {}) {
   const db = getDb();
   const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
   if (!project) throw new Error('Unknown project');
@@ -488,15 +531,16 @@ async function createRunAndDispatch(caseRow, { projectId, userId, model } = {}) 
     projectId,
     capability,
     modelOverride: model || null,
+    thinkingOverride: thinking || null,
     allowedEffects: Array.isArray(allowedEffects) ? allowedEffects : [],
   });
 
   const runId = 'bmr_' + uuidv4().replace(/-/g, '').slice(0, 12);
   const contextVersion = snapshotContextVersion(project.subscription_id, projectId);
   db.prepare(`
-    INSERT INTO benchmark_runs (id, case_id, project_id, probing_task_id, source_task_id, status, context_version, model_override, triggered_by)
-    VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?, ?)
-  `).run(runId, caseRow.id, projectId, task.id, sourceTaskId, JSON.stringify(contextVersion), model || null, userId || null);
+    INSERT INTO benchmark_runs (id, case_id, project_id, probing_task_id, source_task_id, status, context_version, model_override, thinking_override, triggered_by)
+    VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?, ?, ?)
+  `).run(runId, caseRow.id, projectId, task.id, sourceTaskId, JSON.stringify(contextVersion), model || null, thinking || null, userId || null);
 
   pollAndScore(runId).catch(err => console.error('[benchmarkRunner] poll error:', err.message));
 
@@ -519,24 +563,46 @@ async function callJudge(task, logs, judgeRubric, capability = PLANNING_CAPABILI
   ].join('\n');
 
   const response = await getClient().messages.create({
-    model: 'claude-opus-5',
+    ...GRADER_PARAMS,
     // Was 512 — same bug as agentRunner.js's max_tokens fixes: a model that spends
     // budget on internal reasoning before reaching its tool call can get cut off
     // before ever producing one, silently returning an empty/default verdict.
     max_tokens: 4096,
     system: `You are grading whether a real ${CAPABILITY_LABELS[capability] || 'AI agent'}'s output respected a specific rule under test. Respond only by calling the verdict tool.
 
-${actionHooksBlock()}`,
+Write for a technically literate project manager who has to check your verdict at a glance, not for a developer: a one-sentence summary, then at most 5 checks — only the ones that decided the verdict — each with a short plain-language note on the evidence, under 20 words, no markdown. Describe what the agent did and whether it was right in terms of the product and the task ("confirmed that adding the same item twice still creates two cart lines"), never in code terms: no tool names, file paths, function names, or testing jargon. Everyday technical words are fine (database, connection string, deploy, test, bug); words that take coding knowledge to understand are not (yield, dependency injection, assertion, regression suite).
+
+${actionHooksBlock()}
+
+${BOARD_DOCS_ARE_CONTEXT}`,
     tools: [{
       name: 'verdict',
       description: 'Report the review verdict for this run.',
+      // strict: a run once came back with `checks` as a string containing leaked
+      // tool-call XML instead of an array, which crashed the review UI.
+      strict: true,
       input_schema: {
         type: 'object',
         properties: {
           passed: { type: 'boolean' },
-          rationale: { type: 'string' },
+          summary: { type: 'string', description: 'One plain-language sentence: the verdict and the main reason, no code names.' },
+          checks: {
+            type: 'array',
+            description: 'At most 5 entries — only what decided the verdict, most important first.',
+            items: {
+              type: 'object',
+              properties: {
+                criterion: { type: 'string', description: 'What was checked, a few plain words (e.g. "Found the real problem").' },
+                passed: { type: 'boolean' },
+                note: { type: 'string', description: 'The evidence in product terms, under 20 words, no code names.' },
+              },
+              required: ['criterion', 'passed', 'note'],
+              additionalProperties: false,
+            },
+          },
         },
-        required: ['passed', 'rationale'],
+        required: ['passed', 'summary', 'checks'],
+        additionalProperties: false,
       },
     }],
     tool_choice: { type: 'tool', name: 'verdict' },
@@ -547,7 +613,15 @@ ${actionHooksBlock()}`,
   });
 
   const block = response.content.find(b => b.type === 'tool_use');
-  return block ? block.input : { passed: false, rationale: 'Judge model did not return a verdict.' };
+  const cost_usd = Math.round(costUsd(GRADER_MODEL, response.usage) * 1e6) / 1e6;
+  if (!block) return { passed: false, summary: 'Judge model did not return a verdict.', checks: [], cost_usd };
+  const { passed, summary, checks } = block.input;
+  return {
+    passed: passed === true,
+    summary: typeof summary === 'string' ? summary : 'The judge returned an unreadable verdict — re-review to try again.',
+    checks: Array.isArray(checks) ? checks.filter(c => c && typeof c.criterion === 'string') : [],
+    cost_usd,
+  };
 }
 
 async function pollAndScore(runId, { timeoutMs, intervalMs = 2000 } = {}) {
@@ -572,38 +646,17 @@ async function pollAndScore(runId, { timeoutMs, intervalMs = 2000 } = {}) {
   const rubric = JSON.parse(caseRow.rubric || '{}');
   const deterministic = scoreDeterministic(task, logs, rubric.deterministic || {}, capability);
 
-  // Judge automatically whenever the case has a judge rubric to grade against —
-  // a run isn't meaningfully "done" until the substance has been checked, not just
-  // the shape. If the model call itself fails, leave judge_result null rather than
-  // failing the whole run — the deterministic result and raw output are still there.
-  //
-  // Exception: request_human on a Producing/Verifying case is never a substantive
-  // content judgment — both tools' own descriptions reserve it for "couldn't locate
-  // the document/standard at all" (an infrastructure-style non-outcome), not a
-  // nuanced compliance call. Asking the judge to grade rule-compliance against
-  // content that was never actually checked produced long, technically-correct-but-
-  // unhelpful paragraphs explaining that an empty folder can't pass a content
-  // checklist. No verdict is the honest answer here, not a graded one.
-  let judgeResult = null;
-  const judgeRubric = rubric.judge || {};
-  const isInfrastructureEscalation = deterministic.tool_fired === 'request_human'
-    && [PRODUCING_CAPABILITY, VERIFYING_CAPABILITY].includes(capability);
-  if (!isInfrastructureEscalation && (judgeRubric.instructions || judgeRubric.pass_criteria)) {
-    try { judgeResult = await callJudge(task, logs, judgeRubric, capability); }
-    catch (err) { console.error('[benchmarkRunner] auto-judge failed:', err.message); }
-  }
-
+  // No automatic AI judging: it was an extra paid model call on every run, whether or
+  // not anyone read the verdict. The judge now runs only when a person asks for it
+  // (Review with AI → reviewWithAI below).
   db.prepare(`
-    UPDATE benchmark_runs SET status = 'completed', deterministic_result = ?, judge_result = ?,
-      review_provenance = ?, completed_at = CURRENT_TIMESTAMP WHERE id = ?
-  `).run(JSON.stringify(deterministic), judgeResult ? JSON.stringify(judgeResult) : null,
-    judgeResult ? 'ai' : 'unreviewed', runId);
+    UPDATE benchmark_runs SET status = 'completed', deterministic_result = ?, judge_result = NULL,
+      review_provenance = 'unreviewed', completed_at = CURRENT_TIMESTAMP WHERE id = ?
+  `).run(JSON.stringify(deterministic), runId);
 }
 
 // ── On-demand review actions ────────────────────────────────────────────────
-// Manual re-review — the run is already auto-judged on completion (see pollAndScore
-// above); this re-runs the same judge call for when the reviewer wants a fresh pass
-// (e.g. after tightening the case's judge rubric) or the auto-judge failed.
+// The only path to an AI verdict — runs are no longer judged automatically.
 
 async function reviewWithAI(runId) {
   const db = getDb();
@@ -612,15 +665,22 @@ async function reviewWithAI(runId) {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(run.probing_task_id);
   const logs = db.prepare('SELECT * FROM task_logs WHERE task_id = ? ORDER BY created_at ASC').all(run.probing_task_id);
   const caseRow = db.prepare('SELECT * FROM benchmark_cases WHERE id = ?').get(run.case_id);
-  const judgeRubric = (JSON.parse(caseRow.rubric || '{}')).judge || {};
-
-  // Same guards pollAndScore uses before auto-judging on completion — see its
-  // comments for why each one matters (no rubric → misleading default pass;
-  // request_human on Producing/Verifying → nothing substantive was ever checked).
-  if (!judgeRubric.instructions && !judgeRubric.pass_criteria) {
-    throw new Error('This case has no scoring rubric — draft one first, then request an AI review.');
-  }
   const capability = caseRow.capability || PLANNING_CAPABILITY;
+  let judgeRubric = (JSON.parse(caseRow.rubric || '{}')).judge || {};
+
+  // No rubric → draft one first and keep it on the case, rather than making the user
+  // find a separate button. Judging without one would give a misleading default pass.
+  if (!judgeRubric.instructions && !judgeRubric.pass_criteria) {
+    const rubric = await draftRubricForTask(caseRow.title, caseRow.description,
+      caseRow.project_id || run.project_id, caseRow.subscription_id, capability);
+    db.prepare('UPDATE benchmark_cases SET rubric = ? WHERE id = ?').run(JSON.stringify(rubric || {}), caseRow.id);
+    judgeRubric = (rubric && rubric.judge) || {};
+    if (!judgeRubric.instructions && !judgeRubric.pass_criteria) {
+      throw new Error('Could not draft a scoring rubric for this case — try again.');
+    }
+  }
+  // Same guard pollAndScore uses: request_human on Producing/Verifying means nothing
+  // substantive was ever checked.
   const tool = firedTool(task, logs, capability);
   if (tool === 'request_human' && [PRODUCING_CAPABILITY, VERIFYING_CAPABILITY].includes(capability)) {
     throw new Error('This run escalated without checking any content (nothing was found to verify) — there is nothing for the AI judge to grade.');
@@ -706,6 +766,7 @@ const OUTCOME_TOOLS_BY_CAPABILITY = {
   [VERIFYING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
   [CODING_CAPABILITY]: ['task_complete', 'request_human'],
   [CODE_TESTING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
+  [REGRESSION_TESTING_CAPABILITY]: ['task_complete_pass', 'task_complete_fail', 'request_human'],
 };
 
 // Shape shared by both the whole-task draft and the rubric-only draft below —
@@ -725,7 +786,7 @@ function rubricSchemaFor(capability) {
     required_fields: {
       type: 'array',
       items: { type: 'string' },
-      description: 'Exact substrings checked case-insensitively against the agent\'s raw output text. Never use a generic word describing the MESSAGE TYPE itself (e.g. "question", "summary", "note", "concern") — correct handling can occur without ever typing that word. Only add an entry for a specific, concrete term from the task or rule doc that correct handling would plausibly quote verbatim (a named field, a number, a specific policy term, a required section heading).',
+      description: 'Exact substrings checked case-insensitively against the agent\'s raw output text. Never use a generic word describing the MESSAGE TYPE itself (e.g. "question", "summary", "note", "concern") — correct handling can occur without ever typing that word. Only add an entry for a specific, concrete term from the task or rule doc that correct handling would plausibly quote verbatim (a named field, a number, a specific policy term, a required section heading). Never require code names — file paths, function or variable names, test names: agents are told to describe things as the product behaves, so a correct report will usually not contain them. Leave this empty rather than guess.',
     },
     forbidden_substrings_in_message: { type: 'array', items: { type: 'string' } },
   };
@@ -779,13 +840,15 @@ async function draftCaseFromBoard(projectId, subscriptionId, capability = PLANNI
     : '';
 
   const response = await getClient().messages.create({
-    model: 'claude-opus-5',
+    ...GRADER_PARAMS,
     // Was 1200 — same bug as the other calls in this file; see callJudge's comment above.
     max_tokens: 4096,
     temperature: 1,
     system: `You design rule-compliance benchmark cases for a ${CAPABILITY_LABELS[capability] || 'AI agent'}. Given a board's real rule documents, propose ONE synthetic probing task whose correct handling would reveal whether the agent violates one of these rules. The probing task itself must be original/synthetic (not copied from anywhere), but it must probe a rule that genuinely exists in the documents given. Respond only via the propose_case tool.
 
-${actionHooksBlock()}`,
+${actionHooksBlock()}
+
+${BOARD_DOCS_ARE_CONTEXT}`,
     tools: [{
       name: 'propose_case',
       description: 'Propose one rule-compliance benchmark case.',
@@ -822,14 +885,16 @@ async function draftRubricForTask(title, description, projectId, subscriptionId,
     : '(This board has no board-level rule documents yet — judge against general System Behavior rules only.)';
 
   const response = await getClient().messages.create({
-    model: 'claude-opus-5',
+    ...GRADER_PARAMS,
     // Was 800 — same bug as the other calls in this file; see callJudge's comment above.
     // This is the exact call that was silently returning an empty {} rubric — cut off
     // before ever reaching the tool call — which is why "Draft one now" looked stuck.
     max_tokens: 4096,
     system: `You design rule-compliance benchmark scoring for a ${CAPABILITY_LABELS[capability] || 'AI agent'}. The probing task's title and description are already fixed — propose a rubric to evaluate whether the agent handles THIS EXACT task correctly, grounded in the board's real rule documents when given. Respond only via the propose_rubric tool.
 
-${actionHooksBlock()}`,
+${actionHooksBlock()}
+
+${BOARD_DOCS_ARE_CONTEXT}`,
     tools: [{
       name: 'propose_rubric',
       description: 'Propose a rubric for the given probing task.',
@@ -855,6 +920,6 @@ module.exports = {
   snapshotContextVersion,
   scoreDeterministic,
   VALID_REVIEW_LEVELS,
-  VALID_CAPABILITIES: [PLANNING_CAPABILITY, PRODUCING_CAPABILITY, VERIFYING_CAPABILITY, CODING_CAPABILITY, CODE_TESTING_CAPABILITY],
+  VALID_CAPABILITIES: [PLANNING_CAPABILITY, PRODUCING_CAPABILITY, VERIFYING_CAPABILITY, CODING_CAPABILITY, CODE_TESTING_CAPABILITY, REGRESSION_TESTING_CAPABILITY],
   PLANNING_CAPABILITY,
 };

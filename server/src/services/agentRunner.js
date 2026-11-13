@@ -12,7 +12,8 @@ const { notifyHumanActionMembers, shouldPerform, recordEffect, EXTERNAL, PR_CREA
 const { writeFileSafe } = require('../utils/writeGuard');
 const { ACTION_HOOKS } = require('./actionHooks');
 const runnersRegistry = require('../seed/runners.json');
-const { loadModels } = require('./modelRegistry');
+const { AsyncLocalStorage } = require('async_hooks');
+const { loadModels, thinkingParams, costUsd } = require('./modelRegistry');
 
 // Generic tool for invoking a registered action hook — added to every
 // capability's tool set below. What it may actually DO is entirely code-curated
@@ -368,9 +369,6 @@ function removeWorktree(worktreePath, repoPath) {
   }
 }
 
-// CLAUDE.md is loaded for all agents — it contains the context file table and project rules.
-// README.md is loaded only for agents whose capability is_coder=true in runners.json.
-const CODER_CAPABILITIES = runnersRegistry.capabilities.filter(c => c.is_coder).map(c => c.id);
 
 // Lazy-init so dotenv has time to load before we read the key
 let _client = null;
@@ -382,6 +380,106 @@ function getClient() {
     _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   }
   return _client;
+}
+
+// Model + thinking for every messages.create — both come from the agent, falling back
+// to the runner's default model.
+function modelParams(agent, runner) {
+  const model = agent.model || runner.model_default || loadModels().defaultModel;
+  // Top-level cache_control = automatic caching: every loop turn re-sends the whole
+  // conversation, and this bills the already-seen prefix at ~0.1x instead of full price.
+  return { model, ...thinkingParams(agent.thinking, model), cache_control: { type: 'ephemeral' } };
+}
+
+// System prompt as a cached block — a fixed read point for the stable instructions,
+// alongside the automatic breakpoint that follows the growing conversation.
+function cachedSystem(text) {
+  return text ? [{ type: 'text', text, cache_control: { type: 'ephemeral' } }] : text;
+}
+
+// Per-dispatch API usage, set up by dispatch() and read by createMessage() — so every
+// call any handler makes is counted and budget-checked without each call site doing it.
+const usageStore = new AsyncLocalStorage();
+
+function newUsageMeter(budgetUsd) {
+  return { calls: 0, input_tokens: 0, output_tokens: 0, cache_read_tokens: 0, cache_write_tokens: 0, cost_usd: 0, budget_usd: budgetUsd ?? null, tools: [] };
+}
+
+class CostLimitError extends Error {
+  constructor(budget) {
+    super(`Stopped: this run reached its cost limit of $${budget.toFixed(2)}.`);
+    this.isCostLimit = true;
+  }
+}
+
+// Every model call goes through here. The limit is checked BEFORE a call, so the
+// response already paid for is still used; the next call is the one that's refused.
+async function createMessage(params, options) {
+  const meter = usageStore.getStore();
+  if (meter?.budget_usd != null && meter.cost_usd >= meter.budget_usd) throw new CostLimitError(meter.budget_usd);
+  // No caching on a run's first call: writing the cache costs 25% extra and only pays
+  // back if a later call reads it — and most runs are now a single call. Caching starts
+  // from the second call, when the conversation is being re-sent.
+  if (meter && meter.calls === 0) params = withoutCaching(params);
+  params = withoutUnusedHookTool(params);
+  const response = await getClient().messages.create(params, options);
+  if (meter) {
+    const u = response.usage || {};
+    meter.calls++;
+    meter.input_tokens += u.input_tokens || 0;
+    meter.output_tokens += u.output_tokens || 0;
+    meter.cache_read_tokens += u.cache_read_input_tokens || 0;
+    meter.cache_write_tokens += u.cache_creation_input_tokens || 0;
+    meter.cost_usd += costUsd(params.model, u);
+    cleanLeakedMarkup(response);
+    // Which tools each call asked for — the answer to "why did this take N calls?"
+    const asked = (response.content || []).filter(b => b.type === 'tool_use')
+      .map(b => `${b.name}${b.input?.command ? `: ${b.input.command}` : b.input?.path ? `: ${b.input.path}` : ''}`.slice(0, 120));
+    meter.tools.push(asked.length ? asked : ['(no tool)']);
+  }
+  return response;
+}
+
+// invoke_action_hook is the biggest tool definition and is only usable when the
+// instructions name an action (`_notify_all_`) — so it's sent only then.
+function withoutUnusedHookTool(params) {
+  if (!params.tools?.some(t => t.name === ACTION_HOOK_TOOL.name)) return params;
+  const system = Array.isArray(params.system) ? params.system.map(b => b.text).join('\n') : params.system || '';
+  if (hooksNamedIn(`${system}\n${JSON.stringify(params.messages?.[0]?.content ?? '')}`).length) return params;
+  return { ...params, tools: params.tools.filter(t => t.name !== ACTION_HOOK_TOOL.name) };
+}
+
+// With thinking off, models sometimes leak fragments of their tool-call markup into a
+// text field (a summary ending in `</summary></invoke>`). Cleaned only in the prose
+// fields people read — never in file content, where such tags can be real HTML.
+const PROSE_FIELDS = ['summary', 'reason', 'message'];
+const LEAKED_MARKUP = /<\/?(?:invoke|parameter|function_calls|summary|reason|message)\b[^>]*>/g;
+function cleanLeakedMarkup(response) {
+  for (const block of response.content || []) {
+    if (block.type !== 'tool_use' || !block.input) continue;
+    for (const field of PROSE_FIELDS) {
+      if (typeof block.input[field] === 'string') block.input[field] = block.input[field].replace(LEAKED_MARKUP, '').trim();
+    }
+  }
+}
+
+function withoutCaching(params) {
+  const { cache_control, ...rest } = params;
+  if (Array.isArray(rest.system)) rest.system = rest.system.map(({ cache_control: _, ...b }) => b);
+  return rest;
+}
+
+function stopReason(err, what) {
+  return err?.isCostLimit ? err.message : `API error during ${what}: ${describeApiError(err)}`;
+}
+
+// Tool output is re-sent on every later turn, so one noisy command (a 2 MB npm log,
+// a lockfile read) would be re-billed for the rest of the run. Keep the head, which
+// is where the answer usually is, and say that it was cut.
+const TOOL_RESULT_MAX_CHARS = 10000;
+function clipToolResult(text) {
+  if (text.length <= TOOL_RESULT_MAX_CHARS) return text;
+  return `${text.slice(0, TOOL_RESULT_MAX_CHARS)}\n…[output cut: ${text.length - TOOL_RESULT_MAX_CHARS} more characters not shown]`;
 }
 
 // The Anthropic SDK's own err.message is `${status} ${rawJsonBody}` — technically
@@ -602,15 +700,15 @@ function safeListMd(folder, excludeBasenames = new Set()) {
 
 // Build the context block that goes into every agent's initial user message.
 // Sources, all optional, all dedup'd:
-//   1. Global files (APP-AGENT.md always; README.md for coder capabilities)
+//   1. Global files (APP-AGENT.md). AutoKan's own README.md used to be added for coder
+//      capabilities — it describes AutoKan, not the board's project, and was re-billed
+//      on every turn of every coding/testing run; coders read the project's own files.
 //   2. Capability docs — docs/ files mapped to the agent's capability via
 //      context_docs in runners.json (every app agent gets docs/rules.md)
 //   3. Workspace context — auto-scan top-level .md in instructions/{sub}/
 //      (excluding runner personality files — those go into the system prompt)
 //   4. Board context — auto-scan top-level .md in instructions/{sub}/{proj}/
 function buildContextBlock(agent, subscriptionId, projectId) {
-  const agentCapabilities = JSON.parse(agent.role_ids || '[]');
-  const isCoderAgent = CODER_CAPABILITIES.some(cap => agentCapabilities.includes(cap));
   const sections = [];
   const includedAbsPaths = new Set();
 
@@ -623,9 +721,7 @@ function buildContextBlock(agent, subscriptionId, projectId) {
   }
 
   // 1. Global files
-  for (const name of ['APP-AGENT.md', ...(isCoderAgent ? ['README.md'] : [])]) {
-    pushFromAbs(path.join(PROJECT_ROOT, name), name.replace('.md', '').toUpperCase());
-  }
+  pushFromAbs(path.join(PROJECT_ROOT, 'APP-AGENT.md'), 'APP-AGENT');
 
   // 2. Capability docs mapped in runners.json (context_docs) — e.g. docs/rules.md
   const capability = getAgentCapability(agent);
@@ -810,8 +906,8 @@ async function runClarifyAndApprove(task, agent, runner) {
   const baseMessages = [{ role: 'user', content: userMessage }];
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      response = await getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+      response = await createMessage({
+        ...modelParams(agent, runner),
         // Was 1024, then 4096. Raised to match the coder/tester handlers because
         // this handler is single-shot: unlike them it never loops on tool results,
         // so the model has exactly one turn in which to emit BOTH its outcome tool
@@ -821,7 +917,7 @@ async function runClarifyAndApprove(task, agent, runner) {
         // some runs and not others. More room is not a guarantee here, it just
         // removes one cause; the single-turn shape is the real constraint.
         max_tokens: 8192,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt),
         tools: getToolSet(runner),
         messages: attempt === 1 ? baseMessages : [
           ...baseMessages,
@@ -944,10 +1040,10 @@ async function runClarifyAndApprove(task, agent, runner) {
       const toolResults = response.content
         .filter(b => b.type === 'tool_use')
         .map(b => ({ type: 'tool_result', tool_use_id: b.id, content: JSON.stringify({ success: true }) }));
-      const followUp = await getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+      const followUp = await createMessage({
+        ...modelParams(agent, runner),
         max_tokens: 4096,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt),
         tools: getToolSet(runner),
         messages: [
           { role: 'user', content: userMessage },
@@ -1036,7 +1132,7 @@ const IMPLEMENTATION_TOOLS = [
       type: 'object',
       properties: {
         progress: { type: 'number', description: 'Progress percentage 0-100' },
-        message: { type: 'string', description: 'Log message describing what was done' }
+        message: { type: 'string', description: 'One or two plain-language sentences for a project manager: what happened and what it means — not the commands or code behind it.' }
       },
       required: ['message']
     }
@@ -1047,7 +1143,7 @@ const IMPLEMENTATION_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        summary: { type: 'string', description: 'Brief summary of what was implemented and which files changed' }
+        summary: { type: 'string', description: 'A short plain-language summary for a project manager: what changed and why, in terms of the task and the product. No file or function names unless the reader needs them; no code.' }
       },
       required: ['summary']
     }
@@ -1171,33 +1267,69 @@ async function runImplementInWorktree(task, agent, runner) {
 
   let completed = false;
   const MAX_ITERATIONS = runner.max_iterations || 30;
+  // Wall-clock cap, independent of iteration count — same gap as produce_document
+  // originally had (see its comment): a single stuck/slow turn, or a long chain of
+  // real installs/builds/tests, can otherwise burn arbitrary time and tokens without
+  // ever hitting MAX_ITERATIONS. Longer than the document handlers' 3-4 min since
+  // this one runs genuine shell work (npm install/build/test), not just LLM writing.
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 8 * 60 * 1000;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    if (Date.now() - startedAt > MAX_DURATION_MS) {
+      const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      if (worktreePath) removeWorktree(worktreePath, repoPath);
+      broadcastTask(db, taskId);
+      completed = true;
+      break;
+    }
+
     let response;
     try {
-      response = await getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+      response = await withHardTimeout((signal) => createMessage({
+        ...modelParams(agent, runner),
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
         // before ever reaching a tool call can get cut off mid-"thinking", leaving a
         // turn the API then rejects on the next call. Raised pre-emptively even
         // though this handler hasn't hit it yet — same multi-turn tool-loop shape.
         max_tokens: 8192,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt),
         tools: getToolSet(runner),
         messages,
-      });
+      }, { signal }), 150000, 'API call');
     } catch (err) {
+      // Escalate with the specific error, then mark resolved so escalateStalled
+      // below doesn't escalate (and notify) a second time with a generic reason.
+      const reason = stopReason(err, 'implementation');
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       if (worktreePath) removeWorktree(worktreePath, repoPath);
+      broadcastTask(db, taskId);
+      completed = true;
       break;
     }
 
     messages.push({ role: 'assistant', content: response.content });
 
-    if (response.stop_reason === 'end_turn') break;
+    // Stop only when there's nothing left to act on — a response can carry its final
+    // tool call (e.g. task_complete) and still report end_turn; breaking on the stop
+    // reason alone dropped that outcome and the run looked stalled.
+    if (!response.content.some(b => b.type === 'tool_use')) break;
 
     const toolResults = [];
 
@@ -1326,7 +1458,7 @@ async function runImplementInWorktree(task, agent, runner) {
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
-        content: JSON.stringify(result)
+        content: clipToolResult(JSON.stringify(result))
       });
     }
 
@@ -1347,78 +1479,115 @@ async function runImplementInWorktree(task, agent, runner) {
 // ---------------------------------------------------------------------------
 
 const TESTING_TOOLS = [
-  {
-    name: 'bash',
-    description: 'Execute a shell command to run tests (npm test, jest, vitest, etc.) or inspect the project.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'Shell command to run' }
-      },
-      required: ['command']
-    }
-  },
-  {
-    name: 'read_file',
-    description: 'Read a file from the repository.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Path relative to the repo root' }
-      },
-      required: ['path']
-    }
-  },
-  {
-    name: 'write_file',
-    description: 'Write a file. Path must be within your assigned write scope — the server will reject out-of-scope paths.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Path relative to repo root' },
-        content: { type: 'string', description: 'Full file content' }
-      },
-      required: ['path', 'content']
-    }
-  },
-  {
-    name: 'task_log',
-    description: 'Add a progress note to the task log.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        progress: { type: 'number', description: 'Progress percentage 0-100' },
-        message: { type: 'string', description: 'Log message describing what was done' }
-      },
-      required: ['message']
-    }
-  },
-  {
-    name: 'task_complete',
-    description: 'Call this when testing is done. If passed=true the task moves to Human Action for human sign-off. If passed=false it moves back to In Progress for a fix (or stays in Human Action if max retries reached).',
-    input_schema: {
-      type: 'object',
-      properties: {
-        passed: { type: 'boolean', description: 'True if all tests passed, false if any failed' },
-        summary: { type: 'string', description: 'Summary of tests run, what passed, and what failed (if any)' }
-      },
-      required: ['passed', 'summary']
-    }
-  },
-  {
-    name: 'request_human',
-    description: 'Flag the task as blocked and move it to Human Action. Use when you need a secret, permission, or cannot continue.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        reason: { type: 'string', description: 'One to two short sentences MAX — plainly state what is missing/wrong and what decision you need. No background explanation, no restating the whole investigation, no walking through what you checked and ruled out.' }
-      },
-      required: ['reason']
-    }
-  },
+  { name: 'bash', description: 'Run a shell command in the project.', input_schema: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] } },
+  { name: 'read_file', description: 'Read a file.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'Relative to the project root' } }, required: ['path'] } },
+  { name: 'write_file', description: 'Write a file.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'Relative to the project root' }, content: { type: 'string', description: 'Full file content' } }, required: ['path', 'content'] } },
+  { name: 'task_log', description: 'Post a short progress note.', input_schema: { type: 'object', properties: { message: { type: 'string' }, progress: { type: 'number', description: '0-100' } }, required: ['message'] } },
+  { name: 'task_complete', description: 'Finish with your verdict.', input_schema: { type: 'object', properties: { passed: { type: 'boolean' }, summary: { type: 'string', description: 'At most three plain sentences: the outcome and the next step.' } }, required: ['passed', 'summary'] } },
+  { name: 'request_human', description: 'Stop and ask a person for help.', input_schema: { type: 'object', properties: { reason: { type: 'string', description: 'One or two sentences: what is missing and what decision is needed.' } }, required: ['reason'] } },
   ACTION_HOOK_TOOL,
 ];
 
+
+// Everything a test run would otherwise fetch one API round-trip at a time — the test
+// command's result, the file list, the relevant source — gathered in code up front, so
+// the model can usually answer in one or two calls instead of ten or twenty.
+const PREP_SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.vite']);
+const PREP_CODE_EXT = /\.(jsx?|tsx?|mjs|cjs|py|vue|svelte)$/;
+const PREP_SOURCE_BUDGET = 6000;
+const PREP_TEST_OUTPUT_MAX = 4000;
+const PREP_IS_TEST = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\./;
+const PREP_IS_CONFIG = /(^|\/)[^/]*\.config\.[^/]+$/;
+const PREP_TEST_TYPES = [
+  { script: 'test:unit', label: 'Unit' },
+  { script: 'test:integration', label: 'Integration' },
+];
+const PREP_OUT_OF_SCOPE_SCRIPT = /^test:(e2e|system)\b/;
+
+// Test runner output is mostly noise for a verdict — timings, stack frames, file URLs.
+// Keep each test's pass/fail line, a failure's message and expected/actual, and the
+// totals. Non-TAP output (jest, vitest, pytest…) just loses its stack frames.
+function compactTestOutput(output) {
+  const lines = output.split('\n');
+  if (!lines.some(l => /^\s*(not )?ok \d+/.test(l))) {
+    return lines.filter(l => !/^\s+at\s/.test(l)).join('\n');
+  }
+  const keep = [];
+  let inMessage = false;
+  for (const line of lines) {
+    const t = line.trim();
+    if (/^(not )?ok \d+/.test(t)) { keep.push(t); inMessage = false; }
+    else if (/^# (tests|suites|pass|fail|cancelled|skipped|todo)\b/.test(t)) keep.push(t);
+    else if (/^error:/.test(t)) { keep.push(`    ${t}`); inMessage = true; }
+    else if (/^(expected|actual):/.test(t)) { keep.push(`    ${t}`); inMessage = false; }
+    else if (/^[A-Za-z_]+:/.test(t) || t === '---' || t === '...') inMessage = false;
+    else if (inMessage && t) keep.push(`      ${t}`);
+  }
+  return keep.join('\n');
+}
+
+function listProjectFiles(root, rel = '', out = []) {
+  let entries;
+  try { entries = fs.readdirSync(path.join(root, rel), { withFileTypes: true }); } catch { return out; }
+  for (const e of entries) {
+    if (out.length >= 300) break;
+    const relPath = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) { if (!PREP_SKIP_DIRS.has(e.name) && !e.name.startsWith('.')) listProjectFiles(root, relPath, out); }
+    else if (!/lock\.json$|\.lock$/.test(e.name)) out.push(relPath);
+  }
+  return out;
+}
+
+async function prepareTestContext(workDir, task) {
+  const sections = ['## Already done for you'];
+
+  let scripts = {};
+  try { scripts = JSON.parse(fs.readFileSync(path.join(workDir, 'package.json'), 'utf8')).scripts || {}; } catch {}
+  const typed = PREP_TEST_TYPES.filter(t => scripts[t.script]);
+  const runs = typed.length
+    ? typed.map(t => ({ label: t.label, command: `npm run ${t.script}` }))
+    : (scripts.test && !/no test specified/.test(scripts.test) ? [{ label: null, command: 'npm test' }] : []);
+  const outputMax = Math.floor(PREP_TEST_OUTPUT_MAX / Math.max(runs.length, 1));
+  for (const r of runs) {
+    const run = await runBash(r.command, workDir);
+    const compact = compactTestOutput(run.output);
+    const output = compact.length > outputMax
+      ? `…[earlier output cut]\n${compact.slice(-outputMax)}` : compact;
+    sections.push(`### ${r.label ? `${r.label} tests` : 'Test run'}: \`${r.command}\` (${run.success ? 'exit 0 — passed' : 'non-zero exit — failures or errors'})\n\`\`\`\n${output}\n\`\`\``);
+  }
+  if (!runs.length) {
+    sections.push('### Test run\nNo tests were run: this project has no test command in package.json. Run its tests yourself if it has any.');
+  }
+  const outOfScope = Object.keys(scripts).filter(s => PREP_OUT_OF_SCOPE_SCRIPT.test(s));
+  if (outOfScope.length) {
+    sections.push(`### Not run\n${outOfScope.map(s => `\`npm run ${s}\``).join(', ')} — end-to-end/system tests need a running environment and are outside this run.`);
+  }
+
+  const files = listProjectFiles(workDir);
+  sections.push(`### Project files\n${files.join('\n')}`);
+
+  // Source most likely to matter first: files the task text names, then other source,
+  // until the budget is spent. Test files and config are left out — the test run above
+  // already says what the tests check and what failed. Anything left out can be read.
+  const taskText = `${task.title} ${task.description || ''} ${task.acceptance_criteria || ''}`;
+  const code = files.filter(f => PREP_CODE_EXT.test(f) && !PREP_IS_TEST.test(f) && !PREP_IS_CONFIG.test(f));
+  const named = code.filter(f => taskText.includes(path.basename(f)));
+  // When the task points at files, send just those; otherwise fill with other source.
+  if (named.length) code.splice(0, code.length, ...named);
+  code.sort((a, b) => a.localeCompare(b));
+  let used = 0;
+  const included = [];
+  for (const f of code) {
+    let content;
+    try { content = fs.readFileSync(path.join(workDir, f), 'utf8'); } catch { continue; }
+    if (used + content.length > PREP_SOURCE_BUDGET) continue;
+    used += content.length;
+    included.push(`#### ${f}\n\`\`\`\n${content}\n\`\`\``);
+  }
+  if (included.length) sections.push(`### Source (${included.length} of ${code.length} code files — read others only if you need them)\n${included.join('\n\n')}`);
+
+  return sections.join('\n\n');
+}
 
 async function runTestWithRetry(task, agent, runner) {
   const db = getDb();
@@ -1436,6 +1605,7 @@ async function runTestWithRetry(task, agent, runner) {
 
   const metadata = JSON.parse(task.metadata || '{}');
   const retryCount = metadata.test_retry_count || 0;
+  const prepared = await prepareTestContext(workDir, task);
 
   const initialPrompt = [
     contextBlock ? `## Context Files\n${contextBlock}` : '',
@@ -1448,6 +1618,8 @@ async function runTestWithRetry(task, agent, runner) {
     `Priority: ${task.priority} | Complexity: ${task.complexity}`,
     retryCount > 0 ? `\n⚠️ This is retry #${retryCount} — the previous test run failed.` : '',
     ``,
+    prepared,
+    ``,
     loadRunnerPrompt('test-with-retry'),
   ].filter(Boolean).join('\n');
 
@@ -1456,32 +1628,66 @@ async function runTestWithRetry(task, agent, runner) {
   let completed = false;
   const MAX_ITERATIONS = runner.max_iterations || 30;
   const MAX_RETRIES = runner.max_retries ?? 1;
+  // Wall-clock cap, independent of iteration count — same gap produce_document/
+  // verify_document already close (see produce_document's comment). Shorter than
+  // the Coder's 8 min: this handler runs an existing suite or writes a small,
+  // targeted test file, not a full feature implementation.
+  const startedAt = Date.now();
+  const MAX_DURATION_MS = 5 * 60 * 1000;
 
   for (let i = 0; i < MAX_ITERATIONS && !completed; i++) {
+    if (Date.now() - startedAt > MAX_DURATION_MS) {
+      const reason = `Exceeded ${MAX_DURATION_MS / 1000}s without completing — likely a stuck generation or a task too large for one pass.`;
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      console.log(`[AgentRunner][${runner.id}][${taskId}] exceeded time limit → Human Action`);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      completed = true;
+      break;
+    }
+
     let response;
     try {
-      response = await getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+      response = await withHardTimeout((signal) => createMessage({
+        ...modelParams(agent, runner),
         // Was 4096 — same class of bug as Planning's/Verify's (see their max_tokens
         // comments): a model that spends part of its budget on internal reasoning
         // before ever reaching a tool call can get cut off mid-"thinking", leaving a
         // turn the API then rejects on the next call. Raised pre-emptively even
         // though this handler hasn't hit it yet — same multi-turn tool-loop shape.
         max_tokens: 8192,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt),
         tools: getToolSet(runner),
         messages,
-      });
+      }, { signal }), 150000, 'API call');
     } catch (err) {
+      // Escalate with the specific error, then mark resolved so escalateStalled
+      // below doesn't escalate (and notify) a second time with a generic reason.
+      const reason = stopReason(err, 'test run');
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
+      db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
+        .run('col_humanaction', reason, taskId);
       db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
-        .run(uuidv4(), taskId, agent.id, 'note', `Handler error: ${describeApiError(err)}`);
+        .run(uuidv4(), taskId, agent.id, 'human_action_requested', reason);
+      db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
+      notifyHumanActionMembers(db, taskId, reason).catch(() => {});
+      broadcastTask(db, taskId);
+      completed = true;
       break;
     }
 
     messages.push({ role: 'assistant', content: response.content });
 
-    if (response.stop_reason === 'end_turn') break;
+    // Stop only when there's nothing left to act on — a response can carry its final
+    // tool call (e.g. task_complete) and still report end_turn; breaking on the stop
+    // reason alone dropped that outcome and the run looked stalled.
+    if (!response.content.some(b => b.type === 'tool_use')) break;
 
     const toolResults = [];
 
@@ -1525,13 +1731,19 @@ async function runTestWithRetry(task, agent, runner) {
         } else {
           const newRetryCount = retryCount + 1;
           if (newRetryCount > MAX_RETRIES) {
-            const maxRetryReason = `Test run failed after ${newRetryCount} attempts: ${summary}`;
+            const failReason = MAX_RETRIES > 0
+              ? `Test run failed after ${newRetryCount} attempts: ${summary}`
+              : `Tests failed: ${summary}`;
             db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
-              .run('col_humanaction', maxRetryReason, taskId);
+              .run('col_humanaction', failReason, taskId);
+            // 'tests_failed' is what benchmark settlement and outcome scoring watch for.
+            db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+              .run(uuidv4(), taskId, agent.id, 'tests_failed', failReason);
             db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, from_column, to_column, message) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction', `Max retries reached — moved to Human Action`);
-            console.log(`[AgentRunner][${runner.id}][${taskId}] max retries → Human Action`);
-            notifyHumanActionMembers(db, taskId, maxRetryReason).catch(() => {});
+              .run(uuidv4(), taskId, agent.id, 'moved', 'col_testing', 'col_humanaction',
+                MAX_RETRIES > 0 ? 'Max retries reached — moved to Human Action' : 'Tests failed — moved to Human Action');
+            console.log(`[AgentRunner][${runner.id}][${taskId}] tests failed → Human Action`);
+            notifyHumanActionMembers(db, taskId, failReason).catch(() => {});
           } else {
             const newMeta = JSON.stringify({ ...metadata, test_retry_count: newRetryCount });
             // Hand the task back to whoever does the implementing — leaving it
@@ -1573,7 +1785,7 @@ async function runTestWithRetry(task, agent, runner) {
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
-        content: JSON.stringify(result)
+        content: clipToolResult(JSON.stringify(result))
       });
     }
 
@@ -1642,17 +1854,23 @@ function requireLinkedClientPath(task, agent, runner) {
   return { ok: false };
 }
 
-// Guaranteed-independent timeout for a single LLM call — does NOT rely on the SDK's
-// own `{ timeout }` request option, which was observed not actually cutting off a
-// stuck call (a produce_document run sat well past its computed timeout with no
-// escalation). Races the real request against a plain setTimeout instead, so control
-// returns to the caller within `ms` no matter what's happening inside the SDK/network.
-function withHardTimeout(promise, ms, label) {
+// Guaranteed-independent timeout for a single LLM call. The SDK's own `{ timeout }`
+// was observed not cutting off a stuck call — the SDK retries timed-out requests
+// (maxRetries defaults to 2), so a per-request timeout can run ~3x its value. Racing
+// alone isn't enough either: an abandoned promise leaves the request running (and
+// retrying) in the background, still billing tokens. So `run` receives an AbortSignal
+// that is aborted when the deadline hits — the SDK treats a user abort as final and
+// does not retry it.
+function withHardTimeout(run, ms, label) {
+  const controller = new AbortController();
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
   });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([run(controller.signal), timeout]).finally(() => clearTimeout(timer));
 }
 
 // ---------------------------------------------------------------------------
@@ -1705,7 +1923,7 @@ const PRODUCING_TOOLS = [
       type: 'object',
       properties: {
         progress: { type: 'number', description: 'Progress percentage 0-100' },
-        message: { type: 'string', description: 'Log message describing what was done' }
+        message: { type: 'string', description: 'One or two plain-language sentences for a project manager: what happened and what it means — not the commands or code behind it.' }
       },
       required: ['message']
     }
@@ -1804,8 +2022,8 @@ async function runProduceDocument(task, agent, runner) {
 
     let response;
     try {
-      response = await withHardTimeout(getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+      response = await withHardTimeout((signal) => createMessage({
+        ...modelParams(agent, runner),
         // Higher than the other handlers' 4096 — a full multi-section document is the
         // tool_use argument itself (write_file's content field), and 4096 was observed
         // truncating mid-document on real runs (the model logs "writing full document
@@ -1813,16 +2031,16 @@ async function runProduceDocument(task, agent, runner) {
         // silently stalls with no further logs — a cut-off tool_use block that never
         // reaches a catchable error).
         max_tokens: 8192,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt),
         tools: getToolSet(runner),
         messages,
-      }), 150000, 'API call');
+      }, { signal }), 150000, 'API call');
     } catch (err) {
       // Escalate rather than just logging + breaking — an API error or SDK-level
       // timeout (the actual per-request cap for a single hung call, complementing the
       // wall-clock check above which only runs between calls) otherwise leaves the task
       // silently stuck in col_inprogress with no signal to a human that it stopped.
-      const reason = `API error during document production: ${describeApiError(err)}`;
+      const reason = stopReason(err, 'document production');
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
@@ -1834,12 +2052,16 @@ async function runProduceDocument(task, agent, runner) {
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true; // already escalated — keep escalateStalled from doing it again
       break;
     }
 
     messages.push({ role: 'assistant', content: response.content });
 
-    if (response.stop_reason === 'end_turn') break;
+    // Stop only when there's nothing left to act on — a response can carry its final
+    // tool call (e.g. task_complete) and still report end_turn; breaking on the stop
+    // reason alone dropped that outcome and the run looked stalled.
+    if (!response.content.some(b => b.type === 'tool_use')) break;
 
     const toolResults = [];
 
@@ -1905,7 +2127,7 @@ async function runProduceDocument(task, agent, runner) {
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
-        content: JSON.stringify(result)
+        content: clipToolResult(JSON.stringify(result))
       });
     }
 
@@ -1958,7 +2180,7 @@ const VERIFYING_TOOLS = [
       type: 'object',
       properties: {
         progress: { type: 'number', description: 'Progress percentage 0-100' },
-        message: { type: 'string', description: 'Log message describing what was done' }
+        message: { type: 'string', description: 'One or two plain-language sentences for a project manager: what happened and what it means — not the commands or code behind it.' }
       },
       required: ['message']
     }
@@ -2087,8 +2309,8 @@ async function runVerifyDocument(task, agent, runner) {
 
     let response;
     try {
-      response = await withHardTimeout(getClient().messages.create({
-        model: agent.model || runner.model_default || loadModels().defaultModel,
+      response = await withHardTimeout((signal) => createMessage({
+        ...modelParams(agent, runner),
         // Was 4096 — same class of bug as Planning's (see its max_tokens comment):
         // a model that spends part of its budget on internal reasoning before ever
         // reaching a tool call can get cut off mid-"thinking", leaving a turn whose
@@ -2096,12 +2318,12 @@ async function runVerifyDocument(task, agent, runner) {
         // on the NEXT turn ("The final block in an assistant message cannot be
         // 'thinking'"), since a truncated thinking block was never properly closed.
         max_tokens: 8192,
-        system: systemPrompt,
+        system: cachedSystem(systemPrompt),
         tools: getToolSet(runner),
         messages,
-      }), 60000, 'API call');
+      }, { signal }), 60000, 'API call');
     } catch (err) {
-      const reason = `API error during verification: ${describeApiError(err)}`;
+      const reason = stopReason(err, 'verification');
       console.error(`[AgentRunner][${runner.id}][${taskId}] API error:`, err.message);
       db.prepare('UPDATE tasks SET column_id = ?, requires_human_action = 1, human_action_reason = ? WHERE id = ?')
         .run('col_humanaction', reason, taskId);
@@ -2113,12 +2335,16 @@ async function runVerifyDocument(task, agent, runner) {
         .run(uuidv4(), taskId, agent.id, 'moved', task.column_id, 'col_humanaction', reason);
       notifyHumanActionMembers(db, taskId, reason).catch(() => {});
       broadcastTask(db, taskId);
+      completed = true; // already escalated — keep escalateStalled from doing it again
       break;
     }
 
     messages.push({ role: 'assistant', content: response.content });
 
-    if (response.stop_reason === 'end_turn') break;
+    // Stop only when there's nothing left to act on — a response can carry its final
+    // tool call (e.g. task_complete) and still report end_turn; breaking on the stop
+    // reason alone dropped that outcome and the run looked stalled.
+    if (!response.content.some(b => b.type === 'tool_use')) break;
 
     const toolResults = [];
 
@@ -2220,7 +2446,7 @@ async function runVerifyDocument(task, agent, runner) {
       toolResults.push({
         type: 'tool_result',
         tool_use_id: block.id,
-        content: JSON.stringify(result)
+        content: clipToolResult(JSON.stringify(result))
       });
     }
 
@@ -2305,6 +2531,9 @@ async function dispatch(taskId) {
   if (taskMetadata.is_benchmark_probe && taskMetadata.model_override) {
     agent = { ...agent, model: taskMetadata.model_override };
   }
+  if (taskMetadata.is_benchmark_probe && taskMetadata.thinking_override) {
+    agent = { ...agent, thinking: taskMetadata.thinking_override };
+  }
 
   const capability = getAgentCapability(agent);
   if (!capability) return;
@@ -2328,7 +2557,39 @@ async function dispatch(taskId) {
     return;
   }
 
-  await handler(task, agent, runner);
+  const meter = newUsageMeter(runner.max_run_cost_usd);
+  try {
+    await usageStore.run(meter, () => handler(task, agent, runner));
+  } finally {
+    if (meter.calls > 0) recordRunUsage(taskId, agent.id, meter);
+  }
+}
+
+// Totals accumulate on tasks.metadata.usage across every run on the task (a planner
+// task gets one run per human answer); each run also leaves one readable log line.
+function recordRunUsage(taskId, agentId, meter) {
+  const db = getDb();
+  const row = db.prepare('SELECT metadata FROM tasks WHERE id = ?').get(taskId);
+  if (!row) return;
+  const metadata = JSON.parse(row.metadata || '{}');
+  const prev = metadata.usage || {};
+  const sum = k => (prev[k] || 0) + meter[k];
+  metadata.usage = {
+    runs: (prev.runs || 0) + 1,
+    calls: sum('calls'),
+    input_tokens: sum('input_tokens'),
+    output_tokens: sum('output_tokens'),
+    cache_read_tokens: sum('cache_read_tokens'),
+    cache_write_tokens: sum('cache_write_tokens'),
+    cost_usd: Math.round(sum('cost_usd') * 1e6) / 1e6,
+    last_run_cost_usd: Math.round(meter.cost_usd * 1e6) / 1e6,
+    last_run_tool_calls: meter.tools,
+  };
+  db.prepare('UPDATE tasks SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), taskId);
+  db.prepare(`INSERT INTO task_logs (id, task_id, agent_id, action, message) VALUES (?, ?, ?, ?, ?)`)
+    .run(uuidv4(), taskId, agentId, 'usage',
+      `This run cost $${meter.cost_usd.toFixed(3)} (${meter.calls} AI call${meter.calls === 1 ? '' : 's'}).`);
+  broadcastTask(db, taskId);
 }
 
 // Fire-and-forget — never blocks the HTTP request.

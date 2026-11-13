@@ -8,3 +8,5 @@ You are in the In Progress column. Your job is to produce one complete document 
 4. Call `task_complete` with the exact `path` you wrote to and a `summary` of what's in it.
 
 Use `task_log` at each milestone. If required source information is missing or contradictory, do not guess — call `request_human`.
+
+When you need to read or run several things, ask for all of them in one turn (several tool calls at once) rather than one at a time — every extra round-trip costs time and money.
